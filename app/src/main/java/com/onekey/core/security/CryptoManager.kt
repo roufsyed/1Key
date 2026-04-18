@@ -98,6 +98,11 @@ class CryptoManager @Inject constructor() {
         return salt
     }
 
+    fun deleteVaultKey() {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        if (keyStore.containsAlias(KEYSTORE_ALIAS)) keyStore.deleteEntry(KEYSTORE_ALIAS)
+    }
+
     fun encryptString(value: String, key: SecretKey): EncryptedData =
         encrypt(value.toByteArray(Charsets.UTF_8), key)
 

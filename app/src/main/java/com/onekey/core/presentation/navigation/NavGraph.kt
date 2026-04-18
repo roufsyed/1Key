@@ -107,6 +107,11 @@ fun OneKeyNavGraph(
                 onBack = { navController.popBackStack() },
                 onSetupPin = { navController.navigate(Screen.SetupPin.route) },
                 onChangePassword = { navController.navigate(Screen.ChangePassword.route) },
+                onVaultReset = {
+                    navController.navigate(Screen.Onboarding.route) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                },
             )
         }
 

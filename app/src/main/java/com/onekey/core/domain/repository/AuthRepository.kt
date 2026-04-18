@@ -14,5 +14,7 @@ interface AuthRepository {
     suspend fun lock(): AppResult<Unit>
     fun isUnlocked(): Flow<Boolean>
     fun isPinSetup(): Flow<Boolean>
+    suspend fun resetPin(): AppResult<Unit>
+    suspend fun resetVault(): AppResult<Unit>
     suspend fun clearAll(): AppResult<Unit>
 }

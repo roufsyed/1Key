@@ -20,4 +20,5 @@ interface CredentialRepository {
     fun observeFavoritesPaged(): Flow<PagingData<Credential>>
     fun observeWithTotp(): Flow<List<Credential>>
     suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit>
+    suspend fun deleteAllCredentials(): AppResult<Unit>
 }

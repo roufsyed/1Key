@@ -85,6 +85,9 @@ class CredentialRepositoryImpl @Inject constructor(
     override suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit> =
         runCatchingResult { dao.setFavorite(id, isFavorite) }
 
+    override suspend fun deleteAllCredentials(): AppResult<Unit> =
+        runCatchingResult { dao.deleteAll() }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private fun CredentialEntity.toDomain(): Credential {

@@ -22,6 +22,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
+import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -30,14 +31,28 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onSetupPin: () -> Unit,
     onChangePassword: () -> Unit,
+    onVaultReset: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
     importExportVm: ImportExportViewModel = hiltViewModel(),
 ) {
     val tags by settingsVm.tags.collectAsStateWithLifecycle()
     val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
     val backupState by importExportVm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        settingsVm.event.collect { event ->
+            when (event) {
+                SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
+                SettingsEvent.VaultReset -> onVaultReset()
+                is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
+            }
+        }
+    }
 
     val canUseBiometric = remember {
         androidx.biometric.BiometricManager.from(context).canAuthenticate(
@@ -48,6 +63,9 @@ fun SettingsScreen(
     var newTagName by remember { mutableStateOf("") }
     var showAddTag by remember { mutableStateOf(false) }
     var selectedFormat by remember { mutableStateOf(ExportFormat.JSON) }
+    var showResetPinDialog by remember { mutableStateOf(false) }
+    var showResetVaultDialog by remember { mutableStateOf(false) }
+    var resetVaultConfirmed by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -68,7 +86,8 @@ fun SettingsScreen(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                 },
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding),
@@ -128,6 +147,16 @@ fun SettingsScreen(
                                 },
                             )
                         }
+                        if (isPinSetup) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                            ListItem(
+                                headlineContent = { Text("Reset PIN") },
+                                supportingContent = { Text("Remove saved PIN, revert to master password") },
+                                leadingContent = { Icon(Icons.Default.LockReset, null) },
+                                trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                                modifier = Modifier.clickable { showResetPinDialog = true },
+                            )
+                        }
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         ListItem(
                             headlineContent = { Text("Change Master Password") },
@@ -135,6 +164,22 @@ fun SettingsScreen(
                             leadingContent = { Icon(Icons.Default.Key, null) },
                             trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                             modifier = Modifier.clickable(onClick = onChangePassword),
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = {
+                                Text("Reset Vault", color = MaterialTheme.colorScheme.error)
+                            },
+                            supportingContent = { Text("Permanently delete all credentials") },
+                            leadingContent = {
+                                Icon(
+                                    Icons.Default.DeleteForever,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable { showResetVaultDialog = true },
                         )
                     }
                 }
@@ -300,6 +345,84 @@ fun SettingsScreen(
                 Spacer(Modifier.height(32.dp))
             }
         }
+    }
+
+    if (showResetPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetPinDialog = false },
+            icon = { Icon(Icons.Default.LockReset, contentDescription = null) },
+            title = { Text("Reset PIN?") },
+            text = { Text("Your PIN will be removed. You will need to use your master password to unlock the vault.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetPinDialog = false
+                        settingsVm.resetPin()
+                    }
+                ) { Text("Reset PIN") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetPinDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showResetVaultDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showResetVaultDialog = false
+                resetVaultConfirmed = false
+            },
+            icon = {
+                Icon(
+                    Icons.Default.DeleteForever,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text("Reset Vault?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "This will permanently delete ALL credentials stored in this vault. " +
+                            "This action cannot be undone.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Checkbox(
+                            checked = resetVaultConfirmed,
+                            onCheckedChange = { resetVaultConfirmed = it },
+                        )
+                        Text("I understand all my credentials will be deleted")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showResetVaultDialog = false
+                        resetVaultConfirmed = false
+                        settingsVm.resetVault()
+                    },
+                    enabled = resetVaultConfirmed,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ),
+                ) { Text("Delete Everything") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showResetVaultDialog = false
+                        resetVaultConfirmed = false
+                    }
+                ) { Text("Cancel") }
+            },
+        )
     }
 }
 

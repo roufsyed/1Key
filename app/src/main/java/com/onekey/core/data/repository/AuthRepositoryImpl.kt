@@ -152,6 +152,19 @@ class AuthRepositoryImpl @Inject constructor(
             // VaultKeyHolder key remains the same — no credential re-encryption needed
         }
 
+    override suspend fun resetPin(): AppResult<Unit> = runCatchingResult {
+        dataStore.edit { prefs ->
+            prefs.remove(KEY_PIN_HASH)
+            prefs.remove(KEY_PIN_SALT)
+        }
+    }
+
+    override suspend fun resetVault(): AppResult<Unit> = runCatchingResult {
+        crypto.deleteVaultKey()
+        dataStore.edit { it.clear() }
+        keyHolder.lock()
+    }
+
     override suspend fun lock(): AppResult<Unit> = runCatchingResult { keyHolder.lock() }
 
     override fun isUnlocked(): Flow<Boolean> = keyHolder.isUnlocked
