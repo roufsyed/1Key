@@ -40,6 +40,8 @@ class CredentialDetailViewModel @Inject constructor(
     private val credentialId: String? = savedStateHandle.get<String>("credentialId")
         ?.takeIf { it != "new" }
 
+    private val initialTag: String = savedStateHandle.get<String>("initialTag") ?: ""
+
     private val _uiState = MutableStateFlow<CredentialDetailUiState>(CredentialDetailUiState.Loading)
     val uiState: StateFlow<CredentialDetailUiState> = _uiState.asStateFlow()
 
@@ -99,7 +101,8 @@ class CredentialDetailViewModel @Inject constructor(
 
     private fun emptyCredential() = Credential(
         id = "", title = "", username = "", password = "", url = "",
-        notes = "", totpSecret = null, tags = emptyList(),
+        notes = "", totpSecret = null,
+        tags = if (initialTag.isNotEmpty()) listOf(initialTag) else emptyList(),
         customFields = emptyList(), createdAt = 0L, updatedAt = 0L,
     )
 }

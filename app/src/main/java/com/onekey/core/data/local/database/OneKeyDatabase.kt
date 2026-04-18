@@ -17,9 +17,7 @@ val DEFAULT_TAG_NAMES = listOf(
     "Password",
     "Bank Account",
     "Database",
-    "Driver License",
     "Email Account",
-    "Reward Program",
     "Server",
 )
 

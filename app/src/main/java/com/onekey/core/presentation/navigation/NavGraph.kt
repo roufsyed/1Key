@@ -24,8 +24,9 @@ sealed class Screen(val route: String) {
     data object Onboarding : Screen("onboarding")
     data object Lock : Screen("lock")
     data object Vault : Screen("vault")
-    data object CredentialDetail : Screen("credential/{credentialId}") {
-        fun createRoute(id: String?) = "credential/${id ?: "new"}"
+    data object CredentialDetail : Screen("credential/{credentialId}?initialTag={initialTag}") {
+        fun createRoute(id: String?, initialTag: String = "") =
+            "credential/${id ?: "new"}?initialTag=${Uri.encode(initialTag)}"
     }
     data object TwoFaList : Screen("two_fa_list")
     data object Settings : Screen("settings")
@@ -69,8 +70,8 @@ fun OneKeyNavGraph(
 
         composable(Screen.Vault.route) {
             VaultScreen(
-                onAddClick = {
-                    navController.navigate(Screen.CredentialDetail.createRoute(null))
+                onAddClick = { tag ->
+                    navController.navigate(Screen.CredentialDetail.createRoute(null, tag))
                 },
                 onTwoFaClick = {
                     navController.navigate(Screen.TwoFaList.route)
@@ -84,7 +85,13 @@ fun OneKeyNavGraph(
             )
         }
 
-        composable(Screen.CredentialDetail.route) {
+        composable(
+            route = Screen.CredentialDetail.route,
+            arguments = listOf(
+                navArgument("credentialId") { type = NavType.StringType },
+                navArgument("initialTag") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) {
             CredentialDetailScreen(
                 onBack = { navController.popBackStack() },
                 onDeleted = { navController.popBackStack() },

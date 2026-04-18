@@ -4,11 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -25,7 +26,7 @@ const val TAG_FAVORITES = "_favorites"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultScreen(
-    onAddClick: () -> Unit,
+    onAddClick: (String) -> Unit,
     onTwoFaClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onTagClick: (String) -> Unit,
@@ -34,6 +35,9 @@ fun VaultScreen(
     val tagCounts by viewModel.tagCounts.collectAsStateWithLifecycle()
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
+
+    var showBottomSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Scaffold(
         topBar = {
@@ -50,7 +54,11 @@ fun VaultScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onAddClick) {
+            FloatingActionButton(
+                onClick = { showBottomSheet = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
                 Icon(Icons.Default.Add, contentDescription = "Add credential")
             }
         }
@@ -105,6 +113,63 @@ fun VaultScreen(
             }
         }
     }
+
+    if (showBottomSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showBottomSheet = false },
+            sheetState = sheetState,
+        ) {
+            Text(
+                "Choose a category",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = 32.dp),
+            ) {
+                tagCounts.forEach { tagWithCount ->
+                    ListItem(
+                        leadingContent = {
+                            Icon(
+                                tagIcon(tagWithCount.tag.name),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        },
+                        headlineContent = { Text(tagWithCount.tag.name) },
+                        modifier = Modifier.clickable {
+                            showBottomSheet = false
+                            onAddClick(tagWithCount.tag.name)
+                        },
+                    )
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                ListItem(
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.Label,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    headlineContent = {
+                        Text(
+                            "No Category",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        showBottomSheet = false
+                        onAddClick("")
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -147,15 +212,13 @@ private fun TagRow(
 }
 
 private fun tagIcon(name: String) = when (name) {
-    "Login"          -> Icons.Default.Lock
-    "Secure Note"    -> Icons.Default.Description
-    "Credit Card"    -> Icons.Default.CreditCard
-    "Password"       -> Icons.Default.Key
-    "Bank Account"   -> Icons.Default.AccountBalance
-    "Database"       -> Icons.Default.Storage
-    "Driver License" -> Icons.Default.Badge
-    "Email Account"  -> Icons.Default.Email
-    "Reward Program" -> Icons.Default.Stars
-    "Server"         -> Icons.Default.Computer
-    else             -> Icons.Default.Label
+    "Login"        -> Icons.Default.Lock
+    "Secure Note"  -> Icons.Default.Description
+    "Credit Card"  -> Icons.Default.CreditCard
+    "Password"     -> Icons.Default.Key
+    "Bank Account" -> Icons.Default.AccountBalance
+    "Database"     -> Icons.Default.Storage
+    "Email Account"-> Icons.Default.Email
+    "Server"       -> Icons.Default.Computer
+    else           -> Icons.Default.Label
 }
