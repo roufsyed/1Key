@@ -96,13 +96,16 @@ fun LockScreen(
 
             if (isBiometricEnabled && canUseBiometric) {
                 Spacer(Modifier.height(16.dp))
-                IconButton(onClick = {
-                    showBiometricPrompt(
-                        context = context,
-                        onSuccess = { viewModel.unlockWithBiometric() },
-                        onError = { msg -> viewModel.setBiometricError(msg) },
-                    )
-                }) {
+                IconButton(
+                    onClick = {
+                        showBiometricPrompt(
+                            context = context,
+                            onSuccess = { viewModel.unlockWithBiometric() },
+                            onError = { msg -> viewModel.setBiometricError(msg) },
+                        )
+                    },
+                    enabled = state !is AuthUiState.Loading,
+                ) {
                     Icon(
                         Icons.Default.Fingerprint,
                         contentDescription = "Biometric unlock",
@@ -126,6 +129,12 @@ private fun PinUnlockSection(
     onFallbackToPassword: () -> Unit,
 ) {
     var pin by remember { mutableStateOf("") }
+    val isLoading = state is AuthUiState.Loading
+
+    // Clear PIN after a wrong attempt so user can retry cleanly.
+    LaunchedEffect(state) {
+        if (state is AuthUiState.Error) pin = ""
+    }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -155,11 +164,15 @@ private fun PinUnlockSection(
             keyboardActions = KeyboardActions(onDone = { if (pin.isNotEmpty()) onPinSubmit(pin) }),
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.width(200.dp),
-            enabled = state !is AuthUiState.Loading,
+            enabled = !isLoading,
             singleLine = true,
         )
+        if (isLoading) {
+            Spacer(Modifier.height(16.dp))
+            CircularProgressIndicator(Modifier.size(24.dp))
+        }
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onFallbackToPassword) {
+        TextButton(onClick = onFallbackToPassword, enabled = !isLoading) {
             Text("Forgot PIN? Use master password")
         }
     }
@@ -201,8 +214,15 @@ private fun PasswordUnlockSection(
             modifier = Modifier.fillMaxWidth(),
             enabled = password.isNotEmpty() && state !is AuthUiState.Loading,
         ) {
-            if (state is AuthUiState.Loading) CircularProgressIndicator(Modifier.size(20.dp))
-            else Text("Unlock")
+            if (state is AuthUiState.Loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text("Unlock")
+            }
         }
     }
 }
