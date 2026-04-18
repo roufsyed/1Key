@@ -99,5 +99,7 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch { authRepository.lock() }
     }
 
+    fun setBiometricError(message: String) { _state.value = AuthUiState.Error(message) }
+
     fun clearError() { if (_state.value is AuthUiState.Error) _state.value = AuthUiState.Idle }
 }

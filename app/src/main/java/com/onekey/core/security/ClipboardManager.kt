@@ -12,32 +12,28 @@ private const val CLIPBOARD_CLEAR_DELAY_MS = 30_000L
 @Singleton
 class SecureClipboardManager @Inject constructor(private val context: Context) {
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    // Singleton-scoped — lives for app lifetime, cancellation on process death is sufficient.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var clearJob: Job? = null
 
     fun copySecure(label: String, value: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText(label, value)
-        clipboard.setPrimaryClip(clip)
-        scheduleClear(clipboard)
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+        scheduleClear()
     }
 
-    private fun scheduleClear(clipboard: ClipboardManager) {
+    private fun scheduleClear() {
         clearJob?.cancel()
         clearJob = scope.launch {
             delay(CLIPBOARD_CLEAR_DELAY_MS)
-            clearClipboard(clipboard)
+            // Re-fetch the system service in the coroutine body — no stale reference captured.
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
         }
-    }
-
-    private fun clearClipboard(clipboard: ClipboardManager) {
-        // Replace with empty clip — Android 13+ clears automatically,
-        // but this covers older API levels.
-        val empty = ClipData.newPlainText("", "")
-        clipboard.setPrimaryClip(empty)
     }
 
     fun cancelScheduledClear() {
         clearJob?.cancel()
+        clearJob = null
     }
 }

@@ -19,14 +19,14 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 ) : AppPreferencesRepository {
 
     override fun isDarkTheme(): Flow<Boolean> =
-        dataStore.data.map { it[KEY_DARK_THEME] ?: false }
+        dataStore.data.map { it[KEY_DARK_THEME] ?: false }.distinctUntilChanged()
 
     override suspend fun setDarkTheme(dark: Boolean) {
         dataStore.edit { it[KEY_DARK_THEME] = dark }
     }
 
     override fun isBiometricEnabled(): Flow<Boolean> =
-        dataStore.data.map { it[KEY_BIOMETRIC_ENABLED] ?: false }
+        dataStore.data.map { it[KEY_BIOMETRIC_ENABLED] ?: false }.distinctUntilChanged()
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_BIOMETRIC_ENABLED] = enabled }

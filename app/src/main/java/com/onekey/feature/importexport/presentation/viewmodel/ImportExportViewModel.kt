@@ -37,39 +37,43 @@ class ImportExportViewModel @Inject constructor(
     fun export(uri: Uri, format: ExportFormat, context: Context) {
         viewModelScope.launch {
             _uiState.value = ImportExportUiState.Loading
-            val tmpFile = withContext(Dispatchers.IO) {
-                File(context.cacheDir, "export.${format.name.lowercase()}").also { it.createNewFile() }
+            val tmpFile = File(context.cacheDir, "export.${format.name.lowercase()}")
+            try {
+                withContext(Dispatchers.IO) { tmpFile.createNewFile() }
+                when (val result = exportVault(format, tmpFile.absolutePath)) {
+                    is AppResult.Success -> {
+                        withContext(Dispatchers.IO) {
+                            context.contentResolver.openOutputStream(uri)
+                                ?.use { out -> tmpFile.inputStream().use { it.copyTo(out) } }
+                        }
+                        _uiState.value = ImportExportUiState.Success("Export complete")
+                    }
+                    is AppResult.Error ->
+                        _uiState.value = ImportExportUiState.Error(result.message ?: "Export failed")
+                }
+            } finally {
+                withContext(Dispatchers.IO) { tmpFile.delete() }
             }
-            val result = exportVault(format, tmpFile.absolutePath)
-            if (result is AppResult.Error) {
-                _uiState.value = ImportExportUiState.Error(result.message ?: "Export failed")
-                return@launch
-            }
-            withContext(Dispatchers.IO) {
-                context.contentResolver.openOutputStream(uri)?.use { out -> tmpFile.inputStream().copyTo(out) }
-                tmpFile.delete()
-            }
-            _uiState.value = ImportExportUiState.Success("Export complete")
         }
     }
 
     fun import(uri: Uri, format: ExportFormat, context: Context) {
         viewModelScope.launch {
             _uiState.value = ImportExportUiState.Loading
-            val tmpFile = withContext(Dispatchers.IO) {
-                val f = File(context.cacheDir, "import.${format.name.lowercase()}")
-                context.contentResolver.openInputStream(uri)?.use { inp -> f.outputStream().use { inp.copyTo(it) } }
-                f
-            }
-            when (val result = importVault(format, tmpFile.absolutePath)) {
-                is AppResult.Success -> {
-                    tmpFile.delete()
-                    _uiState.value = ImportExportUiState.Success("Imported ${result.data} credentials")
+            val tmpFile = File(context.cacheDir, "import.${format.name.lowercase()}")
+            try {
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)
+                        ?.use { inp -> tmpFile.outputStream().use { inp.copyTo(it) } }
                 }
-                is AppResult.Error -> {
-                    tmpFile.delete()
-                    _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
+                when (val result = importVault(format, tmpFile.absolutePath)) {
+                    is AppResult.Success ->
+                        _uiState.value = ImportExportUiState.Success("Imported ${result.data} credentials")
+                    is AppResult.Error ->
+                        _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
                 }
+            } finally {
+                withContext(Dispatchers.IO) { tmpFile.delete() }
             }
         }
     }

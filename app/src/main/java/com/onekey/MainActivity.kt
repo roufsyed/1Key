@@ -14,6 +14,7 @@ import com.onekey.core.presentation.navigation.Screen
 import com.onekey.core.presentation.theme.OneKeyTheme
 import com.onekey.core.security.RootDetector
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
@@ -32,8 +33,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val rootCheck = rootDetector.check()
-        val isSetupComplete = runBlocking { authRepository.isSetupComplete().first() }
-        val initialDarkTheme = runBlocking { appPrefs.isDarkTheme().first() }
+        val isSetupComplete = runBlocking(Dispatchers.IO) { authRepository.isSetupComplete().first() }
+        val initialDarkTheme = runBlocking(Dispatchers.IO) { appPrefs.isDarkTheme().first() }
 
         setContent {
             val isDarkTheme by appPrefs.isDarkTheme()

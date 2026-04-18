@@ -87,7 +87,7 @@ fun LockScreen(
             if (state is AuthUiState.Error) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    (state as AuthUiState.Error).message,
+                    state.message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -96,7 +96,11 @@ fun LockScreen(
             if (isBiometricEnabled && canUseBiometric) {
                 Spacer(Modifier.height(16.dp))
                 IconButton(onClick = {
-                    showBiometricPrompt(context) { viewModel.unlockWithBiometric() }
+                    showBiometricPrompt(
+                        context = context,
+                        onSuccess = { viewModel.unlockWithBiometric() },
+                        onError = { msg -> viewModel.setBiometricError(msg) },
+                    )
                 }) {
                     Icon(
                         Icons.Default.Fingerprint,
@@ -202,13 +206,21 @@ private fun PasswordUnlockSection(
     }
 }
 
-private fun showBiometricPrompt(context: android.content.Context, onSuccess: () -> Unit) {
+private fun showBiometricPrompt(
+    context: android.content.Context,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit,
+) {
     val activity = context as? FragmentActivity ?: return
     val executor = ContextCompat.getMainExecutor(context)
     val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
         override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
-        override fun onAuthenticationError(code: Int, msg: CharSequence) {}
-        override fun onAuthenticationFailed() {}
+        override fun onAuthenticationError(code: Int, msg: CharSequence) {
+            if (code != BiometricPrompt.ERROR_USER_CANCELED && code != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                onError(msg.toString())
+            }
+        }
+        override fun onAuthenticationFailed() = onError("Biometric not recognized")
     })
     BiometricPrompt.PromptInfo.Builder()
         .setTitle("Biometric Unlock")

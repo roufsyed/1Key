@@ -53,15 +53,13 @@ class VaultViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     init {
-        viewModelScope.launch {
-            tagRepository.observeTags().collect { tags ->
-                _uiState.update { it.copy(tags = tags) }
-            }
-        }
-        viewModelScope.launch {
-            combine(searchQuery, selectedTag) { q, t -> q to t }
-                .collect { (q, t) -> _uiState.update { it.copy(searchQuery = q, selectedTag = t) } }
-        }
+        tagRepository.observeTags()
+            .onEach { tags -> _uiState.update { it.copy(tags = tags) } }
+            .launchIn(viewModelScope)
+
+        combine(searchQuery, selectedTag) { q, t -> q to t }
+            .onEach { (q, t) -> _uiState.update { it.copy(searchQuery = q, selectedTag = t) } }
+            .launchIn(viewModelScope)
     }
 
     fun onSearchQueryChanged(query: String) { searchQuery.value = query }
