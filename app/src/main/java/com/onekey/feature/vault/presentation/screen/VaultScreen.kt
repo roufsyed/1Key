@@ -3,37 +3,37 @@ package com.onekey.feature.vault.presentation.screen
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.paging.compose.LazyPagingItems
-import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.compose.itemKey
-import com.onekey.core.domain.model.Credential
-import com.onekey.core.domain.model.Tag
+import com.onekey.core.domain.model.TagWithCount
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
+
+// Sentinel used to signal "show all credentials" to TaggedCredentialListScreen.
+const val TAG_ALL = "_all"
+const val TAG_FAVORITES = "_favorites"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultScreen(
-    onCredentialClick: (String) -> Unit,
     onAddClick: () -> Unit,
     onTwoFaClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onTagClick: (String) -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val credentials: LazyPagingItems<Credential> = viewModel.credentials.collectAsLazyPagingItems()
-    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
+    val tagCounts by viewModel.tagCounts.collectAsStateWithLifecycle()
+    val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
+    val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -55,165 +55,107 @@ fun VaultScreen(
             }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding),
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(bottom = 88.dp), // clear FAB
         ) {
-            SearchBar(
-                query = uiState.searchQuery,
-                onQueryChange = viewModel::onSearchQueryChanged,
-            )
-            TagFilterRow(
-                tags = uiState.tags,
-                onTagClick = onTagClick,
-            )
-            CredentialList(
-                items = credentials,
-                favorites = favorites,
-                onItemClick = onCredentialClick,
-                onTagClick = onTagClick,
-            )
+            // ── All items ──────────────────────────────────────────────────────
+            item(key = "all") {
+                TagRow(
+                    icon = Icons.Default.GridView,
+                    name = "All Items",
+                    count = totalCount,
+                    onClick = { onTagClick(TAG_ALL) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            }
+
+            // ── Favorites ─────────────────────────────────────────────────────
+            item(key = "favorites") {
+                TagRow(
+                    icon = Icons.Default.FavoriteBorder,
+                    name = "Favorites",
+                    count = favoriteCount,
+                    onClick = { onTagClick(TAG_FAVORITES) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            }
+
+            // ── Section label ─────────────────────────────────────────────────
+            item(key = "section_header") {
+                Text(
+                    "Categories",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                )
+            }
+
+            // ── Tag rows ──────────────────────────────────────────────────────
+            items(items = tagCounts, key = { it.tag.name }) { tagWithCount ->
+                TagRow(
+                    icon = tagIcon(tagWithCount.tag.name),
+                    name = tagWithCount.tag.name,
+                    count = tagWithCount.count,
+                    onClick = { onTagClick(tagWithCount.tag.name) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun SearchBar(query: String, onQueryChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        placeholder = { Text("Search credentials…") },
-        leadingIcon = { Icon(Icons.Default.Search, null) },
-        trailingIcon = {
-            if (query.isNotEmpty()) {
-                IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Default.Clear, null)
-                }
+private fun TagRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    name: String,
+    count: Int,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        leadingContent = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        headlineContent = {
+            Text(name, fontWeight = FontWeight.Medium)
+        },
+        trailingContent = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    count.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        singleLine = true,
+        modifier = Modifier.clickable(onClick = onClick),
     )
 }
 
-@Composable
-private fun TagFilterRow(
-    tags: List<Tag>,
-    onTagClick: (String) -> Unit,
-) {
-    if (tags.isEmpty()) return
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(items = tags, key = { it.name }) { tag ->
-            AssistChip(
-                onClick = { onTagClick(tag.name) },
-                label = { Text(tag.name) },
-            )
-        }
-    }
-    Spacer(Modifier.height(4.dp))
-}
-
-@Composable
-private fun CredentialList(
-    items: LazyPagingItems<Credential>,
-    favorites: List<Credential>,
-    onItemClick: (String) -> Unit,
-    onTagClick: (String) -> Unit,
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (favorites.isNotEmpty()) {
-            item {
-                Text(
-                    "Favorites",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-            items(items = favorites, key = { "fav_${it.id}" }) { credential ->
-                CredentialCard(
-                    credential = credential,
-                    onClick = { onItemClick(credential.id) },
-                    onTagClick = onTagClick,
-                )
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "All Credentials",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                Spacer(Modifier.height(4.dp))
-            }
-        }
-        items(
-            count = items.itemCount,
-            key = items.itemKey { it.id },
-        ) { index ->
-            val credential = items[index]
-            if (credential != null) {
-                CredentialCard(
-                    credential = credential,
-                    onClick = { onItemClick(credential.id) },
-                    onTagClick = onTagClick,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-internal fun CredentialCard(
-    credential: Credential,
-    onClick: () -> Unit,
-    onTagClick: (String) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(credential.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                    if (credential.isFavorite) {
-                        Icon(
-                            Icons.Default.Favorite,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                    }
-                }
-                if (credential.username.isNotEmpty()) {
-                    Text(
-                        credential.username,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (credential.tags.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        credential.tags.take(3).forEach { tag ->
-                            AssistChip(
-                                onClick = { onTagClick(tag) },
-                                label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
-                            )
-                        }
-                    }
-                }
-            }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+private fun tagIcon(name: String) = when (name) {
+    "Login"          -> Icons.Default.Lock
+    "Secure Note"    -> Icons.Default.Description
+    "Credit Card"    -> Icons.Default.CreditCard
+    "Password"       -> Icons.Default.Key
+    "Bank Account"   -> Icons.Default.AccountBalance
+    "Database"       -> Icons.Default.Storage
+    "Driver License" -> Icons.Default.Badge
+    "Email Account"  -> Icons.Default.Email
+    "Reward Program" -> Icons.Default.Stars
+    "Server"         -> Icons.Default.Computer
+    else             -> Icons.Default.Label
 }

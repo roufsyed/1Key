@@ -36,3 +36,6 @@ data class Tag(
     val icon: String,
     val isDefault: Boolean = false,
 )
+
+@Immutable
+data class TagWithCount(val tag: Tag, val count: Int)

@@ -64,8 +64,20 @@ class CredentialRepositoryImpl @Inject constructor(
 
     override fun observeCount(): Flow<Int> = dao.observeCount().distinctUntilChanged()
 
+    override fun observeCountForTag(tag: String): Flow<Int> =
+        dao.observeCountForTag(tag).distinctUntilChanged()
+
+    override fun observeFavoriteCount(): Flow<Int> =
+        dao.observeFavoriteCount().distinctUntilChanged()
+
     override fun observeFavorites(): Flow<List<Credential>> =
         dao.observeFavorites().map { list -> list.map { it.toDomain() } }
+
+    override fun observeFavoritesPaged(): Flow<PagingData<Credential>> =
+        Pager(
+            config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
+            pagingSourceFactory = { dao.favoritesPagingSource() },
+        ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
 
     override fun observeWithTotp(): Flow<List<Credential>> =
         dao.observeWithTotp().map { list -> list.map { it.toDomain() } }

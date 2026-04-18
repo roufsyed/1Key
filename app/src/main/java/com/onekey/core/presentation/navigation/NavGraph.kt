@@ -69,9 +69,6 @@ fun OneKeyNavGraph(
 
         composable(Screen.Vault.route) {
             VaultScreen(
-                onCredentialClick = { id ->
-                    navController.navigate(Screen.CredentialDetail.createRoute(id))
-                },
                 onAddClick = {
                     navController.navigate(Screen.CredentialDetail.createRoute(null))
                 },

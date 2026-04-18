@@ -47,6 +47,12 @@ interface CredentialDao {
     @Query("SELECT COUNT(*) FROM credentials")
     fun observeCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM credentials WHERE tags LIKE '%' || :tag || '%'")
+    fun observeCountForTag(tag: String): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM credentials WHERE is_favorite = 1")
+    fun observeFavoriteCount(): Flow<Int>
+
     @Query("SELECT * FROM credentials")
     suspend fun getAll(): List<CredentialEntity>
 
@@ -58,6 +64,9 @@ interface CredentialDao {
 
     @Query("SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY updated_at DESC")
     fun observeFavorites(): Flow<List<CredentialEntity>>
+
+    @Query("SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY updated_at DESC")
+    fun favoritesPagingSource(): PagingSource<Int, CredentialEntity>
 
     @Query("SELECT * FROM credentials WHERE totp_secret_encrypted IS NOT NULL ORDER BY title ASC")
     fun observeWithTotp(): Flow<List<CredentialEntity>>

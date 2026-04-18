@@ -14,7 +14,10 @@ interface CredentialRepository {
     suspend fun getAllCredentials(): AppResult<List<Credential>>
     suspend fun importCredentials(credentials: List<Credential>): AppResult<Int>
     fun observeCount(): Flow<Int>
+    fun observeCountForTag(tag: String): Flow<Int>
+    fun observeFavoriteCount(): Flow<Int>
     fun observeFavorites(): Flow<List<Credential>>
+    fun observeFavoritesPaged(): Flow<PagingData<Credential>>
     fun observeWithTotp(): Flow<List<Credential>>
     suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit>
 }

@@ -84,10 +84,11 @@ fun LockScreen(
                 )
             }
 
-            if (state is AuthUiState.Error) {
+            val errorMessage = (state as? AuthUiState.Error)?.message
+            if (errorMessage != null) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    state.message,
+                    errorMessage,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )

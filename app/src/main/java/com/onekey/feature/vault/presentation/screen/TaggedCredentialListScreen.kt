@@ -25,7 +25,7 @@ fun TaggedCredentialListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(viewModel.tagName) },
+                title = { Text(viewModel.displayName) },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                 },
