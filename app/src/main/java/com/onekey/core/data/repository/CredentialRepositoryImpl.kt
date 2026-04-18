@@ -97,7 +97,9 @@ class CredentialRepositoryImpl @Inject constructor(
             title = title,
             username = crypto.decryptString(EncryptedData(usernameEncrypted, ivUsername), key),
             password = crypto.decryptString(EncryptedData(passwordEncrypted, ivPassword), key),
-            url = url,
+            url = if (urlEncrypted != null && ivUrl != null)
+                crypto.decryptString(EncryptedData(urlEncrypted, ivUrl), key)
+            else url, // legacy plaintext fallback for rows that pre-date v4 migration
             notes = crypto.decryptString(EncryptedData(notesEncrypted, ivNotes), key),
             totpSecret = if (totpSecretEncrypted != null && ivTotp != null)
                 crypto.decryptString(EncryptedData(totpSecretEncrypted, ivTotp), key)
@@ -105,7 +107,9 @@ class CredentialRepositoryImpl @Inject constructor(
             tags = tags,
             customFields = customFields.map { cf ->
                 CustomField(
-                    key = cf.key,
+                    key = if (cf.keyEncrypted != null && cf.keyIv != null)
+                        crypto.decryptString(EncryptedData(cf.keyEncrypted, cf.keyIv), key)
+                    else cf.key, // legacy plaintext fallback
                     value = crypto.decryptString(EncryptedData(cf.valueEncrypted, cf.iv), key),
                     isSensitive = cf.isSensitive,
                 )
@@ -123,6 +127,7 @@ class CredentialRepositoryImpl @Inject constructor(
         val encPassword = crypto.encryptString(password, key)
         val encNotes = crypto.encryptString(notes, key)
         val encTotp = totpSecret?.let { crypto.encryptString(it, key) }
+        val encUrl = crypto.encryptString(url, key)
 
         return CredentialEntity(
             id = if (id.isBlank()) UUID.randomUUID().toString() else id,
@@ -135,12 +140,17 @@ class CredentialRepositoryImpl @Inject constructor(
             ivNotes = encNotes.iv,
             totpSecretEncrypted = encTotp?.ciphertext,
             ivTotp = encTotp?.iv,
-            url = url,
+            url = "",
+            urlEncrypted = encUrl.ciphertext,
+            ivUrl = encUrl.iv,
             tags = tags,
             customFields = customFields.map { cf ->
                 val encVal = crypto.encryptString(cf.value, key)
+                val encKey = crypto.encryptString(cf.key, key)
                 CustomFieldEntity(
-                    key = cf.key,
+                    key = "",
+                    keyEncrypted = encKey.ciphertext,
+                    keyIv = encKey.iv,
                     valueEncrypted = encVal.ciphertext,
                     iv = encVal.iv,
                     isSensitive = cf.isSensitive,

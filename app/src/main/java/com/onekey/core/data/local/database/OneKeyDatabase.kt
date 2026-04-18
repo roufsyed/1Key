@@ -40,6 +40,15 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Add encrypted URL columns; clear legacy plaintext url (vault key not available here).
+        db.execSQL("ALTER TABLE credentials ADD COLUMN url_encrypted BLOB")
+        db.execSQL("ALTER TABLE credentials ADD COLUMN iv_url BLOB")
+        db.execSQL("UPDATE credentials SET url = ''")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -56,7 +65,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

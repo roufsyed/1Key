@@ -13,7 +13,10 @@ data class CredentialEntity(
     @ColumnInfo(name = "title") val title: String,
     @ColumnInfo(name = "username_encrypted") val usernameEncrypted: ByteArray,
     @ColumnInfo(name = "password_encrypted") val passwordEncrypted: ByteArray,
-    @ColumnInfo(name = "url") val url: String,
+    // url stored plaintext pre-v4; encrypted going forward. Legacy column kept for schema compat.
+    @ColumnInfo(name = "url") val url: String = "",
+    @ColumnInfo(name = "url_encrypted") val urlEncrypted: ByteArray? = null,
+    @ColumnInfo(name = "iv_url") val ivUrl: ByteArray? = null,
     @ColumnInfo(name = "notes_encrypted") val notesEncrypted: ByteArray,
     @ColumnInfo(name = "totp_secret_encrypted") val totpSecretEncrypted: ByteArray?,
     @ColumnInfo(name = "tags") val tags: List<String>,
@@ -36,7 +39,10 @@ data class CredentialEntity(
 }
 
 data class CustomFieldEntity(
-    val key: String,
+    // key stored plaintext pre-v4; encrypted going forward. Legacy field kept for JSON compat.
+    val key: String = "",
+    val keyEncrypted: ByteArray? = null,
+    val keyIv: ByteArray? = null,
     val valueEncrypted: ByteArray,
     val iv: ByteArray,
     val isSensitive: Boolean,
@@ -44,8 +50,8 @@ data class CustomFieldEntity(
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is CustomFieldEntity) return false
-        return key == other.key
+        return valueEncrypted.contentEquals(other.valueEncrypted) && iv.contentEquals(other.iv)
     }
 
-    override fun hashCode(): Int = key.hashCode()
+    override fun hashCode(): Int = 31 * valueEncrypted.contentHashCode() + iv.contentHashCode()
 }
