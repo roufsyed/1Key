@@ -21,6 +21,7 @@ import com.onekey.feature.twofa.presentation.viewmodel.TwoFaListViewModel
 @Composable
 fun TwoFaListScreen(
     onBack: () -> Unit,
+    showBack: Boolean = true,
     viewModel: TwoFaListViewModel = hiltViewModel(),
 ) {
     val entries by viewModel.entries.collectAsStateWithLifecycle()
@@ -30,7 +31,9 @@ fun TwoFaListScreen(
             TopAppBar(
                 title = { Text("2FA Codes") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    if (showBack) {
+                        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    }
                 },
             )
         }

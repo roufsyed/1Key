@@ -27,8 +27,6 @@ const val TAG_FAVORITES = "_favorites"
 @Composable
 fun VaultScreen(
     onAddClick: (String) -> Unit,
-    onTwoFaClick: () -> Unit,
-    onSettingsClick: () -> Unit,
     onTagClick: (String) -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
 ) {
@@ -41,17 +39,7 @@ fun VaultScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("1Key") },
-                actions = {
-                    IconButton(onClick = onTwoFaClick) {
-                        Icon(Icons.Default.Key, contentDescription = "2FA Codes")
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                }
-            )
+            TopAppBar(title = { Text("1Key") })
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -173,7 +161,7 @@ fun VaultScreen(
 }
 
 @Composable
-private fun TagRow(
+internal fun TagRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     name: String,
     count: Int,
@@ -211,7 +199,7 @@ private fun TagRow(
     )
 }
 
-private fun tagIcon(name: String) = when (name) {
+internal fun tagIcon(name: String) = when (name) {
     "Login"        -> Icons.Default.Lock
     "Secure Note"  -> Icons.Default.Description
     "Credit Card"  -> Icons.Default.CreditCard

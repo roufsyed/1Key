@@ -30,6 +30,7 @@ import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    showBack: Boolean = true,
     onSetupPin: () -> Unit,
     onChangePassword: () -> Unit,
     onVaultReset: () -> Unit,
@@ -89,7 +90,9 @@ fun SettingsScreen(
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    if (showBack) {
+                        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    }
                 },
             )
         },
