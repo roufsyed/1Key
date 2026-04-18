@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.room.Room
 import com.onekey.core.data.local.dao.CredentialDao
 import com.onekey.core.data.local.dao.TagDao
+import com.onekey.core.data.local.database.DATABASE_CALLBACK
 import com.onekey.core.data.local.database.MIGRATION_1_2
+import com.onekey.core.data.local.database.MIGRATION_2_3
 import com.onekey.core.data.local.database.OneKeyDatabase
 import dagger.Module
 import dagger.Provides
@@ -21,7 +23,8 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): OneKeyDatabase =
         Room.databaseBuilder(context, OneKeyDatabase::class.java, "onekey.db")
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addCallback(DATABASE_CALLBACK)
             .fallbackToDestructiveMigration()
             .build()
 

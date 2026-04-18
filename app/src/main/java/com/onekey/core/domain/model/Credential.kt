@@ -34,14 +34,5 @@ data class Tag(
     val name: String,
     val color: Int,
     val icon: String,
+    val isDefault: Boolean = false,
 )
-
-enum class PredefinedTag(val displayName: String) {
-    BANK("Bank"),
-    WIFI("WiFi"),
-    LOGIN("Login"),
-    NOTES("Notes"),
-    EMAIL("Email"),
-    SOCIAL("Social"),
-    WORK("Work"),
-}

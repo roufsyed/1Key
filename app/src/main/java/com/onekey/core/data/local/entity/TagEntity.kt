@@ -10,4 +10,5 @@ data class TagEntity(
     @ColumnInfo(name = "color") val color: Int,
     @ColumnInfo(name = "icon") val icon: String,
     @ColumnInfo(name = "created_at") val createdAt: Long,
+    @ColumnInfo(name = "is_default") val isDefault: Boolean = false,
 )

@@ -40,6 +40,11 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun deleteTag(name: String) {
-        viewModelScope.launch { tagRepository.deleteTag(name) }
+        viewModelScope.launch {
+            val tag = tags.value.find { it.name == name }
+            if (tag != null && !tag.isDefault) {
+                tagRepository.deleteTag(name)
+            }
+        }
     }
 }

@@ -208,15 +208,17 @@ fun SettingsScreen(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     ListItem(
                         headlineContent = { Text(tag.name) },
-                        trailingContent = {
-                            IconButton(onClick = { settingsVm.deleteTag(tag.name) }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Delete tag",
-                                    tint = MaterialTheme.colorScheme.error,
-                                )
+                        trailingContent = if (!tag.isDefault) {
+                            {
+                                IconButton(onClick = { settingsVm.deleteTag(tag.name) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete tag",
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                }
                             }
-                        },
+                        } else null,
                     )
                 }
             }

@@ -31,6 +31,6 @@ class TagRepositoryImpl @Inject constructor(
         dao.deleteByName(name)
     }
 
-    private fun TagEntity.toDomain() = Tag(name, color, icon)
-    private fun Tag.toEntity() = TagEntity(name, color, icon, System.currentTimeMillis())
+    private fun TagEntity.toDomain() = Tag(name, color, icon, isDefault)
+    private fun Tag.toEntity() = TagEntity(name, color, icon, System.currentTimeMillis(), isDefault)
 }
