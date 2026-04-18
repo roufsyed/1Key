@@ -1,0 +1,81 @@
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Gradle files
+.gradle/
+build/
+!gradle-wrapper.jar
+gradle-app.setting
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log and temp files
+*.log
+*.temp
+*.tmp
+
+# Android Studio
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Keystore files
+*.jks
+*.keystore
+
+# Generated files
+/captures/
+/output.json
+*.apk
+*.ap_
+*.dex
+*.class
+*.so
+
+# Unit test files
+*.unitTest.json
+
+# Lint and crashlytics
+lint/intermediates/
+lint/generated/
+lint/reports/
+/crashlytics-build.properties
+
+# NDK
+obj/
+.externalNativeBuild/
+
+# Java and Kotlin files
+*.class
+*.kotlin_metadata
+*.kotlin_module
+
+# Miscellaneous
+.DS_Store
+Thumbs.db
+.idea/
+
+# Kotlin daemon sessions (generated)
+.kotlin/
+
+# OS Files
+*.swp
+*.swo
+
+# Eclipse / Buildship
+.project
+.classpath
+.settings/
+*.launch
+
