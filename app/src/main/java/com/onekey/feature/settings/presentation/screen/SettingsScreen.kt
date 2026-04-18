@@ -1,6 +1,7 @@
 package com.onekey.feature.settings.presentation.screen
 
 import android.net.Uri
+import com.onekey.BuildConfig
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ fun SettingsScreen(
     val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
+    val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
     val backupState by importExportVm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -49,6 +51,7 @@ fun SettingsScreen(
             when (event) {
                 SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
                 SettingsEvent.VaultReset -> onVaultReset()
+                is SettingsEvent.SeedComplete -> snackbarHostState.showSnackbar("${event.count} sample credentials added")
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
             }
         }
@@ -303,6 +306,29 @@ fun SettingsScreen(
                     }
                 }
             }
+            // ── Developer Options (debug builds only) ─────────────────────────
+            if (BuildConfig.DEBUG) {
+                item {
+                    Spacer(Modifier.height(8.dp))
+                    SectionHeader("Developer Options")
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        ListItem(
+                            headlineContent = { Text("Seed Sample Data") },
+                            supportingContent = { Text("Insert 9 sample credentials covering all categories") },
+                            leadingContent = {
+                                if (isSeedingData) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Storage, contentDescription = null)
+                                }
+                            },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable(enabled = !isSeedingData) { settingsVm.seedData() },
+                        )
+                    }
+                }
+            }
+
             // ── Privacy ───────────────────────────────────────────────────────
             item {
                 Spacer(Modifier.height(8.dp))

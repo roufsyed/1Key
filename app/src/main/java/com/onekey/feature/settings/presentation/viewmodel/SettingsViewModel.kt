@@ -8,6 +8,7 @@ import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.ResetVaultUseCase
+import com.onekey.core.domain.usecase.SeedDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -16,6 +17,7 @@ import javax.inject.Inject
 sealed class SettingsEvent {
     data object PinReset : SettingsEvent()
     data object VaultReset : SettingsEvent()
+    data class SeedComplete(val count: Int) : SettingsEvent()
     data class Error(val message: String) : SettingsEvent()
 }
 
@@ -25,7 +27,11 @@ class SettingsViewModel @Inject constructor(
     private val appPrefs: AppPreferencesRepository,
     private val authRepository: AuthRepository,
     private val resetVaultUseCase: ResetVaultUseCase,
+    private val seedDataUseCase: SeedDataUseCase,
 ) : ViewModel() {
+
+    private val _isSeedingData = MutableStateFlow(false)
+    val isSeedingData: StateFlow<Boolean> = _isSeedingData.asStateFlow()
 
     private val _event = MutableSharedFlow<SettingsEvent>(extraBufferCapacity = 1)
     val event: SharedFlow<SettingsEvent> = _event.asSharedFlow()
@@ -79,6 +85,19 @@ class SettingsViewModel @Inject constructor(
             when (val result = resetVaultUseCase()) {
                 is AppResult.Success -> _event.emit(SettingsEvent.VaultReset)
                 is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to reset vault"))
+            }
+        }
+    }
+
+    fun seedData() {
+        if (_isSeedingData.value) return
+        viewModelScope.launch {
+            _isSeedingData.value = true
+            val result = seedDataUseCase()
+            _isSeedingData.value = false
+            when (result) {
+                is AppResult.Success -> _event.emit(SettingsEvent.SeedComplete(result.data))
+                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to seed data"))
             }
         }
     }
