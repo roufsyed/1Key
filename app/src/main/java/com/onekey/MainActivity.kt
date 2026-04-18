@@ -14,8 +14,10 @@ import com.onekey.core.presentation.navigation.Screen
 import com.onekey.core.presentation.theme.OneKeyTheme
 import com.onekey.core.security.RootDetector
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
@@ -29,12 +31,22 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
 
         val rootCheck = rootDetector.check()
         val isSetupComplete = runBlocking(Dispatchers.IO) { authRepository.isSetupComplete().first() }
         val initialDarkTheme = runBlocking(Dispatchers.IO) { appPrefs.isDarkTheme().first() }
+        val initialScreenshotsEnabled = runBlocking(Dispatchers.IO) { appPrefs.isScreenshotsEnabled().first() }
+        if (!initialScreenshotsEnabled) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
+        // Observe the preference so the flag updates the moment the user toggles it in Settings,
+        // without requiring an Activity restart.
+        lifecycleScope.launch {
+            appPrefs.isScreenshotsEnabled().collect { enabled ->
+                if (enabled) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
 
         setContent {
             val isDarkTheme by appPrefs.isDarkTheme()

@@ -40,6 +40,7 @@ fun SettingsScreen(
     val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
+    val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
     val backupState by importExportVm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -69,6 +70,8 @@ fun SettingsScreen(
     var showResetPinDialog by remember { mutableStateOf(false) }
     var showResetVaultDialog by remember { mutableStateOf(false) }
     var resetVaultConfirmed by remember { mutableStateOf(false) }
+    var showScreenshotDialog by remember { mutableStateOf(false) }
+    var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -150,6 +153,26 @@ fun SettingsScreen(
                                 },
                             )
                         }
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Allow Screenshots") },
+                            supportingContent = {
+                                Text(
+                                    if (isScreenshotsEnabled) "App visible in Recent Apps screen"
+                                    else "App hidden from Recent Apps screen"
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isScreenshotsEnabled,
+                                    onCheckedChange = { newValue ->
+                                        pendingScreenshotsEnabled = newValue
+                                        showScreenshotDialog = true
+                                    },
+                                )
+                            },
+                        )
                         if (isPinSetup) {
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             ListItem(
@@ -371,6 +394,44 @@ fun SettingsScreen(
                 Spacer(Modifier.height(32.dp))
             }
         }
+    }
+
+    if (showScreenshotDialog) {
+        val enabling = pendingScreenshotsEnabled
+        AlertDialog(
+            onDismissRequest = { showScreenshotDialog = false },
+            icon = { Icon(Icons.Default.Screenshot, contentDescription = null) },
+            title = { Text(if (enabling) "Enable Screenshots?" else "Disable Screenshots?") },
+            text = {
+                Text(
+                    if (enabling)
+                        "Allowing screenshots means this app can appear in the Recent Apps screen " +
+                            "and screen capture tools will be able to capture your passwords.\n\n" +
+                            "Only enable this if you genuinely need to take screenshots inside 1Key."
+                    else
+                        "Disabling screenshots prevents this app from appearing in the Recent Apps " +
+                            "screen and blocks screen capture tools from capturing your passwords.\n\n" +
+                            "This is the recommended setting for a password manager."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        settingsVm.setScreenshotsEnabled(enabling)
+                        showScreenshotDialog = false
+                    },
+                    colors = if (enabling) ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ) else ButtonDefaults.buttonColors(),
+                ) {
+                    Text(if (enabling) "Enable Anyway" else "Disable Screenshots")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScreenshotDialog = false }) { Text("Cancel") }
+            },
+        )
     }
 
     if (showResetPinDialog) {

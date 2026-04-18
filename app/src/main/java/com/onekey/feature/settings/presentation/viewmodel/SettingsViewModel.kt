@@ -48,12 +48,19 @@ class SettingsViewModel @Inject constructor(
     val isPinSetup: StateFlow<Boolean> = authRepository.isPinSetup()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val isScreenshotsEnabled: StateFlow<Boolean> = appPrefs.isScreenshotsEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
 
     fun setBiometricEnabled(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setBiometricEnabled(enabled) }
+    }
+
+    fun setScreenshotsEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setScreenshotsEnabled(enabled) }
     }
 
     fun addTag(name: String) {

@@ -6,12 +6,14 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
 private val KEY_BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
+private val KEY_SCREENSHOTS_ENABLED = booleanPreferencesKey("screenshots_enabled")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -30,5 +32,12 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setBiometricEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_BIOMETRIC_ENABLED] = enabled }
+    }
+
+    override fun isScreenshotsEnabled(): Flow<Boolean> =
+        dataStore.data.map { it[KEY_SCREENSHOTS_ENABLED] ?: true }.distinctUntilChanged()
+
+    override suspend fun setScreenshotsEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_SCREENSHOTS_ENABLED] = enabled }
     }
 }
