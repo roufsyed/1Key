@@ -287,10 +287,10 @@ fun SettingsScreen(
                 }
             }
 
-            // ── Tags ──────────────────────────────────────────────────────────
+            // ── Categories ────────────────────────────────────────────────────
             item {
                 Spacer(Modifier.height(8.dp))
-                SectionHeader("Tags")
+                SectionHeader("Categories")
             }
 
             items(tags, key = { it.name }) { tag ->
@@ -302,7 +302,7 @@ fun SettingsScreen(
                                 IconButton(onClick = { settingsVm.deleteTag(tag.name) }) {
                                     Icon(
                                         Icons.Default.Delete,
-                                        contentDescription = "Delete tag",
+                                        contentDescription = "Delete category",
                                         tint = MaterialTheme.colorScheme.error,
                                     )
                                 }
@@ -321,7 +321,7 @@ fun SettingsScreen(
                         OutlinedTextField(
                             value = newTagName,
                             onValueChange = { newTagName = it },
-                            label = { Text("Tag name") },
+                            label = { Text("Category name") },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
                         )
@@ -331,7 +331,7 @@ fun SettingsScreen(
                                 newTagName = ""
                                 showAddTag = false
                             }
-                        }) { Icon(Icons.Default.Check, "Save tag") }
+                        }) { Icon(Icons.Default.Check, "Save category") }
                         IconButton(onClick = { showAddTag = false; newTagName = "" }) {
                             Icon(Icons.Default.Close, "Cancel")
                         }
@@ -343,7 +343,7 @@ fun SettingsScreen(
                     ) {
                         Icon(Icons.Default.Add, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Add Tag")
+                        Text("Add Category")
                     }
                 }
             }
