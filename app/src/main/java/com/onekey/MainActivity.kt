@@ -12,6 +12,7 @@ import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.presentation.navigation.OneKeyNavGraph
 import com.onekey.core.presentation.navigation.Screen
 import com.onekey.core.presentation.theme.OneKeyTheme
+import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.RootDetector
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
@@ -27,6 +28,12 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var authRepository: AuthRepository
     @Inject lateinit var appPrefs: AppPreferencesRepository
     @Inject lateinit var rootDetector: RootDetector
+    @Inject lateinit var autoLockManager: AutoLockManager
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        autoLockManager.onUserActivity()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

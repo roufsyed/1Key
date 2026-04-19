@@ -8,11 +8,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.feature.auth.presentation.screen.ChangePasswordScreen
 import com.onekey.feature.auth.presentation.screen.LockScreen
 import com.onekey.feature.auth.presentation.screen.OnboardingScreen
@@ -58,9 +60,26 @@ fun OneKeyNavGraph(
     navController: NavHostController = rememberNavController(),
     startDestination: String,
 ) {
+    val appViewModel: AppViewModel = hiltViewModel()
+    val isUnlocked by appViewModel.isUnlocked.collectAsStateWithLifecycle()
+
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
     val showBottomNav = currentRoute in BOTTOM_NAV_ROUTES
+
+    // Navigate to Lock whenever the vault locks mid-session.
+    // Skip if already on Lock or Onboarding to avoid redundant navigation.
+    LaunchedEffect(isUnlocked) {
+        if (!isUnlocked &&
+            currentRoute != null &&
+            currentRoute != Screen.Lock.route &&
+            currentRoute != Screen.Onboarding.route
+        ) {
+            navController.navigate(Screen.Lock.route) {
+                popUpTo(navController.graph.id) { inclusive = false }
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {

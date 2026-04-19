@@ -3,6 +3,7 @@ package com.onekey.feature.settings.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
+import com.onekey.core.domain.model.LockTimeout
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
@@ -52,6 +53,9 @@ class SettingsViewModel @Inject constructor(
     val isScreenshotsEnabled: StateFlow<Boolean> = appPrefs.isScreenshotsEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val lockTimeout: StateFlow<LockTimeout> = appPrefs.getLockTimeout()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockTimeout.IMMEDIATE)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -62,6 +66,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setScreenshotsEnabled(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setScreenshotsEnabled(enabled) }
+    }
+
+    fun setLockTimeout(timeout: LockTimeout) {
+        viewModelScope.launch { appPrefs.setLockTimeout(timeout) }
     }
 
     fun addTag(name: String) {

@@ -20,6 +20,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.domain.model.LockTimeout
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
@@ -42,6 +43,7 @@ fun SettingsScreen(
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
     val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
+    val lockTimeout by settingsVm.lockTimeout.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
     val backupState by importExportVm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -76,6 +78,8 @@ fun SettingsScreen(
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
     var deleteVaultConfirmed by remember { mutableStateOf(false) }
+    var showLockTimeoutDialog by remember { mutableStateOf(false) }
+    var pendingLockTimeout by remember(lockTimeout) { mutableStateOf(lockTimeout) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -178,6 +182,14 @@ fun SettingsScreen(
                                     },
                                 )
                             },
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Auto-lock") },
+                            supportingContent = { Text(lockTimeout.displayName) },
+                            leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable { showLockTimeoutDialog = true },
                         )
                         if (isPinSetup) {
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -466,6 +478,58 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showScreenshotDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showLockTimeoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLockTimeoutDialog = false },
+            icon = { Icon(Icons.Default.Timer, contentDescription = null) },
+            title = { Text("Auto-lock") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Choose how long 1Key waits before locking when you leave the app or stop interacting.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    LockTimeout.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pendingLockTimeout = option }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(
+                                selected = pendingLockTimeout == option,
+                                onClick = { pendingLockTimeout = option },
+                            )
+                            Column {
+                                Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
+                                if (option == LockTimeout.IMMEDIATE) {
+                                    Text(
+                                        "Lock the moment you leave the app",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    settingsVm.setLockTimeout(pendingLockTimeout)
+                    showLockTimeoutDialog = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLockTimeoutDialog = false }) { Text("Cancel") }
             },
         )
     }
