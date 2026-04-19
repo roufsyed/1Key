@@ -1,5 +1,7 @@
 package com.onekey.feature.vault.presentation.screen
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -8,8 +10,10 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.presentation.util.toRelativeTime
@@ -22,6 +26,9 @@ internal fun CredentialCard(
     isSelected: Boolean = false,
     onLongClick: () -> Unit = {},
 ) {
+    // Computed once per unique updatedAt value; avoids DateTimeFormatter work on every recomposition.
+    val relativeTime = remember(credential.updatedAt) { credential.updatedAt.toRelativeTime() }
+
     val containerColor = if (isSelected)
         MaterialTheme.colorScheme.primaryContainer
     else
@@ -72,7 +79,7 @@ internal fun CredentialCard(
                 }
                 if (credential.updatedAt > 0L) {
                     Text(
-                        "Modified ${credential.updatedAt.toRelativeTime()}",
+                        "Modified $relativeTime",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -81,10 +88,7 @@ internal fun CredentialCard(
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         credential.tags.take(3).forEach { tag ->
-                            AssistChip(
-                                onClick = { onTagClick(tag) },
-                                label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
-                            )
+                            TagPill(text = tag, onClick = { onTagClick(tag) })
                         }
                     }
                 }
@@ -97,5 +101,23 @@ internal fun CredentialCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun TagPill(text: String, onClick: () -> Unit) {
+    val shape = MaterialTheme.shapes.extraSmall
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
     }
 }
