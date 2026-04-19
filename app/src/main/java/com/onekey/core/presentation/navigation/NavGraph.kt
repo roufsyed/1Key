@@ -29,6 +29,7 @@ import com.onekey.feature.auth.presentation.screen.OnboardingScreen
 import com.onekey.feature.auth.presentation.screen.SetupPinScreen
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
+import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
 import com.onekey.feature.twofa.presentation.screen.TwoFaListScreen
 import com.onekey.feature.vault.presentation.screen.CredentialDetailScreen
 import com.onekey.feature.vault.presentation.screen.FavouritesScreen
@@ -51,6 +52,7 @@ sealed class Screen(val route: String) {
     data object TaggedList : Screen("tagged/{tagName}") {
         fun createRoute(tagName: String) = "tagged/${Uri.encode(tagName)}"
     }
+    data object QrScanner : Screen("qr_scanner")
 }
 
 private val BOTTOM_NAV_ROUTES = setOf(
@@ -169,6 +171,14 @@ fun OneKeyNavGraph(
                 TwoFaListScreen(
                     onBack = { navController.popBackStack() },
                     showBack = false,
+                    onScanQr = { navController.navigate(Screen.QrScanner.route) },
+                )
+            }
+
+            composable(Screen.QrScanner.route) {
+                QrScannerScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaved = { navController.popBackStack() },
                 )
             }
 

@@ -26,3 +26,11 @@
 # OpenCSV
 -keep class com.opencsv.** { *; }
 -dontwarn com.opencsv.**
+
+# CameraX
+-keep class androidx.camera.** { *; }
+-dontwarn androidx.camera.**
+
+# ML Kit Barcode
+-keep class com.google.mlkit.** { *; }
+-dontwarn com.google.mlkit.**
