@@ -2,9 +2,6 @@ package com.onekey.feature.vault.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
-import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.TagWithCount
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.repository.TagRepository
@@ -40,8 +37,4 @@ class VaultViewModel @Inject constructor(
 
     val favoriteCount: StateFlow<Int> = credentialRepository.observeFavoriteCount()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
-    val favorites: StateFlow<PagingData<Credential>> = credentialRepository.observeFavoritesPaged()
-        .cachedIn(viewModelScope)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PagingData.empty())
 }
