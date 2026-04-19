@@ -1,8 +1,10 @@
 package com.onekey.feature.vault.presentation.screen
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -12,12 +14,19 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.onekey.core.domain.model.TagWithCount
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
+import kotlinx.coroutines.delay
 
 // Sentinel used to signal "show all credentials" to TaggedCredentialListScreen.
 const val TAG_ALL = "_all"
@@ -28,76 +37,172 @@ const val TAG_FAVORITES = "_favorites"
 fun VaultScreen(
     onAddClick: (String) -> Unit,
     onTagClick: (String) -> Unit,
+    onCredentialClick: (String) -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
 ) {
     val tagCounts by viewModel.tagCounts.collectAsStateWithLifecycle()
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    // Always collected unconditionally to satisfy Compose snapshot rules.
+    val searchResults = viewModel.searchResults.collectAsLazyPagingItems()
 
+    var isSearchActive by remember { mutableStateOf(false) }
     var showBottomSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val focusRequester = remember { FocusRequester() }
+
+    BackHandler(enabled = isSearchActive) {
+        isSearchActive = false
+        viewModel.setSearchQuery("")
+    }
+
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            delay(50) // allow the TextField to enter composition before requesting focus
+            focusRequester.requestFocus()
+        }
+    }
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("1Key") })
+            if (isSearchActive) {
+                TopAppBar(
+                    navigationIcon = {
+                        IconButton(onClick = {
+                            isSearchActive = false
+                            viewModel.setSearchQuery("")
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Close search")
+                        }
+                    },
+                    title = {
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { viewModel.setSearchQuery(it) },
+                            placeholder = {
+                                Text(
+                                    "Search credentials…",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent,
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(focusRequester),
+                        )
+                    },
+                    actions = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            }
+                        }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("1Key") },
+                    actions = {
+                        IconButton(onClick = { isSearchActive = true }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search")
+                        }
+                    },
+                )
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showBottomSheet = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Add credential")
+            if (!isSearchActive) {
+                FloatingActionButton(
+                    onClick = { showBottomSheet = true },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add credential")
+                }
             }
-        }
+        },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(bottom = 88.dp), // clear FAB
-        ) {
-            // ── All items ──────────────────────────────────────────────────────
-            item(key = "all") {
-                TagRow(
-                    icon = Icons.Default.GridView,
-                    name = "All Items",
-                    count = totalCount,
-                    onClick = { onTagClick(TAG_ALL) },
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-            }
+        if (isSearchActive) {
+            SearchResultsContent(
+                query = searchQuery,
+                isLoading = searchResults.loadState.refresh is LoadState.Loading,
+                isEmpty = searchResults.loadState.refresh is LoadState.NotLoading
+                    && searchResults.itemCount == 0
+                    && searchQuery.isNotEmpty(),
+                padding = padding,
+                results = {
+                    items(
+                        count = searchResults.itemCount,
+                        key = searchResults.itemKey { it.id },
+                    ) { index ->
+                        val credential = searchResults[index]
+                        if (credential != null) {
+                            CredentialCard(
+                                credential = credential,
+                                onClick = { onCredentialClick(credential.id) },
+                                onTagClick = {},
+                            )
+                        }
+                    }
+                },
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(bottom = 88.dp), // clear FAB
+            ) {
+                // ── All items ──────────────────────────────────────────────────────
+                item(key = "all") {
+                    TagRow(
+                        icon = Icons.Default.GridView,
+                        name = "All Items",
+                        count = totalCount,
+                        onClick = { onTagClick(TAG_ALL) },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
 
-            // ── Favorites ─────────────────────────────────────────────────────
-            item(key = "favorites") {
-                TagRow(
-                    icon = Icons.Default.FavoriteBorder,
-                    name = "Favorites",
-                    count = favoriteCount,
-                    onClick = { onTagClick(TAG_FAVORITES) },
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-            }
+                // ── Favorites ─────────────────────────────────────────────────────
+                item(key = "favorites") {
+                    TagRow(
+                        icon = Icons.Default.FavoriteBorder,
+                        name = "Favorites",
+                        count = favoriteCount,
+                        onClick = { onTagClick(TAG_FAVORITES) },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
 
-            // ── Section label ─────────────────────────────────────────────────
-            item(key = "section_header") {
-                Text(
-                    "Categories",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                )
-            }
+                // ── Section label ─────────────────────────────────────────────────
+                item(key = "section_header") {
+                    Text(
+                        "Categories",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    )
+                }
 
-            // ── Tag rows ──────────────────────────────────────────────────────
-            items(items = tagCounts, key = { it.tag.name }) { tagWithCount ->
-                TagRow(
-                    icon = tagIcon(tagWithCount.tag.name),
-                    name = tagWithCount.tag.name,
-                    count = tagWithCount.count,
-                    onClick = { onTagClick(tagWithCount.tag.name) },
-                )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                // ── Tag rows ──────────────────────────────────────────────────────
+                items(items = tagCounts, key = { it.tag.name }) { tagWithCount ->
+                    TagRow(
+                        icon = tagIcon(tagWithCount.tag.name),
+                        name = tagWithCount.tag.name,
+                        count = tagWithCount.count,
+                        onClick = { onTagClick(tagWithCount.tag.name) },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
             }
         }
     }
@@ -156,6 +261,71 @@ fun VaultScreen(
                     },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsContent(
+    query: String,
+    isLoading: Boolean,
+    isEmpty: Boolean,
+    padding: PaddingValues,
+    results: LazyListScope.() -> Unit,
+) {
+    when {
+        query.isBlank() -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "Type to search credentials…",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        isLoading -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+        isEmpty -> {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "No results for \u201c$query\u201d",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Try a different search term",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        else -> {
+            LazyColumn(
+                modifier = Modifier.padding(padding),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                content = results,
+            )
         }
     }
 }

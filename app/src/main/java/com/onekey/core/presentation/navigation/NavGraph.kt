@@ -131,6 +131,9 @@ fun OneKeyNavGraph(
                     onTagClick = { tagName ->
                         navController.navigate(Screen.TaggedList.createRoute(tagName))
                     },
+                    onCredentialClick = { id ->
+                        navController.navigate(Screen.CredentialDetail.createRoute(id))
+                    },
                 )
             }
 
