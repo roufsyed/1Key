@@ -322,7 +322,7 @@ private fun DetailField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CredentialEditContent(
     credential: Credential,
@@ -392,10 +392,10 @@ private fun CredentialEditContent(
             OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
             OutlinedTextField(value = totpSecret, onValueChange = { totpSecret = it }, label = { Text("TOTP Secret (base32)") }, modifier = Modifier.fillMaxWidth())
 
-            // Tags (chip-based, non-editable text field)
+            // Category (chip-based, non-editable)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    "Tags",
+                    "Category",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -411,15 +411,15 @@ private fun CredentialEditContent(
                             trailingIcon = {
                                 Icon(
                                     Icons.Default.Close,
-                                    contentDescription = "Remove tag",
-                                    modifier = Modifier.size(16.dp),
+                                    contentDescription = "Remove category",
+                                    modifier = Modifier.size(InputChipDefaults.IconSize),
                                 )
                             },
                         )
                     }
                     AssistChip(
                         onClick = { showTagPicker = true },
-                        label = { Text("Add tag") },
+                        label = { Text("Add category") },
                         leadingIcon = {
                             Icon(
                                 Icons.Default.Add,
@@ -466,12 +466,11 @@ private fun CredentialEditContent(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagsViewCard(tags: List<String>) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Tags", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            Text("Category", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -496,7 +495,7 @@ private fun TagPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Tags") },
+        title = { Text("Select Category") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -529,7 +528,7 @@ private fun TagPickerDialog(
                     OutlinedTextField(
                         value = customTagText,
                         onValueChange = { customTagText = it },
-                        label = { Text("New tag") },
+                        label = { Text("New category") },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
                     )
@@ -543,7 +542,7 @@ private fun TagPickerDialog(
                         },
                         enabled = customTagText.isNotBlank(),
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add custom tag")
+                        Icon(Icons.Default.Add, contentDescription = "Add custom category")
                     }
                 }
             }
