@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
@@ -80,6 +81,7 @@ fun SettingsScreen(
     var deleteVaultConfirmed by remember { mutableStateOf(false) }
     var showLockTimeoutDialog by remember { mutableStateOf(false) }
     var pendingLockTimeout by remember(lockTimeout) { mutableStateOf(lockTimeout) }
+    var tagToDelete by remember { mutableStateOf<Tag?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -299,7 +301,7 @@ fun SettingsScreen(
                         headlineContent = { Text(tag.name) },
                         trailingContent = if (!tag.isDefault) {
                             {
-                                IconButton(onClick = { settingsVm.deleteTag(tag.name) }) {
+                                IconButton(onClick = { tagToDelete = tag }) {
                                     Icon(
                                         Icons.Default.Delete,
                                         contentDescription = "Delete category",
@@ -678,6 +680,46 @@ fun SettingsScreen(
                         resetVaultConfirmed = false
                     }
                 ) { Text("Cancel") }
+            },
+        )
+    }
+
+    tagToDelete?.let { tag ->
+        AlertDialog(
+            onDismissRequest = { tagToDelete = null },
+            icon = {
+                Icon(
+                    Icons.Default.Label,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            },
+            title = { Text("Remove \u201c${tag.name}\u201d?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The \u201c${tag.name}\u201d category will be permanently removed.")
+                    Text(
+                        "Any passwords currently tagged with it will have the category quietly " +
+                            "stripped away \u2014 your passwords themselves stay completely safe " +
+                            "and nothing else will change.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settingsVm.deleteTag(tag.name)
+                        tagToDelete = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Remove Category") }
+            },
+            dismissButton = {
+                TextButton(onClick = { tagToDelete = null }) { Text("Keep It") }
             },
         )
     }
