@@ -20,6 +20,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
 import com.onekey.core.domain.model.CustomField
+import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
 import com.onekey.feature.twofa.presentation.screen.TotpWidget
@@ -35,6 +36,7 @@ fun CredentialDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState) {
         when (uiState) {
@@ -52,7 +54,9 @@ fun CredentialDetailScreen(
             if (state.isEditing) {
                 CredentialEditContent(
                     credential = state.credential,
+                    availableTags = availableTags,
                     onSave = viewModel::save,
+                    onAddTag = viewModel::addTag,
                     onBack = onBack,
                 )
             } else {
@@ -149,6 +153,10 @@ private fun CredentialViewContent(
                     label = field.key,
                     value = if (field.isSensitive) "••••••••" else field.value,
                 )
+            }
+
+            if (credential.tags.isNotEmpty()) {
+                TagsViewCard(tags = credential.tags)
             }
 
             // Metadata card
@@ -314,11 +322,13 @@ private fun DetailField(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun CredentialEditContent(
     credential: Credential,
+    availableTags: List<Tag>,
     onSave: (Credential) -> Unit,
+    onAddTag: (String) -> Unit,
     onBack: () -> Unit,
 ) {
     var title by remember(credential.id) { mutableStateOf(credential.title) }
@@ -327,9 +337,10 @@ private fun CredentialEditContent(
     var url by remember(credential.id) { mutableStateOf(credential.url) }
     var notes by remember(credential.id) { mutableStateOf(credential.notes) }
     var totpSecret by remember(credential.id) { mutableStateOf(credential.totpSecret ?: "") }
-    var tagsText by remember(credential.id) { mutableStateOf(credential.tags.joinToString(", ")) }
+    var selectedTags by remember(credential.id) { mutableStateOf(credential.tags) }
     var customFields by remember(credential.id) { mutableStateOf(credential.customFields) }
     var showPassword by remember { mutableStateOf(false) }
+    var showTagPicker by remember { mutableStateOf(false) }
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
@@ -348,7 +359,7 @@ private fun CredentialEditContent(
                                 url = url.trim(),
                                 notes = notes.trim(),
                                 totpSecret = totpSecret.trim().takeIf { it.isNotEmpty() },
-                                tags = tagsText.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                                tags = selectedTags,
                                 customFields = customFields,
                             ))
                         },
@@ -380,7 +391,45 @@ private fun CredentialEditContent(
             OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
             OutlinedTextField(value = totpSecret, onValueChange = { totpSecret = it }, label = { Text("TOTP Secret (base32)") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = tagsText, onValueChange = { tagsText = it }, label = { Text("Tags (comma-separated)") }, modifier = Modifier.fillMaxWidth())
+
+            // Tags (chip-based, non-editable text field)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Tags",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    selectedTags.forEach { tag ->
+                        InputChip(
+                            selected = true,
+                            onClick = { selectedTags = selectedTags - tag },
+                            label = { Text(tag) },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Remove tag",
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            },
+                        )
+                    }
+                    AssistChip(
+                        onClick = { showTagPicker = true },
+                        label = { Text("Add tag") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(AssistChipDefaults.IconSize),
+                            )
+                        },
+                    )
+                }
+            }
 
             Text("Custom Fields (${customFields.size}/${CustomField.MAX_FIELDS})", style = MaterialTheme.typography.titleSmall)
             customFields.forEachIndexed { index, field ->
@@ -400,6 +449,109 @@ private fun CredentialEditContent(
             }
         }
     }
+
+    if (showTagPicker) {
+        TagPickerDialog(
+            availableTags = availableTags,
+            selectedTags = selectedTags,
+            onToggleTag = { tag ->
+                selectedTags = if (tag in selectedTags) selectedTags - tag else selectedTags + tag
+            },
+            onAddCustomTag = { newTag ->
+                if (newTag !in selectedTags) selectedTags = selectedTags + newTag
+                onAddTag(newTag)
+            },
+            onDismiss = { showTagPicker = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TagsViewCard(tags: List<String>) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Tags", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                tags.forEach { tag ->
+                    SuggestionChip(onClick = {}, label = { Text(tag) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TagPickerDialog(
+    availableTags: List<Tag>,
+    selectedTags: List<String>,
+    onToggleTag: (String) -> Unit,
+    onAddCustomTag: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var customTagText by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Tags") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                availableTags.forEach { tag ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = tag.name in selectedTags,
+                            onCheckedChange = { onToggleTag(tag.name) },
+                        )
+                        Text(
+                            tag.name,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                if (availableTags.isNotEmpty()) HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = customTagText,
+                        onValueChange = { customTagText = it },
+                        label = { Text("New tag") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    IconButton(
+                        onClick = {
+                            val trimmed = customTagText.trim()
+                            if (trimmed.isNotEmpty()) {
+                                onAddCustomTag(trimmed)
+                                customTagText = ""
+                            }
+                        },
+                        enabled = customTagText.isNotBlank(),
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add custom tag")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Done") }
+        },
+    )
 }
 
 @Composable

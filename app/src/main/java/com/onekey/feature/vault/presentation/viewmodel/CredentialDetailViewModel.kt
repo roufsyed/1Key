@@ -7,8 +7,10 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
+import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.GetCredentialUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
@@ -35,6 +37,7 @@ class CredentialDetailViewModel @Inject constructor(
     private val deleteCredential: DeleteCredentialUseCase,
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
+    private val tagRepository: TagRepository,
     private val clipboard: SecureClipboardManager,
 ) : ViewModel() {
 
@@ -45,6 +48,9 @@ class CredentialDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<CredentialDetailUiState>(CredentialDetailUiState.Loading)
     val uiState: StateFlow<CredentialDetailUiState> = _uiState.asStateFlow()
+
+    val availableTags: StateFlow<List<Tag>> = tagRepository.observeTags()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val history: Flow<List<CredentialHistoryEntry>> = credentialId
         ?.let { id -> historyRepository.observeHistory(id) }
@@ -108,6 +114,12 @@ class CredentialDetailViewModel @Inject constructor(
             if (result is AppResult.Error) {
                 _uiState.value = CredentialDetailUiState.Error(result.message ?: "Failed to update favourite")
             }
+        }
+    }
+
+    fun addTag(name: String) {
+        viewModelScope.launch {
+            tagRepository.addTag(Tag(name = name, color = 0xFF6200EE.toInt(), icon = ""))
         }
     }
 
