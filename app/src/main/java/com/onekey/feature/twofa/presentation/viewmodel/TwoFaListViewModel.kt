@@ -4,11 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.feature.twofa.domain.TotpGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class TotpEntry(
@@ -23,6 +25,7 @@ data class TotpEntry(
 class TwoFaListViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val totpGenerator: TotpGenerator,
+    private val deleteCredential: DeleteCredentialUseCase,
 ) : ViewModel() {
 
     val entries: StateFlow<List<TotpEntry>> = credentialRepository.observeWithTotp()
@@ -38,4 +41,8 @@ class TwoFaListViewModel @Inject constructor(
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun deleteEntry(id: String) {
+        viewModelScope.launch { deleteCredential(id) }
+    }
 }

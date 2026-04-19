@@ -4,7 +4,8 @@ import android.content.ClipData
 import android.content.ClipDescription
 import android.os.Build
 import android.os.PersistableBundle
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,6 +39,7 @@ fun TwoFaListScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    var pendingDelete by remember { mutableStateOf<TotpEntry?>(null) }
 
     Scaffold(
         topBar = {
@@ -87,6 +89,7 @@ fun TwoFaListScreen(
                 items(entries, key = { it.credential.id }) { entry ->
                     TotpEntryCard(
                         entry = entry,
+                        onLongClick = { pendingDelete = entry },
                         onCopyCode = { code ->
                             val cm = context.getSystemService(
                                 android.content.ClipboardManager::class.java
@@ -130,14 +133,41 @@ fun TwoFaListScreen(
             }
         }
     }
+
+    pendingDelete?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("Remove 2FA account?") },
+            text = { Text("\"${entry.credential.title}\" will be removed. This cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteEntry(entry.credential.id)
+                        pendingDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Remove") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TotpEntryCard(entry: TotpEntry, onCopyCode: (String) -> Unit) {
+private fun TotpEntryCard(
+    entry: TotpEntry,
+    onLongClick: () -> Unit,
+    onCopyCode: (String) -> Unit,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onCopyCode(entry.code) },
+            .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(entry.credential.title, style = MaterialTheme.typography.titleMedium)
