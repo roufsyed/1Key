@@ -17,6 +17,7 @@ import javax.inject.Inject
 sealed class SettingsEvent {
     data object PinReset : SettingsEvent()
     data object VaultReset : SettingsEvent()
+    data object VaultContentsDeleted : SettingsEvent()
     data class SeedComplete(val count: Int) : SettingsEvent()
     data class Error(val message: String) : SettingsEvent()
 }
@@ -92,6 +93,15 @@ class SettingsViewModel @Inject constructor(
             when (val result = resetVaultUseCase()) {
                 is AppResult.Success -> _event.emit(SettingsEvent.VaultReset)
                 is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to reset vault"))
+            }
+        }
+    }
+
+    fun deleteVaultContents() {
+        viewModelScope.launch {
+            when (val result = resetVaultUseCase()) {
+                is AppResult.Success -> _event.emit(SettingsEvent.VaultContentsDeleted)
+                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to delete vault"))
             }
         }
     }
