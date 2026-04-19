@@ -91,7 +91,7 @@ fun OneKeyNavGraph(
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
 
             composable(Screen.Onboarding.route) {
