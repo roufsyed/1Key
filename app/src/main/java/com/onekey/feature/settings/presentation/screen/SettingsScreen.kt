@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
@@ -45,6 +46,8 @@ fun SettingsScreen(
     val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
     val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
     val lockTimeout by settingsVm.lockTimeout.collectAsStateWithLifecycle()
+    val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
+    val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
     val backupState by importExportVm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -227,6 +230,76 @@ fun SettingsScreen(
                             trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                             modifier = Modifier.clickable { showResetVaultDialog = true },
                         )
+                    }
+                }
+            }
+
+            // ── Password Verification ─────────────────────────────────────────
+            item {
+                Spacer(Modifier.height(8.dp))
+                SectionHeader("Password Verification")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        ListItem(
+                            headlineContent = { Text("Periodic master password check") },
+                            supportingContent = {
+                                Text(
+                                    if (isMasterPasswordRecheckEnabled)
+                                        "Master password required every ${masterPasswordRecheckInterval.label}"
+                                    else
+                                        "Biometric and PIN can be used indefinitely"
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isMasterPasswordRecheckEnabled,
+                                    onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
+                                )
+                            },
+                        )
+                        if (isMasterPasswordRecheckEnabled) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                            Column(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    "Recheck interval",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                MasterPasswordInterval.entries.forEach { option ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { settingsVm.setMasterPasswordRecheckInterval(option) }
+                                            .padding(vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        RadioButton(
+                                            selected = masterPasswordRecheckInterval == option,
+                                            onClick = { settingsVm.setMasterPasswordRecheckInterval(option) },
+                                        )
+                                        Column {
+                                            Text(
+                                                option.label,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                            if (option == MasterPasswordInterval.HOURS_48) {
+                                                Text(
+                                                    "Default — recommended",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }

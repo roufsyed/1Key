@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
@@ -58,6 +59,13 @@ class SettingsViewModel @Inject constructor(
     val lockTimeout: StateFlow<LockTimeout> = appPrefs.getLockTimeout()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockTimeout.IMMEDIATE)
 
+    val isMasterPasswordRecheckEnabled: StateFlow<Boolean> = appPrefs.isMasterPasswordRecheckEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val masterPasswordRecheckInterval: StateFlow<MasterPasswordInterval> =
+        appPrefs.getMasterPasswordRecheckInterval()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MasterPasswordInterval.HOURS_48)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -72,6 +80,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setLockTimeout(timeout: LockTimeout) {
         viewModelScope.launch { appPrefs.setLockTimeout(timeout) }
+    }
+
+    fun setMasterPasswordRecheckEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setMasterPasswordRecheckEnabled(enabled) }
+    }
+
+    fun setMasterPasswordRecheckInterval(interval: MasterPasswordInterval) {
+        viewModelScope.launch { appPrefs.setMasterPasswordRecheckInterval(interval) }
     }
 
     fun addTag(name: String) {

@@ -1,6 +1,7 @@
 package com.onekey.core.domain.repository
 
 import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.MasterPasswordInterval
 import kotlinx.coroutines.flow.Flow
 
 interface AppPreferencesRepository {
@@ -12,4 +13,10 @@ interface AppPreferencesRepository {
     suspend fun setScreenshotsEnabled(enabled: Boolean)
     fun getLockTimeout(): Flow<LockTimeout>
     suspend fun setLockTimeout(timeout: LockTimeout)
+    fun isMasterPasswordRecheckEnabled(): Flow<Boolean>
+    suspend fun setMasterPasswordRecheckEnabled(enabled: Boolean)
+    fun getMasterPasswordRecheckInterval(): Flow<MasterPasswordInterval>
+    suspend fun setMasterPasswordRecheckInterval(interval: MasterPasswordInterval)
+    fun getLastMasterPasswordTimestamp(): Flow<Long>
+    suspend fun setLastMasterPasswordTimestamp(timestamp: Long)
 }

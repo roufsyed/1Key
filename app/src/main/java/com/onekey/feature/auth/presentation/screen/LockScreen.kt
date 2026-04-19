@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -46,6 +47,7 @@ fun LockScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val isPinSetup by viewModel.isPinSetup.collectAsStateWithLifecycle()
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsStateWithLifecycle()
+    val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     // Delay navigation by enough time for the success pulse animation to complete (260 ms).
@@ -78,13 +80,21 @@ fun LockScreen(
             Text("1Key", style = MaterialTheme.typography.displaySmall)
             Spacer(Modifier.height(8.dp))
             Text(
-                if (isPinSetup) "Enter PIN to unlock" else "Enter master password to unlock",
+                if (requiresMasterPasswordRecheck || !isPinSetup) "Enter master password to unlock"
+                else "Enter PIN to unlock",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(40.dp))
 
-            if (isPinSetup) {
+            if (requiresMasterPasswordRecheck) {
+                MasterPasswordRecheckBanner()
+                Spacer(Modifier.height(20.dp))
+                PasswordUnlockSection(
+                    state = state,
+                    onPasswordSubmit = { viewModel.unlockWithPassword(it) },
+                )
+            } else if (isPinSetup) {
                 PinUnlockSection(
                     state = state,
                     onPinSubmit = { viewModel.unlockWithPin(it) },
@@ -107,7 +117,7 @@ fun LockScreen(
                 )
             }
 
-            if (isBiometricEnabled && canUseBiometric) {
+            if (isBiometricEnabled && canUseBiometric && !requiresMasterPasswordRecheck) {
                 Spacer(Modifier.height(16.dp))
                 IconButton(
                     onClick = {
@@ -131,6 +141,33 @@ fun LockScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun MasterPasswordRecheckBanner() {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Icon(
+                Icons.Default.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(16.dp).padding(top = 2.dp),
+            )
+            Text(
+                "Periodic security check — please verify with your master password",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
     }
 }

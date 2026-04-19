@@ -45,10 +45,23 @@ class AuthViewModel @Inject constructor(
     val isBiometricEnabled: StateFlow<Boolean> = appPrefs.isBiometricEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    // True when the user must re-enter their master password regardless of PIN/biometric state.
+    val requiresMasterPasswordRecheck: StateFlow<Boolean> = combine(
+        appPrefs.isMasterPasswordRecheckEnabled(),
+        appPrefs.getMasterPasswordRecheckInterval(),
+        appPrefs.getLastMasterPasswordTimestamp(),
+    ) { enabled, interval, lastTimestamp ->
+        enabled && (System.currentTimeMillis() - lastTimestamp) >= interval.millis
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     fun setup(password: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            _state.value = when (val result = setupMasterPassword(password)) {
+            val result = setupMasterPassword(password)
+            if (result is AppResult.Success) {
+                appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+            }
+            _state.value = when (result) {
                 is AppResult.Success -> AuthUiState.SetupComplete
                 is AppResult.Error -> AuthUiState.Error(result.message ?: "Setup failed")
             }
@@ -58,7 +71,11 @@ class AuthViewModel @Inject constructor(
     fun unlockWithPassword(password: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            _state.value = when (val result = unlockVault.withPassword(password)) {
+            val result = unlockVault.withPassword(password)
+            if (result is AppResult.Success) {
+                appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+            }
+            _state.value = when (result) {
                 is AppResult.Success -> AuthUiState.Unlocked
                 is AppResult.Error -> AuthUiState.Error(result.message ?: "Invalid password")
             }
