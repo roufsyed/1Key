@@ -25,7 +25,6 @@ import com.onekey.feature.twofa.presentation.screen.TwoFaListScreen
 import com.onekey.feature.vault.presentation.screen.CredentialDetailScreen
 import com.onekey.feature.vault.presentation.screen.FavouritesScreen
 import com.onekey.feature.vault.presentation.screen.TaggedCredentialListScreen
-import com.onekey.feature.vault.presentation.screen.TagsBrowseScreen
 import com.onekey.feature.vault.presentation.screen.VaultScreen
 
 sealed class Screen(val route: String) {
@@ -33,7 +32,6 @@ sealed class Screen(val route: String) {
     data object Lock : Screen("lock")
     data object Vault : Screen("vault")
     data object Favourites : Screen("favourites")
-    data object Tags : Screen("tags")
     data object CredentialDetail : Screen("credential/{credentialId}?initialTag={initialTag}") {
         fun createRoute(id: String?, initialTag: String = "") =
             "credential/${id ?: "new"}?initialTag=${Uri.encode(initialTag)}"
@@ -50,7 +48,6 @@ sealed class Screen(val route: String) {
 private val BOTTOM_NAV_ROUTES = setOf(
     Screen.Vault.route,
     Screen.Favourites.route,
-    Screen.Tags.route,
     Screen.TwoFaList.route,
     Screen.Settings.route,
 )
@@ -140,14 +137,6 @@ fun OneKeyNavGraph(
                 )
             }
 
-            composable(Screen.Tags.route) {
-                TagsBrowseScreen(
-                    onTagClick = { tagName ->
-                        navController.navigate(Screen.TaggedList.createRoute(tagName))
-                    },
-                )
-            }
-
             composable(
                 route = Screen.CredentialDetail.route,
                 arguments = listOf(
@@ -230,12 +219,6 @@ private fun OneKeyBottomNav(
             onClick = { onNavigate(Screen.Favourites.route) },
             icon = { Icon(Icons.Default.Favorite, contentDescription = "Favourites") },
             label = { Text("Favourites") },
-        )
-        NavigationBarItem(
-            selected = currentRoute == Screen.Tags.route,
-            onClick = { onNavigate(Screen.Tags.route) },
-            icon = { Icon(Icons.Default.Label, contentDescription = "Tags") },
-            label = { Text("Tags") },
         )
         NavigationBarItem(
             selected = currentRoute == Screen.TwoFaList.route,
