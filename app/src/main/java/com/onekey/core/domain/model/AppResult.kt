@@ -1,5 +1,7 @@
 package com.onekey.core.domain.model
 
+import kotlinx.coroutines.CancellationException
+
 sealed class AppResult<out T> {
     data class Success<T>(val data: T) : AppResult<T>()
     data class Error(val exception: Throwable, val message: String? = null) : AppResult<Nothing>()
@@ -28,6 +30,8 @@ inline fun <T, R> AppResult<T>.map(transform: (T) -> R): AppResult<R> = when (th
 
 inline fun <T> runCatchingResult(block: () -> T): AppResult<T> = try {
     AppResult.Success(block())
+} catch (e: CancellationException) {
+    throw e
 } catch (e: Exception) {
     AppResult.Error(e, e.message)
 }
