@@ -6,8 +6,10 @@ import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.onekey.core.data.local.dao.CredentialDao
+import com.onekey.core.data.local.dao.CredentialHistoryDao
 import com.onekey.core.data.local.dao.TagDao
 import com.onekey.core.data.local.entity.CredentialEntity
+import com.onekey.core.data.local.entity.CredentialHistoryEntity
 import com.onekey.core.data.local.entity.TagEntity
 
 val DEFAULT_TAG_NAMES = listOf(
@@ -49,6 +51,28 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS credential_history (
+                id TEXT NOT NULL PRIMARY KEY,
+                credential_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                username_encrypted BLOB NOT NULL,
+                iv_username BLOB NOT NULL,
+                password_encrypted BLOB NOT NULL,
+                iv_password BLOB NOT NULL,
+                url_encrypted BLOB,
+                iv_url BLOB,
+                modified_at INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_credential_history_credential_id ON credential_history (credential_id)")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -64,12 +88,13 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 }
 
 @Database(
-    entities = [CredentialEntity::class, TagEntity::class],
-    version = 4,
+    entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
 abstract class OneKeyDatabase : RoomDatabase() {
     abstract fun credentialDao(): CredentialDao
     abstract fun tagDao(): TagDao
+    abstract fun credentialHistoryDao(): CredentialHistoryDao
 }

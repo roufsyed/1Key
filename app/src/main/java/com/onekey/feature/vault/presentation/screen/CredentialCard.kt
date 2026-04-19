@@ -11,6 +11,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.presentation.util.toRelativeTime
 
 @Composable
 internal fun CredentialCard(
@@ -48,6 +49,13 @@ internal fun CredentialCard(
                     Text(
                         credential.username,
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (credential.updatedAt > 0L) {
+                    Text(
+                        "Modified ${credential.updatedAt.toRelativeTime()}",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

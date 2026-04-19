@@ -1,5 +1,6 @@
 package com.onekey.feature.vault.presentation.screen
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,11 +18,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.CredentialHistoryEntry
 import com.onekey.core.domain.model.CustomField
+import com.onekey.core.presentation.util.toFormattedDateTime
+import com.onekey.core.presentation.util.toRelativeTime
 import com.onekey.feature.twofa.presentation.screen.TotpWidget
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailUiState
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailViewModel
-import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,6 +34,7 @@ fun CredentialDetailScreen(
     viewModel: CredentialDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
 
     LaunchedEffect(uiState) {
         when (uiState) {
@@ -54,6 +58,7 @@ fun CredentialDetailScreen(
             } else {
                 CredentialViewContent(
                     credential = state.credential,
+                    history = history,
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
                     onBack = onBack,
@@ -79,6 +84,7 @@ fun CredentialDetailScreen(
 @Composable
 private fun CredentialViewContent(
     credential: Credential,
+    history: List<CredentialHistoryEntry>,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
@@ -88,6 +94,7 @@ private fun CredentialViewContent(
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
+    var historyExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -98,7 +105,7 @@ private fun CredentialViewContent(
                     IconButton(onClick = onToggleFavorite) {
                         Icon(
                             if (credential.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (credential.isFavorite) "Remove from favorites" else "Add to favorites",
+                            contentDescription = if (credential.isFavorite) "Remove from favourites" else "Add to favourites",
                             tint = if (credential.isFavorite) MaterialTheme.colorScheme.primary
                                    else LocalContentColor.current,
                         )
@@ -110,7 +117,11 @@ private fun CredentialViewContent(
         }
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (credential.username.isNotEmpty()) {
@@ -139,6 +150,18 @@ private fun CredentialViewContent(
                     value = if (field.isSensitive) "••••••••" else field.value,
                 )
             }
+
+            // Metadata card
+            MetadataCard(credential = credential)
+
+            // History section
+            if (history.isNotEmpty()) {
+                HistorySection(
+                    history = history,
+                    expanded = historyExpanded,
+                    onToggle = { historyExpanded = !historyExpanded },
+                )
+            }
         }
     }
 
@@ -152,6 +175,121 @@ private fun CredentialViewContent(
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun MetadataCard(credential: Credential) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            if (credential.createdAt > 0L) {
+                Text(
+                    "Created: ${credential.createdAt.toFormattedDateTime()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (credential.updatedAt > 0L) {
+                Text(
+                    "Modified: ${credential.updatedAt.toFormattedDateTime()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistorySection(
+    history: List<CredentialHistoryEntry>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("History", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "${history.size} ${if (history.size == 1) "revision" else "revisions"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onToggle) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse history" else "Expand history",
+                    )
+                }
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column {
+                    HorizontalDivider()
+                    history.forEachIndexed { index, entry ->
+                        HistoryEntryRow(entry = entry)
+                        if (index < history.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryEntryRow(entry: CredentialHistoryEntry) {
+    var showPassword by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            entry.modifiedAt.toRelativeTime(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (entry.title.isNotEmpty()) {
+            Text(entry.title, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (entry.username.isNotEmpty()) {
+            Text(
+                "User: ${entry.username}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (entry.password.isNotEmpty()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    if (showPassword) "Pass: ${entry.password}" else "Pass: ••••••••",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { showPassword = !showPassword }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+        if (entry.url.isNotEmpty()) {
+            Text(
+                "URL: ${entry.url}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
