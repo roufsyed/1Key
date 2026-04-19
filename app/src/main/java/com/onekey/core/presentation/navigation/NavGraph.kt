@@ -1,6 +1,9 @@
 package com.onekey.core.presentation.navigation
 
 import android.net.Uri
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
@@ -97,6 +100,10 @@ fun OneKeyNavGraph(
             navController = navController,
             startDestination = startDestination,
             modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
+            enterTransition = { fadeIn(tween(300)) },
+            exitTransition = { fadeOut(tween(200)) },
+            popEnterTransition = { fadeIn(tween(300)) },
+            popExitTransition = { fadeOut(tween(200)) },
         ) {
 
             composable(Screen.Onboarding.route) {

@@ -11,10 +11,11 @@ import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.GetPagedCredentialsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class VaultViewModel @Inject constructor(
     private val tagRepository: TagRepository,
@@ -35,6 +36,7 @@ class VaultViewModel @Inject constructor(
                 ) { array -> array.toList() }
             }
         }
+        .debounce(50L)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val totalCount: StateFlow<Int> = credentialRepository.observeCount()
