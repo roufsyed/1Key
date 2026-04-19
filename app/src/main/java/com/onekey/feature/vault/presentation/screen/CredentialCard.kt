@@ -1,8 +1,9 @@
 package com.onekey.feature.vault.presentation.screen
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
@@ -18,17 +19,34 @@ internal fun CredentialCard(
     credential: Credential,
     onClick: () -> Unit,
     onTagClick: (String) -> Unit,
+    isSelected: Boolean = false,
+    onLongClick: () -> Unit = {},
 ) {
+    val containerColor = if (isSelected)
+        MaterialTheme.colorScheme.primaryContainer
+    else
+        CardDefaults.cardColors().containerColor
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (isSelected) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -71,11 +89,13 @@ internal fun CredentialCard(
                     }
                 }
             }
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (!isSelected) {
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

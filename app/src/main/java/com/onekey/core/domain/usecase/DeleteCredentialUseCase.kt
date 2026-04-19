@@ -1,11 +1,16 @@
 package com.onekey.core.domain.usecase
 
 import com.onekey.core.domain.model.AppResult
+import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import javax.inject.Inject
 
 class DeleteCredentialUseCase @Inject constructor(
-    private val repository: CredentialRepository,
+    private val credentialRepository: CredentialRepository,
+    private val historyRepository: CredentialHistoryRepository,
 ) {
-    suspend operator fun invoke(id: String): AppResult<Unit> = repository.deleteCredential(id)
+    suspend operator fun invoke(id: String): AppResult<Unit> {
+        historyRepository.deleteForCredential(id)
+        return credentialRepository.deleteCredential(id)
+    }
 }

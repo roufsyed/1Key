@@ -98,7 +98,6 @@ class CredentialDetailViewModel @Inject constructor(
     fun delete() {
         val id = credentialId ?: return
         viewModelScope.launch {
-            historyRepository.deleteForCredential(id)
             when (val result = deleteCredential(id)) {
                 is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted
                 is AppResult.Error -> _uiState.value = CredentialDetailUiState.Error(result.message ?: "Delete failed")
