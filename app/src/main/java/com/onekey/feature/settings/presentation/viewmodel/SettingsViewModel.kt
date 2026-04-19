@@ -8,6 +8,7 @@ import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.TagRepository
+import com.onekey.core.domain.usecase.DeleteTagUseCase
 import com.onekey.core.domain.usecase.ResetVaultUseCase
 import com.onekey.core.domain.usecase.SeedDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +29,7 @@ class SettingsViewModel @Inject constructor(
     private val tagRepository: TagRepository,
     private val appPrefs: AppPreferencesRepository,
     private val authRepository: AuthRepository,
+    private val deleteTagUseCase: DeleteTagUseCase,
     private val resetVaultUseCase: ResetVaultUseCase,
     private val seedDataUseCase: SeedDataUseCase,
 ) : ViewModel() {
@@ -82,7 +84,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val tag = tags.value.find { it.name == name }
             if (tag != null && !tag.isDefault) {
-                tagRepository.deleteTag(name)
+                val result = deleteTagUseCase(name)
+                if (result is AppResult.Error) {
+                    _event.emit(SettingsEvent.Error(result.message ?: "Failed to delete category"))
+                }
             }
         }
     }
