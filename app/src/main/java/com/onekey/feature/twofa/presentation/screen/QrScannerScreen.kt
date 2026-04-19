@@ -168,7 +168,7 @@ private fun CameraPreviewWithOverlay(
                     }
 
                 val preview = Preview.Builder().build()
-                    .also { it.surfaceProvider = previewView.surfaceProvider }
+                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
 
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                 cameraProviderFuture.addListener({
