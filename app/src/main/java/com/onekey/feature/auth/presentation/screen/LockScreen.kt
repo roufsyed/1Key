@@ -2,6 +2,10 @@ package com.onekey.feature.auth.presentation.screen
 
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -15,7 +19,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -26,6 +33,9 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
+import kotlinx.coroutines.delay
+
+private val PinSuccessColor = Color(0xFF4CAF50)
 
 @Composable
 fun LockScreen(
@@ -38,8 +48,12 @@ fun LockScreen(
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
+    // Delay navigation by enough time for the success pulse animation to complete (260 ms).
     LaunchedEffect(state) {
-        if (state is AuthUiState.Unlocked) onUnlocked()
+        if (state is AuthUiState.Unlocked) {
+            delay(280)
+            onUnlocked()
+        }
     }
 
     val canUseBiometric = remember {
@@ -48,7 +62,6 @@ fun LockScreen(
         ) == BiometricManager.BIOMETRIC_SUCCESS
     }
 
-    // imePadding on the outer Box so keyboard pushes content up rather than hiding buttons
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -131,17 +144,65 @@ private fun PinUnlockSection(
     var pin by remember { mutableStateOf("") }
     val isLoading = state is AuthUiState.Loading
 
-    // Clear PIN after a wrong attempt so user can retry cleanly.
+    val density = LocalDensity.current
+    val shakePx = remember(density) { with(density) { 16.dp.toPx() } }
+
+    val shakeOffset = remember { Animatable(0f) }
+    val dotScale  = remember { Animatable(1f) }
+
+    // Dot fill color: green on success, red on error, primary otherwise.
+    val dotFilledColor by animateColorAsState(
+        targetValue = when (state) {
+            is AuthUiState.Unlocked -> PinSuccessColor
+            is AuthUiState.Error    -> MaterialTheme.colorScheme.error
+            else                    -> MaterialTheme.colorScheme.primary
+        },
+        animationSpec = tween(durationMillis = 150),
+        label = "dotFilledColor",
+    )
+
     LaunchedEffect(state) {
-        if (state is AuthUiState.Error) pin = ""
+        when (state) {
+            is AuthUiState.Error -> {
+                // Damped left-right shake — dots stay red+filled during shake, clear afterwards.
+                shakeOffset.animateTo(
+                    targetValue = 0f,
+                    animationSpec = keyframes {
+                        durationMillis = 460
+                        0f              at 0
+                        -shakePx        at 65
+                        shakePx         at 130
+                        (-shakePx * .70f) at 195
+                        ( shakePx * .70f) at 260
+                        (-shakePx * .40f) at 325
+                        ( shakePx * .40f) at 390
+                        0f              at 460
+                    }
+                )
+                pin = ""  // Clear only after the shake so dots stay visible while shaking
+            }
+            is AuthUiState.Unlocked -> {
+                // Success pulse: quick scale up then back to normal (completes in ~260 ms)
+                dotScale.animateTo(1.18f, tween(130))
+                dotScale.animateTo(1.00f, tween(130))
+            }
+            else -> Unit
+        }
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.graphicsLayer {
+                translationX = shakeOffset.value
+                scaleX = dotScale.value
+                scaleY = dotScale.value
+            },
+        ) {
             repeat(6) { index ->
                 Surface(
                     shape = MaterialTheme.shapes.extraSmall,
-                    color = if (index < pin.length) MaterialTheme.colorScheme.primary
+                    color = if (index < pin.length) dotFilledColor
                             else MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.size(14.dp),
                 ) {}
@@ -186,12 +247,39 @@ private fun PasswordUnlockSection(
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val density = LocalDensity.current
+    val shakePx = remember(density) { with(density) { 16.dp.toPx() } }
+    val shakeOffset = remember { Animatable(0f) }
+
+    LaunchedEffect(state) {
+        if (state is AuthUiState.Error) {
+            shakeOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = 460
+                    0f              at 0
+                    -shakePx        at 65
+                    shakePx         at 130
+                    (-shakePx * .70f) at 195
+                    ( shakePx * .70f) at 260
+                    (-shakePx * .40f) at 325
+                    ( shakePx * .40f) at 390
+                    0f              at 460
+                }
+            )
+        }
+    }
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.graphicsLayer { translationX = shakeOffset.value },
+    ) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
             label = { Text("Master Password") },
-            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+            visualTransformation = if (showPassword) VisualTransformation.None
+                                   else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done,
@@ -201,7 +289,10 @@ private fun PasswordUnlockSection(
             }),
             trailingIcon = {
                 IconButton(onClick = { showPassword = !showPassword }) {
-                    Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                    Icon(
+                        if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                        contentDescription = null,
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -234,16 +325,22 @@ private fun showBiometricPrompt(
 ) {
     val activity = context as? FragmentActivity ?: return
     val executor = ContextCompat.getMainExecutor(context)
-    val prompt = BiometricPrompt(activity, executor, object : BiometricPrompt.AuthenticationCallback() {
-        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onSuccess()
-        override fun onAuthenticationError(code: Int, msg: CharSequence) {
-            if (code != BiometricPrompt.ERROR_USER_CANCELED && code != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
-                onError(msg.toString())
+    val prompt = BiometricPrompt(
+        activity,
+        executor,
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) =
+                onSuccess()
+            override fun onAuthenticationError(code: Int, msg: CharSequence) {
+                if (code != BiometricPrompt.ERROR_USER_CANCELED &&
+                    code != BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                ) {
+                    onError(msg.toString())
+                }
             }
+            override fun onAuthenticationFailed() = Unit
         }
-        // onAuthenticationFailed is informational — the OS prompt handles retry internally.
-        override fun onAuthenticationFailed() = Unit
-    })
+    )
     BiometricPrompt.PromptInfo.Builder()
         .setTitle("Biometric Unlock")
         .setSubtitle("Use biometric to access 1Key")
