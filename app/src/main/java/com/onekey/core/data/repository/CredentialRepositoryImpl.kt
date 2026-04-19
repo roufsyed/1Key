@@ -9,6 +9,7 @@ import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.VaultKeyHolder
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.UUID
 import javax.inject.Inject
@@ -16,6 +17,7 @@ import javax.inject.Singleton
 
 private const val PAGE_SIZE = 30
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class CredentialRepositoryImpl @Inject constructor(
     private val dao: CredentialDao,
@@ -23,21 +25,29 @@ class CredentialRepositoryImpl @Inject constructor(
     private val keyHolder: VaultKeyHolder,
 ) : CredentialRepository {
 
+    // Gate every flow that calls toDomain() on the vault unlock state.
+    // When the vault locks the inner flow is cancelled and an empty/null value
+    // is emitted immediately, preventing requireKey() from being called on a
+    // locked vault and crashing with IllegalStateException.
+
     override fun getPagedCredentials(query: String, tag: String): Flow<PagingData<Credential>> =
-        Pager(
-            config = PagingConfig(
-                pageSize = PAGE_SIZE,
-                enablePlaceholders = false,
-                prefetchDistance = 10,
-            ),
-            pagingSourceFactory = { dao.pagingSource(query, tag) }
-        ).flow
-            .map { pagingData -> pagingData.map { it.toDomain() } }
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(PagingData.empty())
+            else Pager(
+                config = PagingConfig(
+                    pageSize = PAGE_SIZE,
+                    enablePlaceholders = false,
+                    prefetchDistance = 10,
+                ),
+                pagingSourceFactory = { dao.pagingSource(query, tag) }
+            ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+        }
 
     override fun observeCredential(id: String): Flow<Credential?> =
-        dao.observeById(id)
-            .map { it?.toDomain() }
-            .distinctUntilChanged()
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(null)
+            else dao.observeById(id).map { it?.toDomain() }
+        }.distinctUntilChanged()
 
     override suspend fun getCredential(id: String): AppResult<Credential> = runCatchingResult {
         dao.getById(id)?.toDomain() ?: throw NoSuchElementException("Credential $id not found")
@@ -71,16 +81,25 @@ class CredentialRepositoryImpl @Inject constructor(
         dao.observeFavoriteCount().distinctUntilChanged()
 
     override fun observeFavorites(): Flow<List<Credential>> =
-        dao.observeFavorites().map { list -> list.map { it.toDomain() } }
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeFavorites().map { list -> list.map { it.toDomain() } }
+        }
 
     override fun observeFavoritesPaged(): Flow<PagingData<Credential>> =
-        Pager(
-            config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
-            pagingSourceFactory = { dao.favoritesPagingSource() },
-        ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(PagingData.empty())
+            else Pager(
+                config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
+                pagingSourceFactory = { dao.favoritesPagingSource() },
+            ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+        }
 
     override fun observeWithTotp(): Flow<List<Credential>> =
-        dao.observeWithTotp().map { list -> list.map { it.toDomain() } }
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeWithTotp().map { list -> list.map { it.toDomain() } }
+        }
 
     override suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit> =
         runCatchingResult { dao.setFavorite(id, isFavorite) }
@@ -99,7 +118,7 @@ class CredentialRepositoryImpl @Inject constructor(
             password = crypto.decryptString(EncryptedData(passwordEncrypted, ivPassword), key),
             url = if (urlEncrypted != null && ivUrl != null)
                 crypto.decryptString(EncryptedData(urlEncrypted, ivUrl), key)
-            else url, // legacy plaintext fallback for rows that pre-date v4 migration
+            else url,
             notes = crypto.decryptString(EncryptedData(notesEncrypted, ivNotes), key),
             totpSecret = if (totpSecretEncrypted != null && ivTotp != null)
                 crypto.decryptString(EncryptedData(totpSecretEncrypted, ivTotp), key)
@@ -109,7 +128,7 @@ class CredentialRepositoryImpl @Inject constructor(
                 CustomField(
                     key = if (cf.keyEncrypted != null && cf.keyIv != null)
                         crypto.decryptString(EncryptedData(cf.keyEncrypted, cf.keyIv), key)
-                    else cf.key, // legacy plaintext fallback
+                    else cf.key,
                     value = crypto.decryptString(EncryptedData(cf.valueEncrypted, cf.iv), key),
                     isSensitive = cf.isSensitive,
                 )
