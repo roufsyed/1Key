@@ -1,7 +1,12 @@
 package com.onekey.core.presentation.navigation
 
 import android.net.Uri
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -207,30 +212,38 @@ private fun OneKeyBottomNav(
     currentRoute: String?,
     onNavigate: (String) -> Unit,
 ) {
-    NavigationBar {
+    val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    NavigationBar(
+        modifier = Modifier.height(64.dp + bottomInset),
+        windowInsets = WindowInsets(bottom = bottomInset),
+    ) {
         NavigationBarItem(
             selected = currentRoute == Screen.Vault.route,
             onClick = { onNavigate(Screen.Vault.route) },
             icon = { Icon(Icons.Default.Home, contentDescription = "Vault") },
             label = { Text("Vault") },
+            alwaysShowLabel = false,
         )
         NavigationBarItem(
             selected = currentRoute == Screen.Favourites.route,
             onClick = { onNavigate(Screen.Favourites.route) },
             icon = { Icon(Icons.Default.Favorite, contentDescription = "Favourites") },
             label = { Text("Favourites") },
+            alwaysShowLabel = false,
         )
         NavigationBarItem(
             selected = currentRoute == Screen.TwoFaList.route,
             onClick = { onNavigate(Screen.TwoFaList.route) },
             icon = { Icon(Icons.Default.Security, contentDescription = "2FA") },
             label = { Text("2FA") },
+            alwaysShowLabel = false,
         )
         NavigationBarItem(
             selected = currentRoute == Screen.Settings.route,
             onClick = { onNavigate(Screen.Settings.route) },
             icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
             label = { Text("Settings") },
+            alwaysShowLabel = false,
         )
     }
 }
