@@ -341,6 +341,7 @@ private fun CredentialEditContent(
     var customFields by remember(credential.id) { mutableStateOf(credential.customFields) }
     var showPassword by remember { mutableStateOf(false) }
     var showTagPicker by remember { mutableStateOf(false) }
+    var showPasswordGenerator by remember { mutableStateOf(false) }
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
@@ -383,8 +384,13 @@ private fun CredentialEditContent(
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 trailingIcon = {
-                    IconButton(onClick = { showPassword = !showPassword }) {
-                        Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                    Row {
+                        IconButton(onClick = { showPasswordGenerator = true }) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "Generate password")
+                        }
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                        }
                     }
                 }
             )
@@ -462,6 +468,13 @@ private fun CredentialEditContent(
                 onAddTag(newTag)
             },
             onDismiss = { showTagPicker = false },
+        )
+    }
+
+    if (showPasswordGenerator) {
+        PasswordGeneratorSheet(
+            onUsePassword = { generated -> password = generated },
+            onDismiss = { showPasswordGenerator = false },
         )
     }
 }
