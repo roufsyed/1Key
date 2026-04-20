@@ -64,6 +64,22 @@ fun LockScreen(
         ) == BiometricManager.BIOMETRIC_SUCCESS
     }
 
+    // Auto-trigger biometric prompt once when the screen loads with biometric enabled.
+    // Keyed on both preference-backed flags so it re-evaluates after DataStore emits real values
+    // (both start as false while loading). autoTriggeredBiometric prevents repeated triggers
+    // if the user cancels and then the composable recomposes with the same key values.
+    var autoTriggeredBiometric by remember { mutableStateOf(false) }
+    LaunchedEffect(isBiometricEnabled, requiresMasterPasswordRecheck) {
+        if (!autoTriggeredBiometric && isBiometricEnabled && canUseBiometric && !requiresMasterPasswordRecheck) {
+            autoTriggeredBiometric = true
+            showBiometricPrompt(
+                context = context,
+                onSuccess = { viewModel.unlockWithBiometric() },
+                onError = { msg -> viewModel.setBiometricError(msg) },
+            )
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
