@@ -19,4 +19,6 @@ interface AppPreferencesRepository {
     suspend fun setMasterPasswordRecheckInterval(interval: MasterPasswordInterval)
     fun getLastMasterPasswordTimestamp(): Flow<Long>
     suspend fun setLastMasterPasswordTimestamp(timestamp: Long)
+    fun isShowFavourites(): Flow<Boolean>
+    suspend fun setShowFavourites(show: Boolean)
 }

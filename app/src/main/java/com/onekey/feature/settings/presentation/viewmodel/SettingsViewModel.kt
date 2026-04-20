@@ -54,7 +54,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val isScreenshotsEnabled: StateFlow<Boolean> = appPrefs.isScreenshotsEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val lockTimeout: StateFlow<LockTimeout> = appPrefs.getLockTimeout()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockTimeout.IMMEDIATE)
@@ -65,6 +65,9 @@ class SettingsViewModel @Inject constructor(
     val masterPasswordRecheckInterval: StateFlow<MasterPasswordInterval> =
         appPrefs.getMasterPasswordRecheckInterval()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MasterPasswordInterval.HOURS_48)
+
+    val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
@@ -88,6 +91,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setMasterPasswordRecheckInterval(interval: MasterPasswordInterval) {
         viewModelScope.launch { appPrefs.setMasterPasswordRecheckInterval(interval) }
+    }
+
+    fun setShowFavourites(show: Boolean) {
+        viewModelScope.launch { appPrefs.setShowFavourites(show) }
     }
 
     fun addTag(name: String) {

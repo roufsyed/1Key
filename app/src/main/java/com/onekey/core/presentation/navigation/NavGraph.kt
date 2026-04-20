@@ -69,6 +69,7 @@ fun OneKeyNavGraph(
 ) {
     val appViewModel: AppViewModel = hiltViewModel()
     val isUnlocked by appViewModel.isUnlocked.collectAsStateWithLifecycle()
+    val isShowFavourites by appViewModel.isShowFavourites.collectAsStateWithLifecycle()
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -88,11 +89,22 @@ fun OneKeyNavGraph(
         }
     }
 
+    // If Favourites is hidden while the user is on that tab, bounce them to Vault.
+    LaunchedEffect(isShowFavourites) {
+        if (!isShowFavourites && currentRoute == Screen.Favourites.route) {
+            navController.navigate(Screen.Vault.route) {
+                popUpTo(Screen.Vault.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = {
             if (showBottomNav) {
                 OneKeyBottomNav(
                     currentRoute = currentRoute,
+                    showFavourites = isShowFavourites,
                     onNavigate = { navController.navigateToTab(it) },
                 )
             }
@@ -230,6 +242,7 @@ fun OneKeyNavGraph(
 @Composable
 private fun OneKeyBottomNav(
     currentRoute: String?,
+    showFavourites: Boolean,
     onNavigate: (String) -> Unit,
 ) {
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -244,13 +257,15 @@ private fun OneKeyBottomNav(
             label = { Text("Vault") },
             alwaysShowLabel = false,
         )
-        NavigationBarItem(
-            selected = currentRoute == Screen.Favourites.route,
-            onClick = { onNavigate(Screen.Favourites.route) },
-            icon = { Icon(Icons.Default.Favorite, contentDescription = "Favourites") },
-            label = { Text("Favourites") },
-            alwaysShowLabel = false,
-        )
+        if (showFavourites) {
+            NavigationBarItem(
+                selected = currentRoute == Screen.Favourites.route,
+                onClick = { onNavigate(Screen.Favourites.route) },
+                icon = { Icon(Icons.Default.Favorite, contentDescription = "Favourites") },
+                label = { Text("Favourites") },
+                alwaysShowLabel = false,
+            )
+        }
         NavigationBarItem(
             selected = currentRoute == Screen.TwoFaList.route,
             onClick = { onNavigate(Screen.TwoFaList.route) },

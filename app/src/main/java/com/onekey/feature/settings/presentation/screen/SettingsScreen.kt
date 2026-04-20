@@ -47,6 +47,7 @@ fun SettingsScreen(
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
     val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
     val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
+    val isShowFavourites by settingsVm.isShowFavourites.collectAsStateWithLifecycle()
     val lockTimeout by settingsVm.lockTimeout.collectAsStateWithLifecycle()
     val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
@@ -122,22 +123,43 @@ fun SettingsScreen(
             item {
                 SectionHeader("Appearance")
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    ListItem(
-                        headlineContent = { Text("Dark theme") },
-                        supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
-                        leadingContent = {
-                            Icon(
-                                if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                contentDescription = null,
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isDarkTheme,
-                                onCheckedChange = { settingsVm.toggleTheme() },
-                            )
-                        },
-                    )
+                    Column {
+                        ListItem(
+                            headlineContent = { Text("Dark theme") },
+                            supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
+                            leadingContent = {
+                                Icon(
+                                    if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                    contentDescription = null,
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isDarkTheme,
+                                    onCheckedChange = { settingsVm.toggleTheme() },
+                                )
+                            },
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Show Favourites tab") },
+                            supportingContent = {
+                                Text(
+                                    if (isShowFavourites) "Favourites visible in bottom navigation"
+                                    else "Favourites hidden from bottom navigation"
+                                )
+                            },
+                            leadingContent = {
+                                Icon(Icons.Default.Favorite, contentDescription = null)
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isShowFavourites,
+                                    onCheckedChange = { settingsVm.setShowFavourites(it) },
+                                )
+                            },
+                        )
+                    }
                 }
             }
 

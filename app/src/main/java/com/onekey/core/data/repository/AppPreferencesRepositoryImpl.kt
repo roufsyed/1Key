@@ -16,6 +16,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+private val KEY_SHOW_FAVOURITES = booleanPreferencesKey("show_favourites")
 private val KEY_BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
 private val KEY_SCREENSHOTS_ENABLED = booleanPreferencesKey("screenshots_enabled")
 private val KEY_LOCK_TIMEOUT = stringPreferencesKey("lock_timeout")
@@ -43,7 +44,7 @@ class AppPreferencesRepositoryImpl @Inject constructor(
     }
 
     override fun isScreenshotsEnabled(): Flow<Boolean> =
-        dataStore.data.map { it[KEY_SCREENSHOTS_ENABLED] ?: true }.distinctUntilChanged()
+        dataStore.data.map { it[KEY_SCREENSHOTS_ENABLED] ?: false }.distinctUntilChanged()
 
     override suspend fun setScreenshotsEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_SCREENSHOTS_ENABLED] = enabled }
@@ -81,5 +82,12 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setLastMasterPasswordTimestamp(timestamp: Long) {
         dataStore.edit { it[KEY_LAST_MP_TIMESTAMP] = timestamp }
+    }
+
+    override fun isShowFavourites(): Flow<Boolean> =
+        dataStore.data.map { it[KEY_SHOW_FAVOURITES] ?: true }.distinctUntilChanged()
+
+    override suspend fun setShowFavourites(show: Boolean) {
+        dataStore.edit { it[KEY_SHOW_FAVOURITES] = show }
     }
 }
