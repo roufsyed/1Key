@@ -53,12 +53,12 @@ class TaggedCredentialListViewModel @Inject constructor(
                 }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val letterIndex: StateFlow<Map<Char, Int>> = combine(credentials, sortOrder) { creds, order ->
         if (order != CredentialSortOrder.ALPHABETICAL || creds == null) emptyMap()
         else buildLetterIndex(creds.map { it.title })
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     fun setSortOrder(order: CredentialSortOrder) {
         viewModelScope.launch { appPrefs.setCredentialSortOrder(order) }
@@ -69,7 +69,7 @@ class TaggedCredentialListViewModel @Inject constructor(
 
     val isSelectionMode: StateFlow<Boolean> = _selectedIds
         .map { it.isNotEmpty() }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _event = MutableSharedFlow<CredentialListEvent>(extraBufferCapacity = 1)
     val event: SharedFlow<CredentialListEvent> = _event.asSharedFlow()

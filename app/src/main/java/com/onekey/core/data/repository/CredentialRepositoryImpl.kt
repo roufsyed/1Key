@@ -112,28 +112,26 @@ class CredentialRepositoryImpl @Inject constructor(
             }
         }
 
-    override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> =
-        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+    override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> {
+        val sql = SimpleSQLiteQuery(
+            "SELECT * FROM credentials WHERE (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+            arrayOf(query, query, tag, tag),
+        )
+        return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else {
-                val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
-                    arrayOf(query, query, tag, tag),
-                )
-                dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
-            }
+            else dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
         }
+    }
 
-    override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> =
-        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+    override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> {
+        val sql = SimpleSQLiteQuery(
+            "SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
+        )
+        return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else {
-                val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
-                )
-                dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
-            }
+            else dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
         }
+    }
 
     override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
         dao.observeAllTitlesAlphabetical(tag)

@@ -31,6 +31,7 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.FavouritesViewModel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,8 +61,8 @@ fun FavouritesScreen(
         }
     }
 
-    LaunchedEffect(sortOrder) {
-        listState.scrollToItem(0)
+    LaunchedEffect(Unit) {
+        snapshotFlow { sortOrder }.drop(1).collect { listState.scrollToItem(0) }
     }
 
     BackHandler(enabled = isSelectionMode) {
