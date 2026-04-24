@@ -65,7 +65,15 @@ fun TwoFaListScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        if (entries.isEmpty()) {
+        val entriesList = entries
+        if (entriesList == null) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center,
+            ) { CircularProgressIndicator() }
+            return@Scaffold
+        }
+        if (entriesList.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 contentAlignment = Alignment.Center,
@@ -86,7 +94,7 @@ fun TwoFaListScreen(
                 contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(entries, key = { it.credential.id }) { entry ->
+                items(entriesList, key = { it.credential.id }) { entry ->
                     TotpEntryCard(
                         entry = entry,
                         onLongClick = { pendingDelete = entry },

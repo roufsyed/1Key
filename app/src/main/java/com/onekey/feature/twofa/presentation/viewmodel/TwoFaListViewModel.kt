@@ -28,7 +28,7 @@ class TwoFaListViewModel @Inject constructor(
     private val deleteCredential: DeleteCredentialUseCase,
 ) : ViewModel() {
 
-    val entries: StateFlow<List<TotpEntry>> = credentialRepository.observeWithTotp()
+    val entries: StateFlow<List<TotpEntry>?> = credentialRepository.observeWithTotp()
         .transformLatest { credentials ->
             while (true) {
                 emit(credentials.mapNotNull { cred ->
@@ -40,7 +40,7 @@ class TwoFaListViewModel @Inject constructor(
                 delay(1_000L)
             }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun deleteEntry(id: String) {
         viewModelScope.launch { deleteCredential(id) }
