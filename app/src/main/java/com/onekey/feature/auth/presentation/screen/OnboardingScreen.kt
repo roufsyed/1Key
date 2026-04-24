@@ -40,7 +40,7 @@ fun OnboardingScreen(
         if (state is AuthUiState.SetupComplete) onSetupComplete()
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().imePadding()) {
         AnimatedContent(
             targetState = step,
             transitionSpec = {
