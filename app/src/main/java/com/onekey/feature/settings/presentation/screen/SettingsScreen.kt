@@ -6,8 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -113,212 +113,208 @@ fun SettingsScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.padding(padding),
-            contentPadding = PaddingValues(16.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(padding)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-
             // ── Appearance ────────────────────────────────────────────────────
-            item {
-                SectionHeader("Appearance")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        ListItem(
-                            headlineContent = { Text("Dark theme") },
-                            supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
-                            leadingContent = {
-                                Icon(
-                                    if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                    contentDescription = null,
-                                )
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = isDarkTheme,
-                                    onCheckedChange = { settingsVm.toggleTheme() },
-                                )
-                            },
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Show Favourites tab") },
-                            supportingContent = {
-                                Text(
-                                    if (isShowFavourites) "Favourites visible in bottom navigation"
-                                    else "Favourites hidden from bottom navigation"
-                                )
-                            },
-                            leadingContent = {
-                                Icon(Icons.Default.Favorite, contentDescription = null)
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = isShowFavourites,
-                                    onCheckedChange = { settingsVm.setShowFavourites(it) },
-                                )
-                            },
-                        )
-                    }
+            SectionHeader("Appearance")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Dark theme") },
+                        supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
+                        leadingContent = {
+                            Icon(
+                                if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                contentDescription = null,
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isDarkTheme,
+                                onCheckedChange = { settingsVm.toggleTheme() },
+                            )
+                        },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Show Favourites tab") },
+                        supportingContent = {
+                            Text(
+                                if (isShowFavourites) "Favourites visible in bottom navigation"
+                                else "Favourites hidden from bottom navigation"
+                            )
+                        },
+                        leadingContent = {
+                            Icon(Icons.Default.Favorite, contentDescription = null)
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isShowFavourites,
+                                onCheckedChange = { settingsVm.setShowFavourites(it) },
+                            )
+                        },
+                    )
                 }
             }
 
             // ── Security ──────────────────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Security")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        ListItem(
-                            headlineContent = { Text("Setup / Change PIN") },
-                            supportingContent = { Text("Faster unlock with a 6-digit PIN") },
-                            leadingContent = { Icon(Icons.Default.Lock, null) },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable(onClick = onSetupPin),
-                        )
-                        if (canUseBiometric) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                            ListItem(
-                                headlineContent = { Text("Biometric Unlock") },
-                                supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
-                                leadingContent = {
-                                    Icon(Icons.Default.Fingerprint, contentDescription = null)
-                                },
-                                trailingContent = {
-                                    Switch(
-                                        checked = isBiometricEnabled,
-                                        onCheckedChange = { settingsVm.setBiometricEnabled(it) },
-                                    )
-                                },
-                            )
-                        }
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Security")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Setup / Change PIN") },
+                        supportingContent = { Text("Faster unlock with a 6-digit PIN") },
+                        leadingContent = { Icon(Icons.Default.Lock, null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = onSetupPin),
+                    )
+                    if (canUseBiometric) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         ListItem(
-                            headlineContent = { Text("Allow Screenshots") },
-                            supportingContent = {
-                                Text(
-                                    if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
-                                    else "Blocks screenshots, screen recordings, and Recent Apps preview"
-                                )
+                            headlineContent = { Text("Biometric Unlock") },
+                            supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
+                            leadingContent = {
+                                Icon(Icons.Default.Fingerprint, contentDescription = null)
                             },
-                            leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
                             trailingContent = {
                                 Switch(
-                                    checked = isScreenshotsEnabled,
-                                    onCheckedChange = { newValue ->
-                                        pendingScreenshotsEnabled = newValue
-                                        showScreenshotDialog = true
-                                    },
+                                    checked = isBiometricEnabled,
+                                    onCheckedChange = { settingsVm.setBiometricEnabled(it) },
                                 )
                             },
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Auto-lock") },
-                            supportingContent = { Text(lockTimeout.displayName) },
-                            leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable { showLockTimeoutDialog = true },
-                        )
-                        if (isPinSetup) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                            ListItem(
-                                headlineContent = { Text("Reset PIN") },
-                                supportingContent = { Text("Remove saved PIN, revert to master password") },
-                                leadingContent = { Icon(Icons.Default.LockReset, null) },
-                                trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                                modifier = Modifier.clickable { showResetPinDialog = true },
-                            )
-                        }
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Change Master Password") },
-                            supportingContent = { Text("Update your vault master password") },
-                            leadingContent = { Icon(Icons.Default.Key, null) },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable(onClick = onChangePassword),
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = {
-                                Text("Reset Vault", color = MaterialTheme.colorScheme.error)
-                            },
-                            supportingContent = { Text("Permanently delete all credentials") },
-                            leadingContent = {
-                                Icon(
-                                    Icons.Default.DeleteForever,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                )
-                            },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable { showResetVaultDialog = true },
                         )
                     }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Allow Screenshots") },
+                        supportingContent = {
+                            Text(
+                                if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
+                                else "Blocks screenshots, screen recordings, and Recent Apps preview"
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isScreenshotsEnabled,
+                                onCheckedChange = { newValue ->
+                                    pendingScreenshotsEnabled = newValue
+                                    showScreenshotDialog = true
+                                },
+                            )
+                        },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Auto-lock") },
+                        supportingContent = { Text(lockTimeout.displayName) },
+                        leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable { showLockTimeoutDialog = true },
+                    )
+                    if (isPinSetup) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Reset PIN") },
+                            supportingContent = { Text("Remove saved PIN, revert to master password") },
+                            leadingContent = { Icon(Icons.Default.LockReset, null) },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable { showResetPinDialog = true },
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Change Master Password") },
+                        supportingContent = { Text("Update your vault master password") },
+                        leadingContent = { Icon(Icons.Default.Key, null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = onChangePassword),
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = {
+                            Text("Reset Vault", color = MaterialTheme.colorScheme.error)
+                        },
+                        supportingContent = { Text("Permanently delete all credentials") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.DeleteForever,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                        },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable { showResetVaultDialog = true },
+                    )
                 }
             }
 
             // ── Password Verification ─────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Password Verification")
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column {
-                        ListItem(
-                            headlineContent = { Text("Periodic master password check") },
-                            supportingContent = {
-                                Text(
-                                    if (isMasterPasswordRecheckEnabled)
-                                        "Master password required every ${masterPasswordRecheckInterval.label}"
-                                    else
-                                        "Biometric and PIN can be used indefinitely"
-                                )
-                            },
-                            leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-                            trailingContent = {
-                                Switch(
-                                    checked = isMasterPasswordRecheckEnabled,
-                                    onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
-                                )
-                            },
-                        )
-                        if (isMasterPasswordRecheckEnabled) {
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                            Column(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                            ) {
-                                Text(
-                                    "Recheck interval",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Spacer(Modifier.height(4.dp))
-                                MasterPasswordInterval.entries.forEach { option ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { settingsVm.setMasterPasswordRecheckInterval(option) }
-                                            .padding(vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        RadioButton(
-                                            selected = masterPasswordRecheckInterval == option,
-                                            onClick = { settingsVm.setMasterPasswordRecheckInterval(option) },
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Password Verification")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Periodic master password check") },
+                        supportingContent = {
+                            Text(
+                                if (isMasterPasswordRecheckEnabled)
+                                    "Master password required every ${masterPasswordRecheckInterval.label}"
+                                else
+                                    "Biometric and PIN can be used indefinitely"
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isMasterPasswordRecheckEnabled,
+                                onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
+                            )
+                        },
+                    )
+                    if (isMasterPasswordRecheckEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                "Recheck interval",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            MasterPasswordInterval.entries.forEach { option ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { settingsVm.setMasterPasswordRecheckInterval(option) }
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    RadioButton(
+                                        selected = masterPasswordRecheckInterval == option,
+                                        onClick = { settingsVm.setMasterPasswordRecheckInterval(option) },
+                                    )
+                                    Column {
+                                        Text(
+                                            option.label,
+                                            style = MaterialTheme.typography.bodyMedium,
                                         )
-                                        Column {
+                                        if (option == MasterPasswordInterval.HOURS_48) {
                                             Text(
-                                                option.label,
-                                                style = MaterialTheme.typography.bodyMedium,
+                                                "Default — recommended",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
-                                            if (option == MasterPasswordInterval.HOURS_48) {
-                                                Text(
-                                                    "Default — recommended",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
                                         }
                                     }
                                 }
@@ -329,224 +325,205 @@ fun SettingsScreen(
             }
 
             // ── Backup ────────────────────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Backup")
-
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("Format", style = MaterialTheme.typography.labelMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            ExportFormat.entries.forEach { fmt ->
-                                FilterChip(
-                                    selected = selectedFormat == fmt,
-                                    onClick = { selectedFormat = fmt },
-                                    label = { Text(fmt.name) },
-                                )
-                            }
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Backup")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("Format", style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ExportFormat.entries.forEach { fmt ->
+                            FilterChip(
+                                selected = selectedFormat == fmt,
+                                onClick = { selectedFormat = fmt },
+                                label = { Text(fmt.name) },
+                            )
                         }
-
-                        HorizontalDivider()
-
-                        Text(
-                            "The exported file is NOT encrypted — store it securely.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(
-                                onClick = {
-                                    exportLauncher.launch("1key_backup.${selectedFormat.name.lowercase()}")
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = backupState !is ImportExportUiState.Loading,
-                            ) { Text("Export") }
-
-                            OutlinedButton(
-                                onClick = { importLauncher.launch(arrayOf("*/*")) },
-                                modifier = Modifier.weight(1f),
-                                enabled = backupState !is ImportExportUiState.Loading,
-                            ) { Text("Import") }
-                        }
-
-                        when (val s = backupState) {
-                            is ImportExportUiState.Loading ->
-                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            is ImportExportUiState.Success ->
-                                Text(s.message, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-                            is ImportExportUiState.Error ->
-                                Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                            else -> Unit
-                        }
+                    }
+                    HorizontalDivider()
+                    Text(
+                        "The exported file is NOT encrypted — store it securely.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                exportLauncher.launch("1key_backup.${selectedFormat.name.lowercase()}")
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = backupState !is ImportExportUiState.Loading,
+                        ) { Text("Export") }
+                        OutlinedButton(
+                            onClick = { importLauncher.launch(arrayOf("*/*")) },
+                            modifier = Modifier.weight(1f),
+                            enabled = backupState !is ImportExportUiState.Loading,
+                        ) { Text("Import") }
+                    }
+                    when (val s = backupState) {
+                        is ImportExportUiState.Loading ->
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        is ImportExportUiState.Success ->
+                            Text(s.message, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                        is ImportExportUiState.Error ->
+                            Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        else -> Unit
                     }
                 }
             }
 
             // ── Categories ────────────────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Categories")
-            }
-
-            items(tags, key = { it.name }) { tag ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    ListItem(
-                        headlineContent = { Text(tag.name) },
-                        trailingContent = if (!tag.isDefault) {
-                            {
-                                IconButton(onClick = { tagToDelete = tag }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete category",
-                                        tint = MaterialTheme.colorScheme.error,
-                                    )
-                                }
-                            }
-                        } else null,
-                    )
-                }
-            }
-
-            item {
-                if (showAddTag) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedTextField(
-                            value = newTagName,
-                            onValueChange = { input ->
-                                newTagName = input.replaceFirstChar {
-                                    if (it.isLowerCase()) it.titlecase() else it.toString()
-                                }
-                            },
-                            label = { Text("Category name") },
-                            keyboardOptions = KeyboardOptions(
-                                capitalization = KeyboardCapitalization.Sentences,
-                            ),
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                        )
-                        IconButton(onClick = {
-                            if (newTagName.isNotBlank()) {
-                                settingsVm.addTag(newTagName.trim())
-                                newTagName = ""
-                                showAddTag = false
-                            }
-                        }) { Icon(Icons.Default.Check, "Save category") }
-                        IconButton(onClick = { showAddTag = false; newTagName = "" }) {
-                            Icon(Icons.Default.Close, "Cancel")
-                        }
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { showAddTag = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Add, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Add Category")
-                    }
-                }
-            }
-            // ── Developer Options (debug builds only) ─────────────────────────
-            if (BuildConfig.DEBUG) {
-                item {
-                    Spacer(Modifier.height(8.dp))
-                    SectionHeader("Developer Options")
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Categories")
+            tags.forEach { tag ->
+                key(tag.name) {
                     Card(modifier = Modifier.fillMaxWidth()) {
                         ListItem(
-                            headlineContent = { Text("Seed Sample Data") },
-                            supportingContent = { Text("Insert 9 sample credentials covering all categories") },
-                            leadingContent = {
-                                if (isSeedingData) {
-                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Icon(Icons.Default.Storage, contentDescription = null)
+                            headlineContent = { Text(tag.name) },
+                            trailingContent = if (!tag.isDefault) {
+                                {
+                                    IconButton(onClick = { tagToDelete = tag }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete category",
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
                                 }
-                            },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable(enabled = !isSeedingData) { settingsVm.seedData() },
+                            } else null,
                         )
                     }
+                }
+            }
+            if (showAddTag) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = newTagName,
+                        onValueChange = { input ->
+                            newTagName = input.replaceFirstChar {
+                                if (it.isLowerCase()) it.titlecase() else it.toString()
+                            }
+                        },
+                        label = { Text("Category name") },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                        ),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    IconButton(onClick = {
+                        if (newTagName.isNotBlank()) {
+                            settingsVm.addTag(newTagName.trim())
+                            newTagName = ""
+                            showAddTag = false
+                        }
+                    }) { Icon(Icons.Default.Check, "Save category") }
+                    IconButton(onClick = { showAddTag = false; newTagName = "" }) {
+                        Icon(Icons.Default.Close, "Cancel")
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { showAddTag = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Add, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Category")
+                }
+            }
+
+            // ── Developer Options (debug builds only) ─────────────────────────
+            if (BuildConfig.DEBUG) {
+                Spacer(Modifier.height(8.dp))
+                SectionHeader("Developer Options")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    ListItem(
+                        headlineContent = { Text("Seed Sample Data") },
+                        supportingContent = { Text("Insert 9 sample credentials covering all categories") },
+                        leadingContent = {
+                            if (isSeedingData) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Storage, contentDescription = null)
+                            }
+                        },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(enabled = !isSeedingData) { settingsVm.seedData() },
+                    )
                 }
             }
 
             // ── Danger Zone ───────────────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Danger Zone")
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
-                    ),
-                ) {
-                    ListItem(
-                        headlineContent = {
-                            Text("Delete Vault", color = MaterialTheme.colorScheme.error)
-                        },
-                        supportingContent = {
-                            Text("Remove all credentials while keeping your account active")
-                        },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.DeleteSweep,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showDeleteVaultDialog = true },
-                    )
-                }
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Danger Zone")
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f),
+                ),
+            ) {
+                ListItem(
+                    headlineContent = {
+                        Text("Delete Vault", color = MaterialTheme.colorScheme.error)
+                    },
+                    supportingContent = {
+                        Text("Remove all credentials while keeping your account active")
+                    },
+                    leadingContent = {
+                        Icon(
+                            Icons.Default.DeleteSweep,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    },
+                    trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                    modifier = Modifier.clickable { showDeleteVaultDialog = true },
+                )
             }
 
             // ── Privacy ───────────────────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Privacy")
-                ExpandableInfoCard(
-                    title = "Privacy Policy",
-                    icon = Icons.Default.PrivacyTip,
-                ) {
-                    PrivacyLine("All credentials are stored locally on this device using AES-256-GCM encryption.")
-                    PrivacyLine("1Key does not require an account or internet connection.")
-                    PrivacyLine("No analytics, telemetry, or crash reporting of any kind.")
-                    PrivacyLine("Your master password never leaves your device — not even a hash.")
-                    PrivacyLine("Exports are unencrypted plaintext — treat them as sensitive files.")
-                }
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Privacy")
+            ExpandableInfoCard(
+                title = "Privacy Policy",
+                icon = Icons.Default.PrivacyTip,
+            ) {
+                PrivacyLine("All credentials are stored locally on this device using AES-256-GCM encryption.")
+                PrivacyLine("1Key does not require an account or internet connection.")
+                PrivacyLine("No analytics, telemetry, or crash reporting of any kind.")
+                PrivacyLine("Your master password never leaves your device — not even a hash.")
+                PrivacyLine("Exports are unencrypted plaintext — treat them as sensitive files.")
             }
 
             // ── Licences ──────────────────────────────────────────────────────
-            item {
-                Spacer(Modifier.height(8.dp))
-                SectionHeader("Open Source Licences")
-                ExpandableInfoCard(
-                    title = "Third-party libraries",
-                    icon = Icons.Default.Description,
-                ) {
-                    LicenceRow("Kotlin", "Apache License 2.0", "JetBrains")
-                    LicenceRow("Jetpack Compose", "Apache License 2.0", "Google")
-                    LicenceRow("Room", "Apache License 2.0", "Google")
-                    LicenceRow("Hilt / Dagger", "Apache License 2.0", "Google")
-                    LicenceRow("OkHttp / Retrofit", "Apache License 2.0", "Square")
-                    LicenceRow("Kotlinx Coroutines", "Apache License 2.0", "JetBrains")
-                    LicenceRow("Gson", "Apache License 2.0", "Google")
-                    LicenceRow("Android Biometric", "Apache License 2.0", "Google")
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "1Key — version 1.0.0",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Open Source Licences")
+            ExpandableInfoCard(
+                title = "Third-party libraries",
+                icon = Icons.Default.Description,
+            ) {
+                LicenceRow("Kotlin", "Apache License 2.0", "JetBrains")
+                LicenceRow("Jetpack Compose", "Apache License 2.0", "Google")
+                LicenceRow("Room", "Apache License 2.0", "Google")
+                LicenceRow("Hilt / Dagger", "Apache License 2.0", "Google")
+                LicenceRow("OkHttp / Retrofit", "Apache License 2.0", "Square")
+                LicenceRow("Kotlinx Coroutines", "Apache License 2.0", "JetBrains")
+                LicenceRow("Gson", "Apache License 2.0", "Google")
+                LicenceRow("Android Biometric", "Apache License 2.0", "Google")
             }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "1Key — version 1.0.0",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(32.dp))
         }
     }
 
