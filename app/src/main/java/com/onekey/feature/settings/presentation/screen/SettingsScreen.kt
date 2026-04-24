@@ -115,9 +115,10 @@ fun SettingsScreen(
     ) { padding ->
         Column(
             modifier = Modifier
+                .padding(padding)
+                .imePadding()
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(padding)
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {

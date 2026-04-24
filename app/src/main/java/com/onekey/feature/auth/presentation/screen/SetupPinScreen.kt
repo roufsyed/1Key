@@ -65,8 +65,9 @@ fun SetupPinScreen(
     ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxSize()
                 .padding(padding)
+                .imePadding()
+                .fillMaxSize()
                 .padding(32.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
