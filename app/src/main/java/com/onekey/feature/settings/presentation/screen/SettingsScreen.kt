@@ -501,8 +501,15 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(8.dp))
             Text(
+                "Your vault is encrypted and stored only on this device.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+            Text(
                 "1Key — version 1.0.0",
                 style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(32.dp))

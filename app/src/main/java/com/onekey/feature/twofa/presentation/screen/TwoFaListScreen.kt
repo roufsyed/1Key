@@ -153,7 +153,7 @@ fun TwoFaListScreen(
             text = {
                 Text(
                     if (entry.isLinkedCredential)
-                        "The 2FA code will be removed from \"${entry.credential.title}\". The login will be kept."
+                        "Only 2FA code will be removed from \"${entry.credential.title}\". The linked credential will be untouched."
                     else
                         "\"${entry.credential.title}\" will be removed. This cannot be undone."
                 )
@@ -198,6 +198,7 @@ private fun TotpEntryCard(
                 )
             }
             if (entry.isLinkedCredential) {
+                val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
                 Spacer(Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -210,7 +211,7 @@ private fun TotpEntryCard(
                         tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        "Login credential",
+                        categoryLabel,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
