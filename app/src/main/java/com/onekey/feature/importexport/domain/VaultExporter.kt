@@ -9,5 +9,5 @@ interface VaultExporter {
 }
 
 interface VaultImporter {
-    suspend fun parse(path: String, format: ExportFormat): AppResult<List<Credential>>
+    suspend fun parse(path: String, format: ExportFormat): AppResult<ParsedImport>
 }

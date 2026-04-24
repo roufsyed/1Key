@@ -9,6 +9,7 @@ import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.domain.usecase.ExportVaultUseCase
 import com.onekey.core.domain.usecase.ImportVaultUseCase
+import com.onekey.feature.importexport.domain.ImportResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -22,6 +23,7 @@ sealed class ImportExportUiState {
     data object Idle : ImportExportUiState()
     data object Loading : ImportExportUiState()
     data class Success(val message: String) : ImportExportUiState()
+    data class ImportSuccess(val result: ImportResult) : ImportExportUiState()
     data class Error(val message: String) : ImportExportUiState()
 }
 
@@ -68,7 +70,7 @@ class ImportExportViewModel @Inject constructor(
                 }
                 when (val result = importVault(format, tmpFile.absolutePath)) {
                     is AppResult.Success ->
-                        _uiState.value = ImportExportUiState.Success("Imported ${result.data} credentials")
+                        _uiState.value = ImportExportUiState.ImportSuccess(result.data)
                     is AppResult.Error ->
                         _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
                 }

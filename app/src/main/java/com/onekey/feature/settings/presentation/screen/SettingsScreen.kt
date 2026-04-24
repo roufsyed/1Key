@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -29,6 +32,8 @@ import com.onekey.core.domain.model.LockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.usecase.ExportFormat
+import com.onekey.feature.importexport.domain.ImportResult
+import com.onekey.feature.importexport.domain.SkipReason
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
@@ -64,6 +69,8 @@ fun SettingsScreen(
     var biometricPasswordVisible by remember { mutableStateOf(false) }
     var biometricPasswordError by remember { mutableStateOf(false) }
     var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
+    var showSkippedDialog by remember { mutableStateOf(false) }
+    var showFailedDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
@@ -382,6 +389,12 @@ fun SettingsScreen(
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         is ImportExportUiState.Success ->
                             Text(s.message, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
+                        is ImportExportUiState.ImportSuccess ->
+                            ImportSummaryRow(
+                                result = s.result,
+                                onShowSkipped = { showSkippedDialog = true },
+                                onShowFailed = { showFailedDialog = true },
+                            )
                         is ImportExportUiState.Error ->
                             Text(s.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                         else -> Unit
@@ -547,6 +560,88 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(32.dp))
         }
+    }
+
+    val importSuccessState = backupState as? ImportExportUiState.ImportSuccess
+
+    if (showSkippedDialog && importSuccessState != null) {
+        val skipped = importSuccessState.result.skipped
+        AlertDialog(
+            onDismissRequest = { showSkippedDialog = false },
+            icon = { Icon(Icons.Default.Info, contentDescription = null) },
+            title = { Text("Skipped (${skipped.size})") },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(skipped) { item ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                item.title.ifBlank { "(no title)" },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            if (item.username.isNotBlank()) {
+                                Text(
+                                    item.username,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                when (item.reason) {
+                                    SkipReason.DUPLICATE_ID -> "Already in vault (same ID)"
+                                    SkipReason.DUPLICATE_TITLE_USERNAME -> "Already in vault (same name & username)"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSkippedDialog = false }) { Text("Close") }
+            },
+        )
+    }
+
+    if (showFailedDialog && importSuccessState != null) {
+        val failed = importSuccessState.result.failed
+        AlertDialog(
+            onDismissRequest = { showFailedDialog = false },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text("Failed entries (${failed.size})") },
+            text = {
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 320.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(failed) { entry ->
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                "Entry ${entry.rowIndex}",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                entry.reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFailedDialog = false }) { Text("Close") }
+            },
+        )
     }
 
     if (showBiometricConfirmDialog) {
@@ -890,6 +985,39 @@ private fun LicenceRow(name: String, licence: String, author: String) {
     Column {
         Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         Text("$licence · $author", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ImportSummaryRow(
+    result: ImportResult,
+    onShowSkipped: () -> Unit,
+    onShowFailed: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "Imported ${result.imported} ${if (result.imported == 1) "credential" else "credentials"}",
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (result.skipped.isNotEmpty()) {
+            Text(
+                "${result.skipped.size} skipped — tap to view",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable(onClick = onShowSkipped),
+            )
+        }
+        if (result.failed.isNotEmpty()) {
+            Text(
+                "${result.failed.size} failed to parse — tap to view",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                textDecoration = TextDecoration.Underline,
+                modifier = Modifier.clickable(onClick = onShowFailed),
+            )
+        }
     }
 }
 

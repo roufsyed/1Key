@@ -85,6 +85,19 @@ fun ImportExportScreen(
             when (val s = state) {
                 is ImportExportUiState.Loading -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 is ImportExportUiState.Success -> Text(s.message, color = MaterialTheme.colorScheme.primary)
+                is ImportExportUiState.ImportSuccess -> {
+                    val r = s.result
+                    val skippedCount = r.skipped.size
+                    val failedCount = r.failed.size
+                    Text(
+                        buildString {
+                            append("Imported ${r.imported} ${if (r.imported == 1) "credential" else "credentials"}")
+                            if (skippedCount > 0) append(" · $skippedCount skipped")
+                            if (failedCount > 0) append(" · $failedCount failed")
+                        },
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 is ImportExportUiState.Error -> Text(s.message, color = MaterialTheme.colorScheme.error)
                 else -> Unit
             }
