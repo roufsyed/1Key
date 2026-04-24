@@ -24,7 +24,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -120,6 +122,7 @@ private fun CredentialViewContent(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     var historyExpanded by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
 
     Scaffold(
         topBar = {
@@ -150,15 +153,28 @@ private fun CredentialViewContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (credential.username.isNotEmpty()) {
-                DetailField(label = "Username", value = credential.username)
+                DetailField(
+                    label = "Username",
+                    value = credential.username,
+                    trailing = {
+                        IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.username)) }) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy username")
+                        }
+                    }
+                )
             }
             if (credential.password.isNotEmpty()) {
                 DetailField(
                     label = "Password",
                     value = if (showPassword) credential.password else "••••••••",
                     trailing = {
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                        Row {
+                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.password)) }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy password")
+                            }
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                            }
                         }
                     }
                 )
