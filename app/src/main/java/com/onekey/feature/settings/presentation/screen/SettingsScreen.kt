@@ -61,7 +61,6 @@ fun SettingsScreen(
         settingsVm.event.collect { event ->
             when (event) {
                 SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
-                SettingsEvent.VaultReset -> onVaultReset()
                 SettingsEvent.VaultContentsDeleted -> onVaultReset()
                 is SettingsEvent.SeedComplete -> snackbarHostState.showSnackbar("${event.count} sample credentials added")
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
@@ -79,8 +78,6 @@ fun SettingsScreen(
     var showAddTag by remember { mutableStateOf(false) }
     var selectedFormat by remember { mutableStateOf(ExportFormat.JSON) }
     var showResetPinDialog by remember { mutableStateOf(false) }
-    var showResetVaultDialog by remember { mutableStateOf(false) }
-    var resetVaultConfirmed by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
@@ -237,22 +234,6 @@ fun SettingsScreen(
                         leadingContent = { Icon(Icons.Default.Key, null) },
                         trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                         modifier = Modifier.clickable(onClick = onChangePassword),
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = {
-                            Text("Reset Vault", color = MaterialTheme.colorScheme.error)
-                        },
-                        supportingContent = { Text("Permanently delete all credentials") },
-                        leadingContent = {
-                            Icon(
-                                Icons.Default.DeleteForever,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showResetVaultDialog = true },
                     )
                 }
             }
@@ -635,12 +616,7 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "This will permanently remove all your saved credentials and their history " +
-                            "from this device.",
-                    )
-                    Text(
-                        "Your master password and app settings will remain intact, so you can " +
-                            "start adding new credentials straight away — no re-setup needed.",
+                        "This will permanently remove all your saved credentials, their history and app settings from this device.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -704,64 +680,6 @@ fun SettingsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetPinDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    if (showResetVaultDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showResetVaultDialog = false
-                resetVaultConfirmed = false
-            },
-            icon = {
-                Icon(
-                    Icons.Default.DeleteForever,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("Reset Vault?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "This will permanently delete ALL credentials stored in this vault. " +
-                            "This action cannot be undone.",
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Checkbox(
-                            checked = resetVaultConfirmed,
-                            onCheckedChange = { resetVaultConfirmed = it },
-                        )
-                        Text("I understand all my credentials will be deleted")
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showResetVaultDialog = false
-                        resetVaultConfirmed = false
-                        settingsVm.resetVault()
-                    },
-                    enabled = resetVaultConfirmed,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                ) { Text("Delete Everything") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showResetVaultDialog = false
-                        resetVaultConfirmed = false
-                    }
-                ) { Text("Cancel") }
             },
         )
     }
