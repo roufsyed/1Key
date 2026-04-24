@@ -11,11 +11,10 @@ import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.GetPagedCredentialsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 
-@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class VaultViewModel @Inject constructor(
     private val tagRepository: TagRepository,
@@ -23,27 +22,14 @@ class VaultViewModel @Inject constructor(
     private val getPagedCredentials: GetPagedCredentialsUseCase,
 ) : ViewModel() {
 
-    val tagCounts: StateFlow<List<TagWithCount>> = tagRepository.observeTags()
-        .flatMapLatest { tags ->
-            if (tags.isEmpty()) {
-                flowOf(emptyList())
-            } else {
-                combine(
-                    tags.map { tag ->
-                        credentialRepository.observeCountForTag(tag.name)
-                            .map { count -> TagWithCount(tag, count) }
-                    }
-                ) { array -> array.toList() }
-            }
-        }
-        .debounce(50L)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val tagCounts: StateFlow<List<TagWithCount>> = tagRepository.observeTagsWithCounts()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val totalCount: StateFlow<Int> = credentialRepository.observeCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     val favoriteCount: StateFlow<Int> = credentialRepository.observeFavoriteCount()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
