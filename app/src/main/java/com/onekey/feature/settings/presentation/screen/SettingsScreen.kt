@@ -19,6 +19,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +67,15 @@ fun SettingsScreen(
                 SettingsEvent.VaultContentsDeleted -> onVaultReset()
                 is SettingsEvent.SeedComplete -> snackbarHostState.showSnackbar("${event.count} sample credentials added")
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                SettingsEvent.BiometricEnabled -> {
+                    showBiometricConfirmDialog = false
+                    biometricPasswordInput = ""
+                    biometricPasswordVisible = false
+                    biometricPasswordError = false
+                }
+                SettingsEvent.BiometricConfirmFailed -> {
+                    biometricPasswordError = true
+                }
             }
         }
     }
@@ -85,6 +97,10 @@ fun SettingsScreen(
     var showLockTimeoutDialog by remember { mutableStateOf(false) }
     var pendingLockTimeout by remember(lockTimeout) { mutableStateOf(lockTimeout) }
     var tagToDelete by remember { mutableStateOf<Tag?>(null) }
+    var showBiometricConfirmDialog by remember { mutableStateOf(false) }
+    var biometricPasswordInput by remember { mutableStateOf("") }
+    var biometricPasswordVisible by remember { mutableStateOf(false) }
+    var biometricPasswordError by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -184,7 +200,14 @@ fun SettingsScreen(
                             trailingContent = {
                                 Switch(
                                     checked = isBiometricEnabled,
-                                    onCheckedChange = { settingsVm.setBiometricEnabled(it) },
+                                    onCheckedChange = { enabled ->
+                                        if (enabled) {
+                                            biometricPasswordError = false
+                                            showBiometricConfirmDialog = true
+                                        } else {
+                                            settingsVm.setBiometricEnabled(false)
+                                        }
+                                    },
                                 )
                             },
                         )
@@ -514,6 +537,77 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(32.dp))
         }
+    }
+
+    if (showBiometricConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showBiometricConfirmDialog = false
+                biometricPasswordInput = ""
+                biometricPasswordVisible = false
+                biometricPasswordError = false
+            },
+            icon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
+            title = { Text("Confirm Master Password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Biometric unlock gives the same full access to your vault as your master password does.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "To make sure only you can enable it, please enter your master password once. " +
+                            "It is verified locally and never stored or transmitted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = biometricPasswordInput,
+                        onValueChange = { input ->
+                            biometricPasswordInput = input
+                            if (biometricPasswordError) biometricPasswordError = false
+                        },
+                        label = { Text("Master password") },
+                        singleLine = true,
+                        isError = biometricPasswordError,
+                        supportingText = if (biometricPasswordError) {
+                            { Text("Incorrect password — please try again.") }
+                        } else null,
+                        visualTransformation = if (biometricPasswordVisible) VisualTransformation.None
+                                               else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { biometricPasswordVisible = !biometricPasswordVisible }) {
+                                Icon(
+                                    if (biometricPasswordVisible) Icons.Default.VisibilityOff
+                                    else Icons.Default.Visibility,
+                                    contentDescription = if (biometricPasswordVisible) "Hide password" else "Show password",
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        settingsVm.enableBiometricWithVerification(biometricPasswordInput.toCharArray())
+                    },
+                    enabled = biometricPasswordInput.isNotEmpty(),
+                ) { Text("Enable Biometric") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showBiometricConfirmDialog = false
+                        biometricPasswordInput = ""
+                        biometricPasswordVisible = false
+                        biometricPasswordError = false
+                    }
+                ) { Text("Cancel") }
+            },
+        )
     }
 
     if (showScreenshotDialog) {
