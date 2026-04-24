@@ -9,6 +9,8 @@ import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.VaultKeyHolder
+import com.onekey.core.di.ApplicationScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.UUID
@@ -23,7 +25,14 @@ class CredentialRepositoryImpl @Inject constructor(
     private val dao: CredentialDao,
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
+    @ApplicationScope appScope: CoroutineScope,
 ) : CredentialRepository {
+
+    private val countFlow: StateFlow<Int> =
+        dao.observeCount().stateIn(appScope, SharingStarted.Eagerly, 0)
+
+    private val favoriteCountFlow: StateFlow<Int> =
+        dao.observeFavoriteCount().stateIn(appScope, SharingStarted.Eagerly, 0)
 
     // Gate every flow that calls toDomain() on the vault unlock state.
     // When the vault locks the inner flow is cancelled and an empty/null value
@@ -72,13 +81,12 @@ class CredentialRepositoryImpl @Inject constructor(
             entities.size
         }
 
-    override fun observeCount(): Flow<Int> = dao.observeCount().distinctUntilChanged()
+    override fun observeCount(): Flow<Int> = countFlow
 
     override fun observeCountForTag(tag: String): Flow<Int> =
         dao.observeCountForTag(tag).distinctUntilChanged()
 
-    override fun observeFavoriteCount(): Flow<Int> =
-        dao.observeFavoriteCount().distinctUntilChanged()
+    override fun observeFavoriteCount(): Flow<Int> = favoriteCountFlow
 
     override fun observeFavorites(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->

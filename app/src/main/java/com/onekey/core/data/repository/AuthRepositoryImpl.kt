@@ -2,12 +2,14 @@ package com.onekey.core.data.repository
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
+import com.onekey.core.di.ApplicationScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.VaultKeyHolder
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,10 +27,14 @@ class AuthRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>,
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
+    @ApplicationScope appScope: CoroutineScope,
 ) : AuthRepository {
 
+    private val prefs: StateFlow<Preferences> = dataStore.data
+        .stateIn(appScope, SharingStarted.Eagerly, emptyPreferences())
+
     override fun isSetupComplete(): Flow<Boolean> =
-        dataStore.data.map { it[KEY_SETUP_COMPLETE] ?: false }.distinctUntilChanged()
+        prefs.map { it[KEY_SETUP_COMPLETE] ?: false }.distinctUntilChanged()
 
     override suspend fun setupMasterPassword(password: CharArray): AppResult<Unit> =
         runCatchingResult {
@@ -170,7 +176,7 @@ class AuthRepositoryImpl @Inject constructor(
     override fun isUnlocked(): Flow<Boolean> = keyHolder.isUnlocked
 
     override fun isPinSetup(): Flow<Boolean> =
-        dataStore.data.map { it[KEY_PIN_HASH] != null }.distinctUntilChanged()
+        prefs.map { it[KEY_PIN_HASH] != null }.distinctUntilChanged()
 
     override suspend fun clearAll(): AppResult<Unit> = runCatchingResult {
         dataStore.edit { it.clear() }

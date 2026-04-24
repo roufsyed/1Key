@@ -40,7 +40,7 @@ class TwoFaListViewModel @Inject constructor(
                 delay(1_000L)
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun deleteEntry(id: String) {
         viewModelScope.launch { deleteCredential(id) }

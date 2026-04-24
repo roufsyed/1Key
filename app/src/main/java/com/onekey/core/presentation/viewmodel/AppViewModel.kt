@@ -17,8 +17,8 @@ class AppViewModel @Inject constructor(
 ) : ViewModel() {
 
     val isUnlocked: StateFlow<Boolean> = authRepository.isUnlocked()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 }

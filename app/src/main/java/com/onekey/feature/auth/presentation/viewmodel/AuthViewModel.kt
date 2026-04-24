@@ -34,16 +34,16 @@ class AuthViewModel @Inject constructor(
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     val isSetupComplete: StateFlow<Boolean> = authRepository.isSetupComplete()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isUnlocked: StateFlow<Boolean> = authRepository.isUnlocked()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isPinSetup: StateFlow<Boolean> = authRepository.isPinSetup()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isBiometricEnabled: StateFlow<Boolean> = appPrefs.isBiometricEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     // True when the user must re-enter their master password regardless of PIN/biometric state.
     val requiresMasterPasswordRecheck: StateFlow<Boolean> = combine(
@@ -52,7 +52,7 @@ class AuthViewModel @Inject constructor(
         appPrefs.getLastMasterPasswordTimestamp(),
     ) { enabled, interval, lastTimestamp ->
         enabled && (System.currentTimeMillis() - lastTimestamp) >= interval.millis
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun setup(password: CharArray) {
         viewModelScope.launch {
