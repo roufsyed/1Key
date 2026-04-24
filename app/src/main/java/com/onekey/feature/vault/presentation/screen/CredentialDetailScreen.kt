@@ -3,6 +3,7 @@
 package com.onekey.feature.vault.presentation.screen
 
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -169,11 +170,11 @@ private fun CredentialViewContent(
                     value = if (showPassword) credential.password else "••••••••",
                     trailing = {
                         Row {
-                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.password)) }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy password")
-                            }
                             IconButton(onClick = { showPassword = !showPassword }) {
                                 Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                            }
+                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.password)) }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy password")
                             }
                         }
                     }
@@ -380,11 +381,33 @@ private fun CredentialEditContent(
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
+    val hasUnsavedChanges by remember {
+        derivedStateOf {
+            title.trim() != credential.title ||
+            username.trim() != credential.username ||
+            password != credential.password ||
+            url.trim() != credential.url ||
+            notes.trim() != credential.notes ||
+            totpSecret.trim() != (credential.totpSecret ?: "") ||
+            selectedTags != credential.tags ||
+            customFields != credential.customFields
+        }
+    }
+    var showDiscardDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = hasUnsavedChanges) {
+        showDiscardDialog = true
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(if (credential.id.isEmpty()) "New Credential" else "Edit Credential") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.Close, null) } },
+                navigationIcon = {
+                    IconButton(onClick = { if (hasUnsavedChanges) showDiscardDialog = true else onBack() }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                },
                 actions = {
                     TextButton(
                         onClick = {
@@ -527,6 +550,35 @@ private fun CredentialEditContent(
         TotpQrScannerSheet(
             onSecretScanned = { secret -> totpSecret = secret },
             onDismiss = { showTotpScanner = false },
+        )
+    }
+
+    if (showDiscardDialog) {
+        AlertDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Unsaved changes") },
+            text = { Text("You have unsaved changes. Save or discard them?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardDialog = false
+                        onSave(credential.copy(
+                            title = title.trim(),
+                            username = username.trim(),
+                            password = password,
+                            url = url.trim(),
+                            notes = notes.trim(),
+                            totpSecret = totpSecret.trim().takeIf { it.isNotEmpty() },
+                            tags = selectedTags,
+                            customFields = customFields,
+                        ))
+                    },
+                    enabled = title.isNotBlank(),
+                ) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardDialog = false; onBack() }) { Text("Discard") }
+            },
         )
     }
 }
