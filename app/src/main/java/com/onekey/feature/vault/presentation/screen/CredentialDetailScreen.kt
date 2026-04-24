@@ -1,9 +1,22 @@
+@file:OptIn(androidx.camera.core.ExperimentalGetImage::class)
+
 package com.onekey.feature.vault.presentation.screen
 
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,21 +24,33 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
 import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
+import com.onekey.feature.twofa.domain.OtpAuthUriParser
 import com.onekey.feature.twofa.presentation.screen.TotpWidget
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailUiState
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailViewModel
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,8 +91,6 @@ fun CredentialDetailScreen(
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
                     onBack = onBack,
-                    onCopyPassword = viewModel::copyPassword,
-                    onCopyUsername = viewModel::copyUsername,
                     onToggleFavorite = viewModel::toggleFavorite,
                 )
             }
@@ -92,8 +115,6 @@ private fun CredentialViewContent(
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onBack: () -> Unit,
-    onCopyPassword: (String) -> Unit,
-    onCopyUsername: (String) -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -129,13 +150,12 @@ private fun CredentialViewContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             if (credential.username.isNotEmpty()) {
-                DetailField(label = "Username", value = credential.username) { onCopyUsername(credential.username) }
+                DetailField(label = "Username", value = credential.username)
             }
             if (credential.password.isNotEmpty()) {
                 DetailField(
                     label = "Password",
                     value = if (showPassword) credential.password else "••••••••",
-                    onCopy = { onCopyPassword(credential.password) },
                     trailing = {
                         IconButton(onClick = { showPassword = !showPassword }) {
                             Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
@@ -305,19 +325,17 @@ private fun HistoryEntryRow(entry: CredentialHistoryEntry) {
 private fun DetailField(
     label: String,
     value: String,
-    onCopy: (() -> Unit)? = null,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                Text(value, style = MaterialTheme.typography.bodyMedium)
+                SelectionContainer {
+                    Text(value, style = MaterialTheme.typography.bodyMedium)
+                }
             }
             trailing?.invoke()
-            if (onCopy != null) {
-                IconButton(onClick = onCopy) { Icon(Icons.Default.ContentCopy, "Copy") }
-            }
         }
     }
 }
@@ -342,6 +360,7 @@ private fun CredentialEditContent(
     var showPassword by remember { mutableStateOf(false) }
     var showTagPicker by remember { mutableStateOf(false) }
     var showPasswordGenerator by remember { mutableStateOf(false) }
+    var showTotpScanner by remember { mutableStateOf(false) }
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
@@ -396,7 +415,17 @@ private fun CredentialEditContent(
             )
             OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
-            OutlinedTextField(value = totpSecret, onValueChange = { totpSecret = it }, label = { Text("TOTP Secret (base32)") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = totpSecret,
+                onValueChange = { totpSecret = it },
+                label = { Text("TOTP Secret (base32)") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(onClick = { showTotpScanner = true }) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR code")
+                    }
+                },
+            )
 
             // Category (chip-based, non-editable)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -476,6 +505,193 @@ private fun CredentialEditContent(
             onUsePassword = { generated -> password = generated },
             onDismiss = { showPasswordGenerator = false },
         )
+    }
+
+    if (showTotpScanner) {
+        TotpQrScannerSheet(
+            onSecretScanned = { secret -> totpSecret = secret },
+            onDismiss = { showTotpScanner = false },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TotpQrScannerSheet(
+    onSecretScanned: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasPermission = granted }
+
+    LaunchedEffect(Unit) {
+        if (!hasPermission) permissionLauncher.launch(android.Manifest.permission.CAMERA)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                "Scan 2FA QR Code",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+            Text(
+                "Point the camera at a 2FA QR code to fill in the secret automatically.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            if (hasPermission) {
+                TotpCameraPreview(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(360.dp),
+                    onSecretDetected = { secret ->
+                        onSecretScanned(secret)
+                        onDismiss()
+                    },
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        Text(
+                            "Camera permission required to scan QR codes",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 32.dp),
+                        )
+                        Button(onClick = { permissionLauncher.launch(android.Manifest.permission.CAMERA) }) {
+                            Text("Grant Permission")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TotpCameraPreview(
+    modifier: Modifier = Modifier,
+    onSecretDetected: (String) -> Unit,
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val onDetectedState = rememberUpdatedState(onSecretDetected)
+    val detected = remember { AtomicBoolean(false) }
+
+    val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    val barcodeScanner = remember {
+        BarcodeScanning.getClient(
+            BarcodeScannerOptions.Builder()
+                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                .build()
+        )
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            barcodeScanner.close()
+            analysisExecutor.shutdown()
+        }
+    }
+
+    Box(modifier = modifier) {
+        AndroidView(
+            factory = { ctx ->
+                val previewView = PreviewView(ctx).apply {
+                    implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+                    scaleType = PreviewView.ScaleType.FILL_CENTER
+                }
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { analysis ->
+                        analysis.setAnalyzer(analysisExecutor) { imageProxy ->
+                            val mediaImage = imageProxy.image
+                            if (mediaImage != null && !detected.get()) {
+                                val input = InputImage.fromMediaImage(
+                                    mediaImage,
+                                    imageProxy.imageInfo.rotationDegrees,
+                                )
+                                barcodeScanner.process(input)
+                                    .addOnSuccessListener { barcodes ->
+                                        val raw = barcodes.firstOrNull()?.rawValue ?: return@addOnSuccessListener
+                                        val params = OtpAuthUriParser.parse(raw) ?: return@addOnSuccessListener
+                                        if (detected.compareAndSet(false, true)) {
+                                            onDetectedState.value(params.secret)
+                                        }
+                                    }
+                                    .addOnCompleteListener { imageProxy.close() }
+                            } else {
+                                imageProxy.close()
+                            }
+                        }
+                    }
+
+                val preview = Preview.Builder().build()
+                    .also { it.setSurfaceProvider(previewView.surfaceProvider) }
+
+                val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                cameraProviderFuture.addListener({
+                    runCatching {
+                        val provider = cameraProviderFuture.get()
+                        provider.unbindAll()
+                        provider.bindToLifecycle(
+                            lifecycleOwner,
+                            CameraSelector.DEFAULT_BACK_CAMERA,
+                            preview,
+                            imageAnalysis,
+                        )
+                    }
+                }, ContextCompat.getMainExecutor(ctx))
+
+                previewView
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .border(
+                        width = 3.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        shape = RoundedCornerShape(16.dp),
+                    ),
+            )
+        }
     }
 }
 
@@ -568,12 +784,92 @@ private fun TagPickerDialog(
 
 @Composable
 private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> Unit, onRemove: () -> Unit) {
-    var key by remember { mutableStateOf(field.key) }
-    var value by remember { mutableStateOf(field.value) }
+    var fieldKey by remember { mutableStateOf(field.key) }
+    var fieldValue by remember { mutableStateOf(field.value) }
+    var isSensitive by remember { mutableStateOf(field.isSensitive) }
+    var showValue by remember { mutableStateOf(!field.isSensitive) }
 
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = key, onValueChange = { key = it; onFieldChanged(field.copy(key = it)) }, label = { Text("Key") }, modifier = Modifier.weight(1f))
-        OutlinedTextField(value = value, onValueChange = { value = it; onFieldChanged(field.copy(value = it)) }, label = { Text("Value") }, modifier = Modifier.weight(1f))
-        IconButton(onClick = onRemove) { Icon(Icons.Default.Remove, "Remove field") }
+    fun propagate() = onFieldChanged(CustomField(key = fieldKey, value = fieldValue, isSensitive = isSensitive))
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Custom Field",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Remove field",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = fieldKey,
+                onValueChange = { fieldKey = it; propagate() },
+                label = { Text("Label") },
+                placeholder = { Text("e.g. API Key, PIN, Recovery Code") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+
+            OutlinedTextField(
+                value = fieldValue,
+                onValueChange = { fieldValue = it; propagate() },
+                label = { Text("Value") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = if (isSensitive && !showValue) PasswordVisualTransformation()
+                                       else VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (isSensitive) KeyboardType.Password else KeyboardType.Text,
+                ),
+                trailingIcon = if (isSensitive) {
+                    {
+                        IconButton(onClick = { showValue = !showValue }) {
+                            Icon(
+                                if (showValue) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = if (showValue) "Hide value" else "Show value",
+                            )
+                        }
+                    }
+                } else null,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
+                    Text("Sensitive", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Masks this value in view mode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = isSensitive,
+                    onCheckedChange = { checked ->
+                        isSensitive = checked
+                        showValue = !checked
+                        propagate()
+                    },
+                )
+            }
+        }
     }
 }

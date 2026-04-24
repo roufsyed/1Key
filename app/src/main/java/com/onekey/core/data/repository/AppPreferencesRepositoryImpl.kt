@@ -85,7 +85,7 @@ class AppPreferencesRepositoryImpl @Inject constructor(
     }
 
     override fun isShowFavourites(): Flow<Boolean> =
-        dataStore.data.map { it[KEY_SHOW_FAVOURITES] ?: true }.distinctUntilChanged()
+        dataStore.data.map { it[KEY_SHOW_FAVOURITES] ?: false }.distinctUntilChanged()
 
     override suspend fun setShowFavourites(show: Boolean) {
         dataStore.edit { it[KEY_SHOW_FAVOURITES] = show }

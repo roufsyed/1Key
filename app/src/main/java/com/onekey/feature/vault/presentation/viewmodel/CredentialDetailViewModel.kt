@@ -14,7 +14,6 @@ import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.GetCredentialUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
-import com.onekey.core.security.SecureClipboardManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -38,7 +37,6 @@ class CredentialDetailViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
     private val tagRepository: TagRepository,
-    private val clipboard: SecureClipboardManager,
 ) : ViewModel() {
 
     private val credentialId: String? = savedStateHandle.get<String>("credentialId")
@@ -121,9 +119,6 @@ class CredentialDetailViewModel @Inject constructor(
             tagRepository.addTag(Tag(name = name, color = 0xFF6200EE.toInt(), icon = ""))
         }
     }
-
-    fun copyPassword(password: String) = clipboard.copySecure("Password", password)
-    fun copyUsername(username: String) = clipboard.copySecure("Username", username)
 
     private fun emptyCredential() = Credential(
         id = "", title = "", username = "", password = "", url = "",
