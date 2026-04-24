@@ -59,6 +59,11 @@ fun SettingsScreen(
     val context = LocalContext.current
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var showBiometricConfirmDialog by remember { mutableStateOf(false) }
+    var biometricPasswordInput by remember { mutableStateOf("") }
+    var biometricPasswordVisible by remember { mutableStateOf(false) }
+    var biometricPasswordError by remember { mutableStateOf(false) }
+    var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
@@ -72,9 +77,18 @@ fun SettingsScreen(
                     biometricPasswordInput = ""
                     biometricPasswordVisible = false
                     biometricPasswordError = false
+                    biometricAttemptsRemaining = 3
                 }
-                SettingsEvent.BiometricConfirmFailed -> {
+                is SettingsEvent.BiometricConfirmFailed -> {
                     biometricPasswordError = true
+                    biometricAttemptsRemaining = event.attemptsRemaining
+                }
+                SettingsEvent.VaultLocked -> {
+                    showBiometricConfirmDialog = false
+                    biometricPasswordInput = ""
+                    biometricPasswordVisible = false
+                    biometricPasswordError = false
+                    biometricAttemptsRemaining = 3
                 }
             }
         }
@@ -97,10 +111,6 @@ fun SettingsScreen(
     var showLockTimeoutDialog by remember { mutableStateOf(false) }
     var pendingLockTimeout by remember(lockTimeout) { mutableStateOf(lockTimeout) }
     var tagToDelete by remember { mutableStateOf<Tag?>(null) }
-    var showBiometricConfirmDialog by remember { mutableStateOf(false) }
-    var biometricPasswordInput by remember { mutableStateOf("") }
-    var biometricPasswordVisible by remember { mutableStateOf(false) }
-    var biometricPasswordError by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -546,6 +556,7 @@ fun SettingsScreen(
                 biometricPasswordInput = ""
                 biometricPasswordVisible = false
                 biometricPasswordError = false
+                biometricAttemptsRemaining = 3
             },
             icon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
             title = { Text("Confirm Master Password") },
@@ -571,7 +582,13 @@ fun SettingsScreen(
                         singleLine = true,
                         isError = biometricPasswordError,
                         supportingText = if (biometricPasswordError) {
-                            { Text("Incorrect password — please try again.") }
+                            {
+                                val remaining = biometricAttemptsRemaining
+                                Text(
+                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
+                                    else "Incorrect password — $remaining attempts remaining."
+                                )
+                            }
                         } else null,
                         visualTransformation = if (biometricPasswordVisible) VisualTransformation.None
                                                else PasswordVisualTransformation(),
@@ -604,6 +621,7 @@ fun SettingsScreen(
                         biometricPasswordInput = ""
                         biometricPasswordVisible = false
                         biometricPasswordError = false
+                        biometricAttemptsRemaining = 3
                     }
                 ) { Text("Cancel") }
             },
