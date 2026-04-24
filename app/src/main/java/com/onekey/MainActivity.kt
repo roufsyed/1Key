@@ -82,7 +82,7 @@ private fun RootWarningScreen(reason: String) {
         title = { androidx.compose.material3.Text("Security Warning") },
         text = {
             androidx.compose.material3.Text(
-                "This device may be compromised:\n\n$reason\n\n1Key cannot guarantee the security of your vault on a rooted device."
+                "This device may be compromised:\n\n$reason\n\n1Key cannot guarantee the security of your vault on a rooted device. On rooted devices, other apps may be able to read memory or bypass Android's security sandbox, exposing your vault key."
             )
         },
         confirmButton = {},

@@ -75,6 +75,12 @@ fun SetupPinScreen(
                 if (step == 0) "Enter a 6-digit PIN" else "Confirm your PIN",
                 style = MaterialTheme.typography.bodyLarge,
             )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Your PIN unlocks access to the vault key stored in Android KeyStore. The PIN digits themselves are never saved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Spacer(Modifier.height(32.dp))
 
             val currentPin = if (step == 0) pin else confirmPin

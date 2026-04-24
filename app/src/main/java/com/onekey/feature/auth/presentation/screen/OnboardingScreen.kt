@@ -280,6 +280,13 @@ private fun CreateVaultPage(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Your password is never stored. We derive an encryption key from it using PBKDF2 (310,000 iterations). Forget the password — lose access forever.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
 
         Spacer(Modifier.height(32.dp))
 

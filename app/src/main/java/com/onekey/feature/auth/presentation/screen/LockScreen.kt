@@ -179,11 +179,19 @@ private fun MasterPasswordRecheckBanner() {
                 tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(16.dp).padding(top = 2.dp),
             )
-            Text(
-                "Periodic security check — please verify with your master password",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
+            Column {
+                Text(
+                    "Periodic security check — please verify with your master password",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "This check ensures only you — not just someone with your unlocked phone — can access the vault.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
+                )
+            }
         }
     }
 }

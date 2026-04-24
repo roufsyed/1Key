@@ -180,7 +180,7 @@ fun SettingsScreen(
                             HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             ListItem(
                                 headlineContent = { Text("Biometric Unlock") },
-                                supportingContent = { Text("Use fingerprint or face to unlock") },
+                                supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
                                 leadingContent = {
                                     Icon(Icons.Default.Fingerprint, contentDescription = null)
                                 },
@@ -197,8 +197,8 @@ fun SettingsScreen(
                             headlineContent = { Text("Allow Screenshots") },
                             supportingContent = {
                                 Text(
-                                    if (isScreenshotsEnabled) "App visible in Recent Apps screen"
-                                    else "App hidden from Recent Apps screen"
+                                    if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
+                                    else "Blocks screenshots, screen recordings, and Recent Apps preview"
                                 )
                             },
                             leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
@@ -596,7 +596,7 @@ fun SettingsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Choose how long 1Key waits before locking when you leave the app or stop interacting.",
+                        "Choose how long 1Key waits before locking when you leave the app or stop interacting. The vault key is wiped from memory when auto-lock triggers — shorter timeout means a smaller window of exposure.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

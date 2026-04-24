@@ -107,7 +107,7 @@ fun TwoFaListScreen(
 
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    message = "Code copied — clears in 30s",
+                                    message = "Code copied — clipboard will be cleared automatically in 30s",
                                     duration = SnackbarDuration.Short,
                                 )
                             }

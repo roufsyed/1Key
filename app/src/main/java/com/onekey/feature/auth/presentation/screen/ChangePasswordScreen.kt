@@ -68,7 +68,7 @@ fun ChangePasswordScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "You will need to enter your current password to set a new one. All your vault data remains intact.",
+                "Only your password verification is updated on this device. Your vault key is unchanged — all existing credentials remain accessible immediately.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
