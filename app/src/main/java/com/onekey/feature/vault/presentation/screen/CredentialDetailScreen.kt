@@ -378,6 +378,7 @@ private fun CredentialEditContent(
     var showTagPicker by remember { mutableStateOf(false) }
     var showPasswordGenerator by remember { mutableStateOf(false) }
     var showTotpScanner by remember { mutableStateOf(false) }
+    var showOcrScanner  by remember { mutableStateOf(false) }
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
@@ -433,7 +434,17 @@ private fun CredentialEditContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
-            OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text("Username") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                value = username,
+                onValueChange = { username = it },
+                label = { Text("Username") },
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    IconButton(onClick = { showOcrScanner = true }) {
+                        Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                    }
+                },
+            )
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it },
@@ -550,6 +561,16 @@ private fun CredentialEditContent(
         TotpQrScannerSheet(
             onSecretScanned = { secret -> totpSecret = secret },
             onDismiss = { showTotpScanner = false },
+        )
+    }
+
+    if (showOcrScanner) {
+        OcrScannerSheet(
+            onResult = { scannedUsername, scannedPassword ->
+                if (scannedUsername != null) username = scannedUsername
+                if (scannedPassword != null) password = scannedPassword
+            },
+            onDismiss = { showOcrScanner = false },
         )
     }
 

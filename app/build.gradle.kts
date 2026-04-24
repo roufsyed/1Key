@@ -120,4 +120,7 @@ dependencies {
 
     // ML Kit Barcode Scanning
     implementation(libs.mlkit.barcode)
+
+    // ML Kit Text Recognition (on-device, Latin script)
+    implementation(libs.mlkit.text.recognition)
 }
