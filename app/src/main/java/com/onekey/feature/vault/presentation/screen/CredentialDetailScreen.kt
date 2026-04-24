@@ -464,7 +464,18 @@ private fun CredentialEditContent(
                 }
             )
             OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notes") }, modifier = Modifier.fillMaxWidth(), minLines = 3)
+            OutlinedTextField(
+                value = notes,
+                onValueChange = { notes = it },
+                label = { Text("Notes") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                trailingIcon = {
+                    IconButton(onClick = { showOcrScanner = true }) {
+                        Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                    }
+                },
+            )
             OutlinedTextField(
                 value = totpSecret,
                 onValueChange = { totpSecret = it },
@@ -566,9 +577,10 @@ private fun CredentialEditContent(
 
     if (showOcrScanner) {
         OcrScannerSheet(
-            onResult = { scannedUsername, scannedPassword ->
+            onResult = { scannedUsername, scannedPassword, scannedNotes ->
                 if (scannedUsername != null) username = scannedUsername
                 if (scannedPassword != null) password = scannedPassword
+                if (scannedNotes != null) notes = scannedNotes
             },
             onDismiss = { showOcrScanner = false },
         )

@@ -50,7 +50,7 @@ private sealed class OcrSheetState {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OcrScannerSheet(
-    onResult: (username: String?, password: String?) -> Unit,
+    onResult: (username: String?, password: String?, notes: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -79,6 +79,7 @@ fun OcrScannerSheet(
     val imageCaptureRef = remember { mutableStateOf<ImageCapture?>(null) }
     var selectedUsername by remember { mutableStateOf<String?>(null) }
     var selectedPassword by remember { mutableStateOf<String?>(null) }
+    var selectedNotes    by remember { mutableStateOf<List<String>>(emptyList()) }
     var pendingBlock     by remember { mutableStateOf<String?>(null) }
 
     // ── Capture + OCR (all callbacks on main thread) ───────────────────────
@@ -236,14 +237,20 @@ fun OcrScannerSheet(
                         blocks = state.blocks,
                         selectedUsername = selectedUsername,
                         selectedPassword = selectedPassword,
+                        selectedNotes = selectedNotes,
                         onBlockTap = { pendingBlock = it },
                         onDone = {
-                            onResult(selectedUsername, selectedPassword)
+                            onResult(
+                                selectedUsername,
+                                selectedPassword,
+                                selectedNotes.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+                            )
                             onDismiss()
                         },
                         onRetake = {
                             selectedUsername = null
                             selectedPassword = null
+                            selectedNotes = emptyList()
                             imageCaptureRef.value = null
                             ocrState = OcrSheetState.Preview
                         },
@@ -255,6 +262,8 @@ fun OcrScannerSheet(
 
     // ── Assignment dialog (rendered outside the sheet so it layers on top) ─
     pendingBlock?.let { block ->
+        // Capture current notes state so button label reflects it at render time.
+        val blockInNotes = block in selectedNotes
         AlertDialog(
             onDismissRequest = { pendingBlock = null },
             title = { Text("Assign as…") },
@@ -272,13 +281,36 @@ fun OcrScannerSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Button(
-                        onClick = { selectedUsername = block; pendingBlock = null },
+                        onClick = {
+                            selectedUsername = block
+                            if (selectedPassword == block) selectedPassword = null
+                            selectedNotes = selectedNotes - block
+                            pendingBlock = null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Username") }
                     OutlinedButton(
-                        onClick = { selectedPassword = block; pendingBlock = null },
+                        onClick = {
+                            selectedPassword = block
+                            if (selectedUsername == block) selectedUsername = null
+                            selectedNotes = selectedNotes - block
+                            pendingBlock = null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("Password") }
+                    OutlinedButton(
+                        onClick = {
+                            if (blockInNotes) {
+                                selectedNotes = selectedNotes - block
+                            } else {
+                                if (selectedUsername == block) selectedUsername = null
+                                if (selectedPassword == block) selectedPassword = null
+                                selectedNotes = selectedNotes + block
+                            }
+                            pendingBlock = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (blockInNotes) "Remove from Notes" else "Add to Notes") }
                 }
             },
             dismissButton = null,
@@ -350,13 +382,14 @@ private fun OcrSelectionContent(
     blocks: List<String>,
     selectedUsername: String?,
     selectedPassword: String?,
+    selectedNotes: List<String>,
     onBlockTap: (String) -> Unit,
     onDone: () -> Unit,
     onRetake: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
 
-        // Slot summary
+        // Username + Password slot row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -367,10 +400,22 @@ private fun OcrSelectionContent(
             OcrSlotCard(label = "Password", value = selectedPassword, modifier = Modifier.weight(1f))
         }
 
+        // Notes slot — only shown when at least one block is assigned
+        if (selectedNotes.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            OcrSlotCard(
+                label = "Notes",
+                value = "${selectedNotes.size} block${if (selectedNotes.size == 1) "" else "s"} selected",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            )
+        }
+
         Spacer(Modifier.height(10.dp))
 
         Text(
-            "Tap a block to assign it as username or password.",
+            "Tap a block to assign it as username, password, or notes.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -378,20 +423,21 @@ private fun OcrSelectionContent(
 
         Spacer(Modifier.height(8.dp))
 
-        // Scrollable block list — capped at 280 dp so the action row stays visible
+        // Scrollable block list — capped at 260 dp so the action row stays visible
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 280.dp)
+                .heightIn(max = 260.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             blocks.forEach { block ->
-                val assignment = when (block) {
-                    selectedUsername -> "Username"
-                    selectedPassword -> "Password"
-                    else -> null
+                val assignment = when {
+                    block == selectedUsername  -> "Username"
+                    block == selectedPassword  -> "Password"
+                    block in selectedNotes     -> "Notes"
+                    else                       -> null
                 }
                 OcrTextBlockCard(
                     text = block,
@@ -418,7 +464,7 @@ private fun OcrSelectionContent(
             }
             Button(
                 onClick = onDone,
-                enabled = selectedUsername != null || selectedPassword != null,
+                enabled = selectedUsername != null || selectedPassword != null || selectedNotes.isNotEmpty(),
                 modifier = Modifier.weight(1f),
             ) { Text("Done") }
         }
