@@ -9,8 +9,10 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -145,12 +147,21 @@ fun TwoFaListScreen(
     pendingDelete?.let { entry ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("Remove 2FA account?") },
-            text = { Text("\"${entry.credential.title}\" will be removed. This cannot be undone.") },
+            title = {
+                Text(if (entry.isLinkedCredential) "Remove 2FA code?" else "Remove 2FA account?")
+            },
+            text = {
+                Text(
+                    if (entry.isLinkedCredential)
+                        "The 2FA code will be removed from \"${entry.credential.title}\". The login will be kept."
+                    else
+                        "\"${entry.credential.title}\" will be removed. This cannot be undone."
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteEntry(entry.credential.id)
+                        viewModel.removeTotp(entry)
                         pendingDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(
@@ -185,6 +196,25 @@ private fun TotpEntryCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (entry.isLinkedCredential) {
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Lock,
+                        contentDescription = null,
+                        modifier = Modifier.size(11.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Login credential",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

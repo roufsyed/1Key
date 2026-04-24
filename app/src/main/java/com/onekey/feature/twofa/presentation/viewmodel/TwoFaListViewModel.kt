@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
+import com.onekey.core.domain.usecase.SaveCredentialUseCase
 import com.onekey.feature.twofa.domain.TotpGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -18,7 +19,15 @@ data class TotpEntry(
     val code: String,
     val remainingSeconds: Int,
     val progress: Float,
-)
+) {
+    // True when the credential contains data beyond the TOTP secret itself.
+    // Deleting from the 2FA screen should only clear totpSecret in this case.
+    val isLinkedCredential: Boolean =
+        credential.password.isNotEmpty()
+            || credential.notes.isNotEmpty()
+            || credential.url.isNotEmpty()
+            || credential.customFields.isNotEmpty()
+}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -26,6 +35,7 @@ class TwoFaListViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val totpGenerator: TotpGenerator,
     private val deleteCredential: DeleteCredentialUseCase,
+    private val saveCredential: SaveCredentialUseCase,
 ) : ViewModel() {
 
     val entries: StateFlow<List<TotpEntry>?> = credentialRepository.observeWithTotp()
@@ -42,7 +52,13 @@ class TwoFaListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    fun deleteEntry(id: String) {
-        viewModelScope.launch { deleteCredential(id) }
+    fun removeTotp(entry: TotpEntry) {
+        viewModelScope.launch {
+            if (entry.isLinkedCredential) {
+                saveCredential(entry.credential.copy(totpSecret = null))
+            } else {
+                deleteCredential(entry.credential.id)
+            }
+        }
     }
 }
