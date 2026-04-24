@@ -42,32 +42,32 @@ class SettingsViewModel @Inject constructor(
     val event: SharedFlow<SettingsEvent> = _event.asSharedFlow()
 
     val tags: StateFlow<List<Tag>> = tagRepository.observeTags()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val isDarkTheme: StateFlow<Boolean> = appPrefs.isDarkTheme()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isBiometricEnabled: StateFlow<Boolean> = appPrefs.isBiometricEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isPinSetup: StateFlow<Boolean> = authRepository.isPinSetup()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val isScreenshotsEnabled: StateFlow<Boolean> = appPrefs.isScreenshotsEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val lockTimeout: StateFlow<LockTimeout> = appPrefs.getLockTimeout()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LockTimeout.IMMEDIATE)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, LockTimeout.IMMEDIATE)
 
     val isMasterPasswordRecheckEnabled: StateFlow<Boolean> = appPrefs.isMasterPasswordRecheckEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val masterPasswordRecheckInterval: StateFlow<MasterPasswordInterval> =
         appPrefs.getMasterPasswordRecheckInterval()
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MasterPasswordInterval.HOURS_48)
+            .stateIn(viewModelScope, SharingStarted.Eagerly, MasterPasswordInterval.HOURS_48)
 
     val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
