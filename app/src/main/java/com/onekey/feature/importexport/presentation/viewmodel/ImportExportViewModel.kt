@@ -9,6 +9,7 @@ import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.domain.usecase.ExportVaultUseCase
 import com.onekey.core.domain.usecase.ImportVaultUseCase
+import com.onekey.core.security.AutoLockManager
 import com.onekey.feature.importexport.domain.ImportResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -31,7 +32,11 @@ sealed class ImportExportUiState {
 class ImportExportViewModel @Inject constructor(
     private val exportVault: ExportVaultUseCase,
     private val importVault: ImportVaultUseCase,
+    private val autoLockManager: AutoLockManager,
 ) : ViewModel() {
+
+    fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
+    fun notifyPickerDone() { autoLockManager.clearPickerSuppression() }
 
     private val _uiState = MutableStateFlow<ImportExportUiState>(ImportExportUiState.Idle)
     val uiState: StateFlow<ImportExportUiState> = _uiState.asStateFlow()

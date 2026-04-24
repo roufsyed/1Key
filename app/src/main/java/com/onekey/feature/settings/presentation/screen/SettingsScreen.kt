@@ -122,11 +122,13 @@ fun SettingsScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
     ) { uri: Uri? ->
+        importExportVm.notifyPickerDone()
         uri?.let { importExportVm.export(it, selectedFormat, context) }
     }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
+        importExportVm.notifyPickerDone()
         uri?.let { importExportVm.import(it, selectedFormat, context) }
     }
 
@@ -373,13 +375,17 @@ fun SettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
+                                importExportVm.notifyPickerLaunched()
                                 exportLauncher.launch("1key_backup.${selectedFormat.name.lowercase()}")
                             },
                             modifier = Modifier.weight(1f),
                             enabled = backupState !is ImportExportUiState.Loading,
                         ) { Text("Export") }
                         OutlinedButton(
-                            onClick = { importLauncher.launch(arrayOf("*/*")) },
+                            onClick = {
+                                importExportVm.notifyPickerLaunched()
+                                importLauncher.launch(arrayOf("*/*"))
+                            },
                             modifier = Modifier.weight(1f),
                             enabled = backupState !is ImportExportUiState.Loading,
                         ) { Text("Import") }

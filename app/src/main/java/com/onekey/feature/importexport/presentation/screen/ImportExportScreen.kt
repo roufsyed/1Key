@@ -30,12 +30,14 @@ fun ImportExportScreen(
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
     ) { uri: Uri? ->
+        viewModel.notifyPickerDone()
         uri?.let { viewModel.export(it, selectedFormat, context) }
     }
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
+        viewModel.notifyPickerDone()
         uri?.let { viewModel.import(it, selectedFormat, context) }
     }
 
@@ -67,8 +69,8 @@ fun ImportExportScreen(
             Text("Exports all credentials as ${selectedFormat.name}. The exported file is NOT encrypted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             Button(
                 onClick = {
-                    val ext = selectedFormat.name.lowercase()
-                    exportLauncher.launch("1key_backup.$ext")
+                    viewModel.notifyPickerLaunched()
+                    exportLauncher.launch("1key_backup.${selectedFormat.name.lowercase()}")
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state !is ImportExportUiState.Loading,
@@ -77,7 +79,10 @@ fun ImportExportScreen(
             Divider()
             Text("Import", style = MaterialTheme.typography.titleMedium)
             OutlinedButton(
-                onClick = { importLauncher.launch(arrayOf("*/*")) },
+                onClick = {
+                    viewModel.notifyPickerLaunched()
+                    importLauncher.launch(arrayOf("*/*"))
+                },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state !is ImportExportUiState.Loading,
             ) { Text("Import Credentials") }

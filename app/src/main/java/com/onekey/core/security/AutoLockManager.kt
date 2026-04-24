@@ -32,6 +32,14 @@ class AutoLockManager @Inject constructor(
     private var isVaultUnlocked = false
     private var lastActivityResetMs = 0L
 
+    // Suppresses auto-lock while a system file picker is in the foreground.
+    // The picker causes onStop to fire even though the vault must stay unlocked
+    // so that the picker callback can complete its export/import work.
+    @Volatile private var pickerActive = false
+
+    fun suppressForPicker() { pickerActive = true }
+    fun clearPickerSuppression() { pickerActive = false }
+
     init {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         scope.launch {
@@ -60,7 +68,7 @@ class AutoLockManager @Inject constructor(
     }
 
     override fun onStop(owner: LifecycleOwner) {
-        if (!isVaultUnlocked) return
+        if (!isVaultUnlocked || pickerActive) return
         idleJob?.cancel()
         idleJob = null
         backgroundJob?.cancel()
