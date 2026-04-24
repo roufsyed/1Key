@@ -2,6 +2,7 @@ package com.onekey.core.data.local.dao
 
 import androidx.paging.PagingSource
 import androidx.room.*
+import androidx.sqlite.db.SupportSQLiteQuery
 import com.onekey.core.data.local.entity.CredentialEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -73,4 +74,23 @@ interface CredentialDao {
 
     @Query("UPDATE credentials SET is_favorite = :isFavorite WHERE id = :id")
     suspend fun setFavorite(id: String, isFavorite: Boolean)
+
+    @RawQuery(observedEntities = [CredentialEntity::class])
+    fun pagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity>
+
+    @RawQuery(observedEntities = [CredentialEntity::class])
+    fun favoritesPagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity>
+
+    @RawQuery(observedEntities = [CredentialEntity::class])
+    fun observeListRaw(query: SupportSQLiteQuery): Flow<List<CredentialEntity>>
+
+    @Query("""
+        SELECT title FROM credentials
+        WHERE (:tag = '' OR tags LIKE '%' || :tag || '%')
+        ORDER BY lower(title) ASC
+    """)
+    fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
+
+    @Query("SELECT title FROM credentials WHERE is_favorite = 1 ORDER BY lower(title) ASC")
+    fun observeFavoriteTitlesAlphabetical(): Flow<List<String>>
 }

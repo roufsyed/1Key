@@ -9,7 +9,9 @@ import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.VaultKeyHolder
+import androidx.sqlite.db.SimpleSQLiteQuery
 import com.onekey.core.di.ApplicationScope
+import com.onekey.core.domain.model.CredentialSortOrder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -39,17 +41,19 @@ class CredentialRepositoryImpl @Inject constructor(
     // is emitted immediately, preventing requireKey() from being called on a
     // locked vault and crashing with IllegalStateException.
 
-    override fun getPagedCredentials(query: String, tag: String): Flow<PagingData<Credential>> =
+    override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(PagingData.empty())
-            else Pager(
-                config = PagingConfig(
-                    pageSize = PAGE_SIZE,
-                    enablePlaceholders = false,
-                    prefetchDistance = 10,
-                ),
-                pagingSourceFactory = { dao.pagingSource(query, tag) }
-            ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+            else {
+                val sql = SimpleSQLiteQuery(
+                    "SELECT * FROM credentials WHERE (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+                    arrayOf(query, query, tag, tag),
+                )
+                Pager(
+                    config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false, prefetchDistance = 10),
+                    pagingSourceFactory = { dao.pagingSourceRaw(sql) },
+                ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+            }
         }
 
     override fun observeCredential(id: String): Flow<Credential?> =
@@ -94,14 +98,54 @@ class CredentialRepositoryImpl @Inject constructor(
             else dao.observeFavorites().map { list -> list.map { it.toDomain() } }
         }
 
-    override fun observeFavoritesPaged(): Flow<PagingData<Credential>> =
+    override fun observeFavoritesPaged(sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(PagingData.empty())
-            else Pager(
-                config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
-                pagingSourceFactory = { dao.favoritesPagingSource() },
-            ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+            else {
+                val sql = SimpleSQLiteQuery(
+                    "SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
+                )
+                Pager(
+                    config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
+                    pagingSourceFactory = { dao.favoritesPagingSourceRaw(sql) },
+                ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+            }
         }
+
+    override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else {
+                val sql = SimpleSQLiteQuery(
+                    "SELECT * FROM credentials WHERE (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+                    arrayOf(query, query, tag, tag),
+                )
+                dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
+            }
+        }
+
+    override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else {
+                val sql = SimpleSQLiteQuery(
+                    "SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
+                )
+                dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
+            }
+        }
+
+    override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
+        dao.observeAllTitlesAlphabetical(tag)
+
+    override fun observeFavoriteTitlesAlphabetical(): Flow<List<String>> =
+        dao.observeFavoriteTitlesAlphabetical()
+
+    private fun CredentialSortOrder.toOrderBy() = when (this) {
+        CredentialSortOrder.NEWEST_FIRST -> "created_at DESC"
+        CredentialSortOrder.LAST_MODIFIED -> "updated_at DESC"
+        CredentialSortOrder.ALPHABETICAL -> "lower(title) ASC"
+    }
 
     override fun observeWithTotp(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->

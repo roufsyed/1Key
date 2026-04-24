@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.onekey.core.di.ApplicationScope
+import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.LockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.repository.AppPreferencesRepository
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 import javax.inject.Singleton
 
+private val KEY_CREDENTIAL_SORT_ORDER = stringPreferencesKey("credential_sort_order")
 private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
 private val KEY_SHOW_FAVOURITES = booleanPreferencesKey("show_favourites")
 private val KEY_BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
@@ -102,5 +104,15 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setShowFavourites(show: Boolean) {
         dataStore.edit { it[KEY_SHOW_FAVOURITES] = show }
+    }
+
+    override fun getCredentialSortOrder(): Flow<CredentialSortOrder> =
+        prefs.map { p ->
+            val name = p[KEY_CREDENTIAL_SORT_ORDER] ?: CredentialSortOrder.NEWEST_FIRST.name
+            CredentialSortOrder.entries.find { it.name == name } ?: CredentialSortOrder.NEWEST_FIRST
+        }.distinctUntilChanged()
+
+    override suspend fun setCredentialSortOrder(order: CredentialSortOrder) {
+        dataStore.edit { it[KEY_CREDENTIAL_SORT_ORDER] = order.name }
     }
 }

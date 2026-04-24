@@ -1,5 +1,6 @@
 package com.onekey.core.domain.repository
 
+import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.LockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import kotlinx.coroutines.flow.Flow
@@ -21,4 +22,6 @@ interface AppPreferencesRepository {
     suspend fun setLastMasterPasswordTimestamp(timestamp: Long)
     fun isShowFavourites(): Flow<Boolean>
     suspend fun setShowFavourites(show: Boolean)
+    fun getCredentialSortOrder(): Flow<CredentialSortOrder>
+    suspend fun setCredentialSortOrder(order: CredentialSortOrder)
 }
