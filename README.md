@@ -172,4 +172,4 @@ No `INTERNET`. No `READ_CONTACTS`. No `ACCESS_FINE_LOCATION`. Nothing else.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for the full text.
+Copyright © 2026 Rouf Syed. All rights reserved — see [LICENSE](LICENSE) for details.
