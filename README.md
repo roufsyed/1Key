@@ -162,6 +162,14 @@ No `INTERNET`. No `READ_CONTACTS`. No `ACCESS_FINE_LOCATION`. Nothing else.
 
 ---
 
+## Privacy
+
+1Key has no backend, no analytics, and no network permission. Read the full breakdown of what data is stored, how encryption works, and why each permission exists:
+
+**[Privacy Policy →](PRIVACY.md)**
+
+---
+
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE) for the full text.
