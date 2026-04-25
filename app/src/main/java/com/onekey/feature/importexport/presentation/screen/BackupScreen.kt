@@ -24,10 +24,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.usecase.ExportFormat
+import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.SkipReason
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportEvent
@@ -214,6 +219,9 @@ fun BackupScreen(
                 )
             }
 
+            val isInteractionBlocked =
+                state is ImportExportUiState.Loading || state is ImportExportUiState.ImportPreview
+
             Button(
                 onClick = {
                     if (encryptExport) showExportPasswordDialog = true
@@ -223,7 +231,7 @@ fun BackupScreen(
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = state !is ImportExportUiState.Loading,
+                enabled = !isInteractionBlocked,
             ) { Text("Export Vault") }
 
             // ── Import ────────────────────────────────────────────────────────
@@ -242,7 +250,7 @@ fun BackupScreen(
                     importLauncher.launch(arrayOf("*/*"))
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = state !is ImportExportUiState.Loading,
+                enabled = !isInteractionBlocked,
             ) { Text("Import Credentials") }
 
             when (val s = state) {
@@ -264,6 +272,17 @@ fun BackupScreen(
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    // ── Import preview dialog ─────────────────────────────────────────────────
+
+    val previewState = state as? ImportExportUiState.ImportPreview
+    if (previewState != null) {
+        ImportPreviewDialog(
+            state = previewState,
+            onConfirm = { opts -> viewModel.confirmImport(opts) },
+            onDismiss = { viewModel.cancelPendingImport() },
+        )
     }
 
     // ── Disable-encryption dialog ─────────────────────────────────────────────
@@ -774,6 +793,401 @@ private fun TransferRow(good: Boolean, text: String) {
             modifier = Modifier.size(16.dp).padding(top = 1.dp),
         )
         Text(text, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+// ── Import preview ────────────────────────────────────────────────────────────
+
+@Composable
+private fun ImportPreviewDialog(
+    state: ImportExportUiState.ImportPreview,
+    onConfirm: (ImportFieldOptions) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var opts by remember {
+        mutableStateOf(ImportFieldOptions(customFieldKeys = state.customFieldKeys.toSet()))
+    }
+    val totalCount = state.parsed.credentials.size
+    val failedCount = state.parsed.failed.size
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+        ),
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.92f),
+            shape = MaterialTheme.shapes.large,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+
+                // ── Header ────────────────────────────────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Import Preview", style = MaterialTheme.typography.titleLarge)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Cancel import")
+                    }
+                }
+                HorizontalDivider()
+
+                // ── Scrollable body ───────────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    // Summary
+                    Text(
+                        buildString {
+                            append(if (totalCount == 1) "1 credential found" else "$totalCount credentials found")
+                            if (failedCount > 0) append(" · $failedCount could not be parsed")
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    // Field toggles
+                    Text(
+                        "Fields to import",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ),
+                    ) {
+                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                            FieldToggleRow("Username", Icons.Default.Person, opts.username) {
+                                opts = opts.copy(username = it)
+                            }
+                            FieldToggleRow("Password", Icons.Default.Lock, opts.password) {
+                                opts = opts.copy(password = it)
+                            }
+                            FieldToggleRow("Website URL", Icons.Default.Language, opts.url) {
+                                opts = opts.copy(url = it)
+                            }
+                            FieldToggleRow("Notes", Icons.Default.StickyNote2, opts.notes) {
+                                opts = opts.copy(notes = it)
+                            }
+                            FieldToggleRow("2FA / TOTP secret", Icons.Default.Shield, opts.totp) {
+                                opts = opts.copy(totp = it)
+                            }
+                            FieldToggleRow("Categories / tags", Icons.Default.Label, opts.tags) {
+                                opts = opts.copy(tags = it)
+                            }
+                            if (state.customFieldKeys.isEmpty()) {
+                                FieldToggleRow(
+                                    label = "Custom fields (none in file)",
+                                    icon = Icons.Default.Tune,
+                                    checked = false,
+                                    enabled = false,
+                                ) {}
+                            } else {
+                                val allCfSelected = state.customFieldKeys.all { it in opts.customFieldKeys }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Default.Tune,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = if (allCfSelected) MaterialTheme.colorScheme.primary
+                                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    )
+                                    Text(
+                                        "Custom fields (${state.customFieldKeys.size})",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f),
+                                        color = if (allCfSelected) MaterialTheme.colorScheme.onSurface
+                                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            opts = if (allCfSelected)
+                                                opts.copy(customFieldKeys = emptySet())
+                                            else
+                                                opts.copy(customFieldKeys = state.customFieldKeys.toSet())
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                    ) {
+                                        Text(
+                                            if (allCfSelected) "None" else "All",
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                }
+                                state.customFieldKeys.forEach { key ->
+                                    val isSensitive = key in state.sensitiveCustomFieldKeys
+                                    FieldToggleRow(
+                                        label = key,
+                                        icon = if (isSensitive) Icons.Default.Lock else Icons.Default.Tune,
+                                        checked = key in opts.customFieldKeys,
+                                        indent = true,
+                                    ) { checked ->
+                                        opts = if (checked)
+                                            opts.copy(customFieldKeys = opts.customFieldKeys + key)
+                                        else
+                                            opts.copy(customFieldKeys = opts.customFieldKeys - key)
+                                    }
+                                }
+                            }
+                            FieldToggleRow("Favourites", Icons.Default.Favorite, opts.isFavorite) {
+                                opts = opts.copy(isFavorite = it)
+                            }
+                        }
+                    }
+
+                    // Per-category sample
+                    if (state.previewItems.isNotEmpty()) {
+                        HorizontalDivider()
+                        Text(
+                            "Sample — one from each category",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            "This is how each credential will look after import with the fields selected above.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        state.previewItems.forEach { credential ->
+                            PreviewCredentialCard(credential = credential, opts = opts)
+                        }
+                    } else if (totalCount == 0) {
+                        Text(
+                            "No credentials were found in this file.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // ── Action row ────────────────────────────────────────────────
+                HorizontalDivider()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Cancel") }
+                    Button(
+                        onClick = { onConfirm(opts) },
+                        modifier = Modifier.weight(1f),
+                        enabled = totalCount > 0,
+                    ) {
+                        Text(
+                            if (totalCount == 1) "Import 1 Credential"
+                            else "Import $totalCount Credentials"
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldToggleRow(
+    label: String,
+    icon: ImageVector,
+    checked: Boolean,
+    enabled: Boolean = true,
+    indent: Boolean = false,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val startPad = if (indent) 32.dp else 16.dp
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (enabled) Modifier.clickable { onCheckedChange(!checked) } else Modifier)
+            .padding(start = startPad, end = 16.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                checked -> MaterialTheme.colorScheme.primary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            },
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
+            color = when {
+                !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                checked -> MaterialTheme.colorScheme.onSurface
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            modifier = Modifier.height(24.dp),
+        )
+    }
+}
+
+@Composable
+private fun PreviewCredentialCard(credential: Credential, opts: ImportFieldOptions) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            // Title row — always shown
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    credential.title.ifBlank { "(no title)" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (opts.isFavorite && credential.isFavorite) {
+                    Icon(
+                        Icons.Default.Favorite,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            if (opts.username && credential.username.isNotBlank())
+                PreviewFieldRow(Icons.Default.Person, credential.username)
+
+            if (opts.password && credential.password.isNotBlank())
+                PreviewFieldRow(Icons.Default.Lock, "••••••••")
+
+            if (opts.url && credential.url.isNotBlank())
+                PreviewFieldRow(Icons.Default.Language, credential.url)
+
+            if (opts.notes && credential.notes.isNotBlank()) {
+                val preview = if (credential.notes.length > 80)
+                    credential.notes.take(80) + "…" else credential.notes
+                PreviewFieldRow(Icons.Default.StickyNote2, preview)
+            }
+
+            if (opts.totp && credential.totpSecret != null)
+                PreviewFieldRow(Icons.Default.Shield, "2FA / TOTP enabled")
+
+            if (opts.tags && credential.tags.isNotEmpty()) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 2.dp),
+                ) {
+                    credential.tags.take(3).forEach { tag ->
+                        Surface(
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        ) {
+                            Text(
+                                tag,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                    if (credential.tags.size > 3) {
+                        Text(
+                            "+${credential.tags.size - 3}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            val visibleCustomFields = credential.customFields.filter { it.key in opts.customFieldKeys }
+            visibleCustomFields.forEach { field ->
+                PreviewFieldRow(
+                    if (field.isSensitive) Icons.Default.Lock else Icons.Default.Tune,
+                    "${field.key}: ${if (field.isSensitive) "••••••••" else field.value}",
+                )
+            }
+
+            // Warn when all optional fields are hidden
+            val anyVisible = (opts.username && credential.username.isNotBlank()) ||
+                (opts.password && credential.password.isNotBlank()) ||
+                (opts.url && credential.url.isNotBlank()) ||
+                (opts.notes && credential.notes.isNotBlank()) ||
+                (opts.totp && credential.totpSecret != null) ||
+                (opts.tags && credential.tags.isNotEmpty()) ||
+                visibleCustomFields.isNotEmpty()
+            if (!anyVisible) {
+                Text(
+                    "Only the title will be imported with current field selection.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewFieldRow(icon: ImageVector, value: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(13.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
