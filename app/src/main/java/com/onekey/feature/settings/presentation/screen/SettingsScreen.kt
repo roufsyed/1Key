@@ -1,13 +1,8 @@
 package com.onekey.feature.settings.presentation.screen
 
-import android.net.Uri
 import com.onekey.BuildConfig
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,19 +19,12 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.LockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.Tag
-import com.onekey.core.domain.usecase.ExportFormat
-import com.onekey.feature.importexport.domain.ImportResult
-import com.onekey.feature.importexport.domain.SkipReason
-import com.onekey.feature.importexport.presentation.viewmodel.ImportExportEvent
-import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
-import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
@@ -48,8 +36,8 @@ fun SettingsScreen(
     onSetupPin: () -> Unit,
     onChangePassword: () -> Unit,
     onVaultReset: () -> Unit,
+    onBackup: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
-    importExportVm: ImportExportViewModel = hiltViewModel(),
 ) {
     val tags by settingsVm.tags.collectAsStateWithLifecycle()
     val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
@@ -61,7 +49,6 @@ fun SettingsScreen(
     val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
-    val backupState by importExportVm.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -71,8 +58,6 @@ fun SettingsScreen(
     var biometricPasswordError by remember { mutableStateOf(false) }
     var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
     var showBiometricLockedDialog by remember { mutableStateOf(false) }
-    var showSkippedDialog by remember { mutableStateOf(false) }
-    var showFailedDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
@@ -112,99 +97,6 @@ fun SettingsScreen(
 
     var newTagName by remember { mutableStateOf("") }
     var showAddTag by remember { mutableStateOf(false) }
-    var selectedFormat by remember { mutableStateOf(ExportFormat.JSON) }
-    var encryptExport by remember { mutableStateOf(true) }
-    var showExportPasswordDialog by remember { mutableStateOf(false) }
-    var exportPasswordInput by remember { mutableStateOf("") }
-    var exportPasswordVisible by remember { mutableStateOf(false) }
-    var importPasswordInput by remember { mutableStateOf("") }
-    var importPasswordVisible by remember { mutableStateOf(false) }
-    var showDisableEncryptionDialog by remember { mutableStateOf(false) }
-    var disableEncPwdInput by remember { mutableStateOf("") }
-    var disableEncPwdVisible by remember { mutableStateOf(false) }
-    var disableEncPwdError by remember { mutableStateOf<String?>(null) }
-    var exportPasswordError by remember { mutableStateOf<String?>(null) }
-    var isVerifyingExportPassword by remember { mutableStateOf(false) }
-    var showExportLockedDialog by remember { mutableStateOf(false) }
-    var showResultDialog by remember { mutableStateOf(false) }
-    var resultDialogSuccess by remember { mutableStateOf(true) }
-    var resultDialogMessage by remember { mutableStateOf("") }
-
-    val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("*/*")
-    ) { uri: Uri? ->
-        importExportVm.notifyPickerDone()
-        if (uri != null) {
-            if (encryptExport) importExportVm.exportEncrypted(uri, selectedFormat, context)
-            else importExportVm.export(uri, selectedFormat, context)
-        } else {
-            importExportVm.clearPendingExportPassword()
-        }
-    }
-    val importLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        importExportVm.notifyPickerDone()
-        uri?.let { importExportVm.import(it, context) }
-    }
-
-    LaunchedEffect(Unit) {
-        importExportVm.events.collect { event ->
-            when (event) {
-                is ImportExportEvent.PlainExportAllowed -> {
-                    encryptExport = false
-                    showDisableEncryptionDialog = false
-                    disableEncPwdInput = ""
-                    disableEncPwdVisible = false
-                    disableEncPwdError = null
-                }
-                is ImportExportEvent.PlainExportDenied -> {
-                    disableEncPwdError = event.message
-                }
-                is ImportExportEvent.ExportPasswordVerified -> {
-                    importExportVm.setPendingExportPassword(exportPasswordInput.toCharArray())
-                    showExportPasswordDialog = false
-                    exportPasswordInput = ""
-                    exportPasswordVisible = false
-                    exportPasswordError = null
-                    isVerifyingExportPassword = false
-                    importExportVm.notifyPickerLaunched()
-                    exportLauncher.launch("1key_backup.1key")
-                }
-                is ImportExportEvent.ExportPasswordFailed -> {
-                    isVerifyingExportPassword = false
-                    exportPasswordError = if (event.attemptsRemaining == 1)
-                        "Wrong password — 1 attempt remaining before the vault locks."
-                    else
-                        "Wrong password — ${event.attemptsRemaining} attempts remaining."
-                }
-                is ImportExportEvent.ExportVaultLocked -> {
-                    isVerifyingExportPassword = false
-                    showExportPasswordDialog = false
-                    exportPasswordInput = ""
-                    exportPasswordVisible = false
-                    exportPasswordError = null
-                    showExportLockedDialog = true
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(backupState) {
-        when (val s = backupState) {
-            is ImportExportUiState.Success -> {
-                resultDialogSuccess = true
-                resultDialogMessage = s.message
-                showResultDialog = true
-            }
-            is ImportExportUiState.Error -> {
-                resultDialogSuccess = false
-                resultDialogMessage = s.message
-                showResultDialog = true
-            }
-            else -> Unit
-        }
-    }
     var showResetPinDialog by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
@@ -430,98 +322,17 @@ fun SettingsScreen(
                 }
             }
 
-            // ── Backup ────────────────────────────────────────────────────────
+            // ── Backup & Import ───────────────────────────────────────────────
             Spacer(Modifier.height(8.dp))
-            SectionHeader("Backup")
+            SectionHeader("Backup & Import")
             Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text("Format", style = MaterialTheme.typography.labelMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ExportFormat.entries.forEach { fmt ->
-                            FilterChip(
-                                selected = selectedFormat == fmt,
-                                onClick = { selectedFormat = fmt },
-                                label = { Text(fmt.name) },
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Encrypt export", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                if (encryptExport) "Protected with your master password"
-                                else "Unprotected — anyone can read it",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = encryptExport,
-                            onCheckedChange = { newValue ->
-                                if (!newValue) {
-                                    disableEncPwdError = null
-                                    showDisableEncryptionDialog = true
-                                } else {
-                                    encryptExport = true
-                                }
-                            },
-                        )
-                    }
-                    HorizontalDivider()
-                    if (encryptExport) {
-                        Text(
-                            "Backup encrypted with AES-256-GCM. The same password is required to restore.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    } else {
-                        Text(
-                            "The exported file is NOT encrypted — store it securely.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                if (encryptExport) {
-                                    showExportPasswordDialog = true
-                                } else {
-                                    importExportVm.notifyPickerLaunched()
-                                    exportLauncher.launch("1key_backup.${selectedFormat.name.lowercase()}")
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = backupState !is ImportExportUiState.Loading,
-                        ) { Text("Export") }
-                        OutlinedButton(
-                            onClick = {
-                                importExportVm.notifyPickerLaunched()
-                                importLauncher.launch(arrayOf("*/*"))
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = backupState !is ImportExportUiState.Loading,
-                        ) { Text("Import") }
-                    }
-                    when (val s = backupState) {
-                        is ImportExportUiState.Loading ->
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        is ImportExportUiState.ImportSuccess ->
-                            ImportSummaryRow(
-                                result = s.result,
-                                onShowSkipped = { showSkippedDialog = true },
-                                onShowFailed = { showFailedDialog = true },
-                            )
-                        else -> Unit
-                    }
-                }
+                ListItem(
+                    headlineContent = { Text("Backup & Import") },
+                    supportingContent = { Text("Export your vault or import credentials from another app") },
+                    leadingContent = { Icon(Icons.Default.Backup, contentDescription = null) },
+                    trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                    modifier = Modifier.clickable(onClick = onBackup),
+                )
             }
 
             // ── Categories ────────────────────────────────────────────────────
@@ -682,88 +493,6 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(32.dp))
         }
-    }
-
-    val importSuccessState = backupState as? ImportExportUiState.ImportSuccess
-
-    if (showSkippedDialog && importSuccessState != null) {
-        val skipped = importSuccessState.result.skipped
-        AlertDialog(
-            onDismissRequest = { showSkippedDialog = false },
-            icon = { Icon(Icons.Default.Info, contentDescription = null) },
-            title = { Text("Skipped (${skipped.size})") },
-            text = {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(skipped) { item ->
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                item.title.ifBlank { "(no title)" },
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            if (item.username.isNotBlank()) {
-                                Text(
-                                    item.username,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            Text(
-                                when (item.reason) {
-                                    SkipReason.DUPLICATE_ID -> "Already in vault (same ID)"
-                                    SkipReason.DUPLICATE_TITLE_USERNAME -> "Already in vault (same name & username)"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showSkippedDialog = false }) { Text("Close") }
-            },
-        )
-    }
-
-    if (showFailedDialog && importSuccessState != null) {
-        val failed = importSuccessState.result.failed
-        AlertDialog(
-            onDismissRequest = { showFailedDialog = false },
-            icon = {
-                Icon(
-                    Icons.Default.Warning,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("Failed entries (${failed.size})") },
-            text = {
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    items(failed) { entry ->
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                "Entry ${entry.rowIndex}",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                            Text(
-                                entry.reason,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showFailedDialog = false }) { Text("Close") }
-            },
-        )
     }
 
     if (showBiometricConfirmDialog) {
@@ -1045,298 +774,6 @@ fun SettingsScreen(
         )
     }
 
-    // ── Disable-encryption confirmation dialog ────────────────────────────────
-
-    if (showDisableEncryptionDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showDisableEncryptionDialog = false
-                disableEncPwdInput = ""
-                disableEncPwdVisible = false
-                disableEncPwdError = null
-            },
-            icon = {
-                Icon(
-                    Icons.Default.LockOpen,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("Turn Off Encryption?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Unencrypted exports are plain readable files. Anyone who finds your backup — " +
-                            "on your device, in cloud storage, or sent by mistake — can read every " +
-                            "password without any tools or technical knowledge.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "Encryption is strongly recommended. Only disable it if you need to import " +
-                            "the file into another app that cannot handle the encrypted format.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        value = disableEncPwdInput,
-                        onValueChange = { input ->
-                            disableEncPwdInput = input
-                            if (disableEncPwdError != null) disableEncPwdError = null
-                        },
-                        label = { Text("Master password") },
-                        singleLine = true,
-                        isError = disableEncPwdError != null,
-                        supportingText = disableEncPwdError?.let { { Text(it) } },
-                        visualTransformation = if (disableEncPwdVisible) VisualTransformation.None
-                                               else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { disableEncPwdVisible = !disableEncPwdVisible }) {
-                                Icon(
-                                    if (disableEncPwdVisible) Icons.Default.VisibilityOff
-                                    else Icons.Default.Visibility,
-                                    contentDescription = null,
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        importExportVm.verifyPasswordForPlainExport(disableEncPwdInput.toCharArray())
-                        disableEncPwdInput = ""
-                    },
-                    enabled = disableEncPwdInput.isNotEmpty(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
-                ) { Text("Disable Encryption") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showDisableEncryptionDialog = false
-                        disableEncPwdInput = ""
-                        disableEncPwdVisible = false
-                        disableEncPwdError = null
-                    }
-                ) { Text("Keep Encrypted") }
-            },
-        )
-    }
-
-    // ── Export password dialog ────────────────────────────────────────────────
-
-    if (showExportPasswordDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                if (!isVerifyingExportPassword) {
-                    showExportPasswordDialog = false
-                    exportPasswordInput = ""
-                    exportPasswordVisible = false
-                    exportPasswordError = null
-                }
-            },
-            icon = { Icon(Icons.Default.Lock, contentDescription = null) },
-            title = { Text("Encrypt Backup") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Enter your master password to encrypt the backup. " +
-                            "You will need the same password to restore from this file.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    OutlinedTextField(
-                        value = exportPasswordInput,
-                        onValueChange = { input ->
-                            exportPasswordInput = input
-                            if (exportPasswordError != null) exportPasswordError = null
-                        },
-                        label = { Text("Master password") },
-                        singleLine = true,
-                        isError = exportPasswordError != null,
-                        supportingText = exportPasswordError?.let { err -> { Text(err) } },
-                        visualTransformation = if (exportPasswordVisible) VisualTransformation.None
-                                               else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { exportPasswordVisible = !exportPasswordVisible }) {
-                                Icon(
-                                    if (exportPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null,
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        isVerifyingExportPassword = true
-                        importExportVm.verifyPasswordForExport(exportPasswordInput.toCharArray())
-                    },
-                    enabled = exportPasswordInput.isNotEmpty() && !isVerifyingExportPassword,
-                ) {
-                    if (isVerifyingExportPassword) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Text("Verify & Continue")
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showExportPasswordDialog = false
-                        exportPasswordInput = ""
-                        exportPasswordVisible = false
-                        exportPasswordError = null
-                    },
-                    enabled = !isVerifyingExportPassword,
-                ) { Text("Cancel") }
-            },
-        )
-    }
-
-    // ── Export vault-locked dialog ────────────────────────────────────────────
-
-    if (showExportLockedDialog) {
-        AlertDialog(
-            onDismissRequest = { /* non-dismissible — user must acknowledge */ },
-            icon = {
-                Icon(
-                    Icons.Default.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("Vault Locked") },
-            text = {
-                Text(
-                    "You've entered the wrong password 3 times. " +
-                        "To keep your data safe, your vault has been locked. " +
-                        "Please re-authenticate to continue.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showExportLockedDialog = false
-                        importExportVm.lockVault()
-                    },
-                ) { Text("OK") }
-            },
-        )
-    }
-
-    // ── Export / import result dialog ─────────────────────────────────────────
-
-    if (showResultDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showResultDialog = false
-                importExportVm.acknowledgeResult()
-            },
-            icon = {
-                Icon(
-                    if (resultDialogSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
-                    contentDescription = null,
-                    tint = if (resultDialogSuccess) MaterialTheme.colorScheme.primary
-                           else MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text(if (resultDialogSuccess) "Backup Saved" else "Something Went Wrong") },
-            text = { Text(resultDialogMessage, style = MaterialTheme.typography.bodyMedium) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showResultDialog = false
-                        importExportVm.acknowledgeResult()
-                    }
-                ) { Text("OK") }
-            },
-        )
-    }
-
-    // ── Import password dialog (encrypted file detected) ──────────────────────
-
-    val awaitingImport = backupState as? ImportExportUiState.AwaitingImportPassword
-    if (awaitingImport != null) {
-        AlertDialog(
-            onDismissRequest = {
-                importPasswordInput = ""
-                importPasswordVisible = false
-                importExportVm.cancelPendingImport()
-            },
-            icon = { Icon(Icons.Default.LockOpen, contentDescription = null) },
-            title = { Text("Encrypted Backup") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "This backup is password-protected. Enter the password that was used when it was created.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    if (awaitingImport.error != null) {
-                        Text(
-                            awaitingImport.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                    OutlinedTextField(
-                        value = importPasswordInput,
-                        onValueChange = { importPasswordInput = it },
-                        label = { Text("Backup password") },
-                        singleLine = true,
-                        isError = awaitingImport.error != null,
-                        visualTransformation = if (importPasswordVisible) VisualTransformation.None
-                                               else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { importPasswordVisible = !importPasswordVisible }) {
-                                Icon(
-                                    if (importPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null,
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        importExportVm.importWithPassword(importPasswordInput.toCharArray())
-                        importPasswordInput = ""
-                        importPasswordVisible = false
-                    },
-                    enabled = importPasswordInput.isNotEmpty(),
-                ) { Text("Decrypt & Import") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        importPasswordInput = ""
-                        importPasswordVisible = false
-                        importExportVm.cancelPendingImport()
-                    }
-                ) { Text("Cancel") }
-            },
-        )
-    }
-
     tagToDelete?.let { tag ->
         AlertDialog(
             onDismissRequest = { tagToDelete = null },
@@ -1347,13 +784,13 @@ fun SettingsScreen(
                     tint = MaterialTheme.colorScheme.primary,
                 )
             },
-            title = { Text("Remove \u201c${tag.name}\u201d?") },
+            title = { Text("Remove “${tag.name}”?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("The \u201c${tag.name}\u201d category will be permanently removed.")
+                    Text("The “${tag.name}” category will be permanently removed.")
                     Text(
                         "Any passwords currently tagged with it will have the category quietly " +
-                            "stripped away \u2014 your passwords themselves stay completely safe " +
+                            "stripped away — your passwords themselves stay completely safe " +
                             "and nothing else will change.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1424,39 +861,6 @@ private fun LicenceRow(name: String, licence: String, author: String) {
     Column {
         Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
         Text("$licence · $author", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun ImportSummaryRow(
-    result: ImportResult,
-    onShowSkipped: () -> Unit,
-    onShowFailed: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            "Imported ${result.imported} ${if (result.imported == 1) "credential" else "credentials"}",
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.bodySmall,
-        )
-        if (result.skipped.isNotEmpty()) {
-            Text(
-                "${result.skipped.size} skipped — tap to view",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier.clickable(onClick = onShowSkipped),
-            )
-        }
-        if (result.failed.isNotEmpty()) {
-            Text(
-                "${result.failed.size} failed to parse — tap to view",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-                textDecoration = TextDecoration.Underline,
-                modifier = Modifier.clickable(onClick = onShowFailed),
-            )
-        }
     }
 }
 

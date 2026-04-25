@@ -28,6 +28,7 @@ import com.onekey.feature.auth.presentation.screen.LockScreen
 import com.onekey.feature.auth.presentation.screen.OnboardingScreen
 import com.onekey.feature.auth.presentation.screen.SetupPinScreen
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
+import com.onekey.feature.importexport.presentation.screen.BackupScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
 import com.onekey.feature.twofa.presentation.screen.TwoFaListScreen
@@ -53,6 +54,7 @@ sealed class Screen(val route: String) {
         fun createRoute(tagName: String) = "tagged/${Uri.encode(tagName)}"
     }
     data object QrScanner : Screen("qr_scanner")
+    data object Backup : Screen("backup")
 }
 
 private val BOTTOM_NAV_ROUTES = setOf(
@@ -205,7 +207,12 @@ fun OneKeyNavGraph(
                             popUpTo(navController.graph.id) { inclusive = true }
                         }
                     },
+                    onBackup = { navController.navigate(Screen.Backup.route) },
                 )
+            }
+
+            composable(Screen.Backup.route) {
+                BackupScreen(onBack = { navController.popBackStack() })
             }
 
             composable(Screen.SetupPin.route) {
