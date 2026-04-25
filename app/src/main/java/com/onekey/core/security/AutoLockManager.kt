@@ -37,7 +37,13 @@ class AutoLockManager @Inject constructor(
     // so that the picker callback can complete its export/import work.
     @Volatile private var pickerActive = false
 
-    fun suppressForPicker() { pickerActive = true }
+    fun suppressForPicker() {
+        pickerActive = true
+        // Cancel any background lock job that fired in onStop just before this flag
+        // was set — otherwise it would lock the vault while the picker is open.
+        backgroundJob?.cancel()
+        backgroundJob = null
+    }
     fun clearPickerSuppression() { pickerActive = false }
 
     init {
@@ -74,11 +80,12 @@ class AutoLockManager @Inject constructor(
         backgroundJob?.cancel()
         backgroundJob = scope.launch {
             val timeout = appPrefs.getLockTimeout().first()
+            if (pickerActive) return@launch
             if (timeout == LockTimeout.IMMEDIATE) {
                 authRepository.lock()
             } else {
                 delay(timeout.millis)
-                if (isVaultUnlocked) authRepository.lock()
+                if (isVaultUnlocked && !pickerActive) authRepository.lock()
             }
         }
     }
