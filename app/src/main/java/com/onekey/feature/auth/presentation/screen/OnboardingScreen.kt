@@ -1,5 +1,8 @@
 package com.onekey.feature.auth.presentation.screen
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -15,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -34,7 +38,21 @@ fun OnboardingScreen(
     onSetupComplete: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var step by remember { mutableStateOf(0) }
+    var showRestoreDialog by remember { mutableStateOf(false) }
+    var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            pendingRestoreUri = uri
+            showRestoreDialog = true
+            // Clear any prior error so the dialog starts fresh.
+            viewModel.clearError()
+        }
+    }
 
     LaunchedEffect(state) {
         if (state is AuthUiState.SetupComplete) onSetupComplete()
@@ -59,6 +77,7 @@ fun OnboardingScreen(
                     state = state,
                     onBack = { step = 1 },
                     onSubmit = { password -> viewModel.setup(password.toCharArray()) },
+                    onRestoreFromBackup = { restoreLauncher.launch(arrayOf("*/*")) },
                 )
                 else -> Unit
             }
@@ -70,6 +89,22 @@ fun OnboardingScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 24.dp),
+        )
+    }
+
+    if (showRestoreDialog) {
+        RestoreFromBackupDialog(
+            state = state,
+            onConfirm = { password ->
+                pendingRestoreUri?.let {
+                    viewModel.restoreFromEncryptedBackup(it, password.toCharArray(), context)
+                }
+            },
+            onDismiss = {
+                showRestoreDialog = false
+                pendingRestoreUri = null
+                viewModel.clearError()
+            },
         )
     }
 }
@@ -231,6 +266,7 @@ private fun CreateVaultPage(
     state: AuthUiState,
     onBack: () -> Unit,
     onSubmit: (String) -> Unit,
+    onRestoreFromBackup: () -> Unit,
 ) {
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -355,9 +391,93 @@ private fun CreateVaultPage(
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text("Back")
         }
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        TextButton(
+            onClick = onRestoreFromBackup,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = state !is AuthUiState.Loading,
+        ) {
+            Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Restore from encrypted 1Key backup")
+        }
 
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
     }
+}
+
+// ── Restore-from-backup dialog ────────────────────────────────────────────────
+
+@Composable
+private fun RestoreFromBackupDialog(
+    state: AuthUiState,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var password by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+
+    // Dismiss automatically once setup completes (LaunchedEffect handles navigation).
+    // Keep dialog open while loading so the user can see the spinner.
+    AlertDialog(
+        onDismissRequest = { if (state !is AuthUiState.Loading) onDismiss() },
+        icon = { Icon(Icons.Default.Restore, contentDescription = null) },
+        title = { Text("Restore from Backup") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Enter the master password that was used to encrypt this backup. " +
+                        "It will become your new vault master password.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (state is AuthUiState.Error) {
+                    Text(
+                        state.message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Backup password") },
+                    singleLine = true,
+                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(
+                                if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = null,
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(password) },
+                enabled = password.isNotEmpty() && state !is AuthUiState.Loading,
+            ) {
+                if (state is AuthUiState.Loading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text("Restore")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = state !is AuthUiState.Loading) {
+                Text("Cancel")
+            }
+        },
+    )
 }
 
 // ── Shared components ─────────────────────────────────────────────────────────

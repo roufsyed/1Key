@@ -13,8 +13,13 @@ class ExportVaultUseCase @Inject constructor(
     suspend operator fun invoke(format: ExportFormat, outputPath: String): AppResult<Unit> {
         val result = repository.getAllCredentials()
         if (result is AppResult.Error) return result
-        val credentials = (result as AppResult.Success).data
-        return exporter.export(credentials, format, outputPath)
+        return exporter.export((result as AppResult.Success).data, format, outputPath)
+    }
+
+    suspend fun encrypted(format: ExportFormat, password: CharArray, outputPath: String): AppResult<Unit> {
+        val result = repository.getAllCredentials()
+        if (result is AppResult.Error) return result
+        return exporter.exportEncrypted((result as AppResult.Success).data, password, format, outputPath)
     }
 }
 

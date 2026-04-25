@@ -3,6 +3,7 @@ package com.onekey.core.domain.usecase
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.feature.importexport.domain.FailedEntry
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.SkipReason
 import com.onekey.feature.importexport.domain.SkippedCredential
@@ -13,12 +14,26 @@ class ImportVaultUseCase @Inject constructor(
     private val repository: CredentialRepository,
     private val importer: VaultImporter,
 ) {
-    suspend operator fun invoke(format: ExportFormat, filePath: String): AppResult<ImportResult> {
-        val parseResult = importer.parse(filePath, format)
+    suspend fun isEncrypted(filePath: String): Boolean = importer.isEncrypted(filePath)
+
+    suspend operator fun invoke(filePath: String): AppResult<ImportResult> {
+        val parseResult = importer.parse(filePath)
         if (parseResult is AppResult.Error) return parseResult
+        val (parsed, failed) = (parseResult as AppResult.Success).data
+        return deduplicateAndImport(parsed, failed)
+    }
 
-        val (parsed, failedEntries) = (parseResult as AppResult.Success).data
+    suspend fun fromEncrypted(filePath: String, password: CharArray): AppResult<ImportResult> {
+        val parseResult = importer.parseEncrypted(filePath, password)
+        if (parseResult is AppResult.Error) return parseResult
+        val (parsed, failed) = (parseResult as AppResult.Success).data
+        return deduplicateAndImport(parsed, failed)
+    }
 
+    private suspend fun deduplicateAndImport(
+        parsed: List<Credential>,
+        failedEntries: List<FailedEntry>,
+    ): AppResult<ImportResult> {
         val existingResult = repository.getAllCredentials()
         if (existingResult is AppResult.Error) return existingResult
 
@@ -49,12 +64,6 @@ class ImportVaultUseCase @Inject constructor(
             if (importResult is AppResult.Error) return importResult
         }
 
-        return AppResult.Success(
-            ImportResult(
-                imported = toImport.size,
-                skipped = skipped,
-                failed = failedEntries,
-            )
-        )
+        return AppResult.Success(ImportResult(imported = toImport.size, skipped = skipped, failed = failedEntries))
     }
 }

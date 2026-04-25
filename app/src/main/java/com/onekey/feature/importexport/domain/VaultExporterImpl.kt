@@ -6,11 +6,15 @@ import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.usecase.ExportFormat
+import com.onekey.core.security.CryptoManager
 import java.io.File
 import java.io.FileWriter
+import java.io.StringWriter
 import javax.inject.Inject
 
-class VaultExporterImpl @Inject constructor() : VaultExporter {
+class VaultExporterImpl @Inject constructor(
+    private val crypto: CryptoManager,
+) : VaultExporter {
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
@@ -20,28 +24,42 @@ class VaultExporterImpl @Inject constructor() : VaultExporter {
         path: String,
     ): AppResult<Unit> = runCatchingResult {
         when (format) {
-            ExportFormat.JSON -> exportJson(credentials, path)
-            ExportFormat.CSV -> exportCsv(credentials, path)
+            ExportFormat.JSON -> File(path).writeText(buildJsonString(credentials))
+            ExportFormat.CSV -> writeCsvToFile(credentials, path)
         }
     }
 
-    private fun exportJson(credentials: List<Credential>, path: String) {
-        val dtos = credentials.map { it.toDto() }
-        File(path).writeText(gson.toJson(dtos))
+    override suspend fun exportEncrypted(
+        credentials: List<Credential>,
+        password: CharArray,
+        format: ExportFormat,
+        path: String,
+    ): AppResult<Unit> = runCatchingResult {
+        val plaintext = when (format) {
+            ExportFormat.JSON -> buildJsonString(credentials).toByteArray(Charsets.UTF_8)
+            ExportFormat.CSV -> buildCsvString(credentials).toByteArray(Charsets.UTF_8)
+        }
+        File(path).writeBytes(BackupEncryption.encrypt(plaintext, password, format, crypto))
     }
 
-    private fun exportCsv(credentials: List<Credential>, path: String) {
+    // ── Serialisation helpers ─────────────────────────────────────────────────
+
+    private fun buildJsonString(credentials: List<Credential>): String =
+        gson.toJson(credentials.map { it.toDto() })
+
+    private fun buildCsvString(credentials: List<Credential>): String {
+        val sw = StringWriter()
+        CSVWriter(sw).use { writer ->
+            writer.writeNext(CSV_HEADERS)
+            credentials.forEach { writer.writeNext(it.toCsvRow()) }
+        }
+        return sw.toString()
+    }
+
+    private fun writeCsvToFile(credentials: List<Credential>, path: String) {
         CSVWriter(FileWriter(path)).use { writer ->
-            writer.writeNext(arrayOf("title", "username", "password", "url", "notes", "tags", "totp_secret", "created_at", "updated_at"))
-            credentials.forEach { c ->
-                writer.writeNext(arrayOf(
-                    c.title, c.username, c.password, c.url, c.notes,
-                    c.tags.joinToString("|"),
-                    c.totpSecret ?: "",
-                    c.createdAt.toString(),
-                    c.updatedAt.toString(),
-                ))
-            }
+            writer.writeNext(CSV_HEADERS)
+            credentials.forEach { writer.writeNext(it.toCsvRow()) }
         }
     }
 
@@ -58,4 +76,19 @@ class VaultExporterImpl @Inject constructor() : VaultExporter {
         "created_at" to createdAt,
         "updated_at" to updatedAt,
     )
+
+    private fun Credential.toCsvRow() = arrayOf(
+        title, username, password, url, notes,
+        tags.joinToString("|"),
+        totpSecret ?: "",
+        createdAt.toString(),
+        updatedAt.toString(),
+    )
+
+    private companion object {
+        val CSV_HEADERS = arrayOf(
+            "title", "username", "password", "url", "notes",
+            "tags", "totp_secret", "created_at", "updated_at",
+        )
+    }
 }
