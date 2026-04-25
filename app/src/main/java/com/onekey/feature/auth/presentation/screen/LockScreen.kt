@@ -4,8 +4,14 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOutBack
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
@@ -16,6 +22,7 @@ import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,7 +41,9 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val PinSuccessColor = Color(0xFF4CAF50)
 
@@ -50,10 +59,10 @@ fun LockScreen(
     val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    // Delay navigation by enough time for the success pulse animation to complete (260 ms).
+    // Delay navigation until the success animation completes (~530 ms).
     LaunchedEffect(state) {
         if (state is AuthUiState.Unlocked) {
-            delay(280)
+            delay(540)
             onUnlocked()
         }
     }
@@ -93,7 +102,7 @@ fun LockScreen(
                 .padding(horizontal = 32.dp, vertical = 48.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("1Key", style = MaterialTheme.typography.displaySmall)
+            LogoSection(state = state)
             Spacer(Modifier.height(8.dp))
             Text(
                 if (requiresMasterPasswordRecheck || !isPinSetup) "Enter master password to unlock"
@@ -158,6 +167,111 @@ fun LockScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun LogoSection(state: AuthUiState) {
+    val textAlpha   = remember { Animatable(1f) }
+    val iconAlpha   = remember { Animatable(0f) }
+    val iconScale   = remember { Animatable(0.55f) }
+    val keyRotation = remember { Animatable(0f) }
+    val rippleScale = remember { Animatable(0f) }
+    val rippleAlpha = remember { Animatable(0f) }
+    val shakeOffset = remember { Animatable(0f) }
+
+    val keyColor = MaterialTheme.colorScheme.primary
+    val density = LocalDensity.current
+    val shakePx = remember(density) { with(density) { 10.dp.toPx() } }
+
+    LaunchedEffect(state) {
+        when (state) {
+            is AuthUiState.Unlocked -> {
+                // Phase 1 (0–180ms): "1Key" text fades out while key icon scales in
+                coroutineScope {
+                    launch { textAlpha.animateTo(0f, tween(80, easing = LinearEasing)) }
+                    launch {
+                        delay(30)
+                        coroutineScope {
+                            launch { iconAlpha.animateTo(1f, tween(120, easing = LinearEasing)) }
+                            launch { iconScale.animateTo(1f, tween(150, easing = EaseOutBack)) }
+                        }
+                    }
+                }
+                // Phase 2 (180–530ms): rotate key + radiate success ripple (concurrent)
+                coroutineScope {
+                    launch {
+                        keyRotation.animateTo(360f, tween(220, easing = FastOutSlowInEasing))
+                    }
+                    launch {
+                        rippleAlpha.snapTo(0.32f)
+                        coroutineScope {
+                            launch {
+                                rippleScale.animateTo(3.0f, tween(350, easing = LinearOutSlowInEasing))
+                            }
+                            launch {
+                                delay(50)
+                                rippleAlpha.animateTo(0f, tween(300, easing = LinearEasing))
+                            }
+                        }
+                    }
+                }
+            }
+            is AuthUiState.Error -> {
+                shakeOffset.animateTo(
+                    targetValue = 0f,
+                    animationSpec = keyframes {
+                        durationMillis = 400
+                        0f               at 0
+                        (-shakePx)       at 55
+                        shakePx          at 110
+                        (-shakePx * .6f) at 175
+                        (shakePx * .6f)  at 235
+                        (-shakePx * .3f) at 310
+                        0f               at 400
+                    },
+                )
+            }
+            else -> Unit
+        }
+    }
+
+    // Both composables always live in the tree — graphicsLayer alpha keeps layout stable.
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier.graphicsLayer { translationX = shakeOffset.value },
+    ) {
+        // Expanding ripple circle — starts invisible, pulses outward on success
+        Box(
+            modifier = Modifier
+                .size(100.dp)
+                .graphicsLayer {
+                    scaleX = rippleScale.value
+                    scaleY = rippleScale.value
+                    alpha  = rippleAlpha.value
+                }
+                .background(keyColor, CircleShape),
+        )
+        // Key icon — morphs in from the text and then spins
+        Icon(
+            Icons.Default.VpnKey,
+            contentDescription = "Vault unlocked",
+            modifier = Modifier
+                .size(80.dp)
+                .graphicsLayer {
+                    rotationZ = keyRotation.value
+                    scaleX    = iconScale.value
+                    scaleY    = iconScale.value
+                    alpha     = iconAlpha.value
+                },
+            tint = keyColor,
+        )
+        // App name — always composed for layout stability; fades out on success
+        Text(
+            "1Key",
+            style = MaterialTheme.typography.displaySmall,
+            modifier = Modifier.graphicsLayer { alpha = textAlpha.value },
+        )
     }
 }
 
