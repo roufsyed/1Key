@@ -3,13 +3,21 @@ package com.onekey.feature.importexport.presentation.screen
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateIntAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -23,8 +31,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,15 +62,21 @@ import com.onekey.feature.importexport.domain.SkipReason
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportEvent
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BackupScreen(
     onBack: () -> Unit,
+    onNavigateToVault: () -> Unit = {},
     viewModel: ImportExportViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    // Once an ImportPreview state is observed, the dialog stays open across Loading,
+    // ImportSuccess, and Error transitions until the user explicitly dismisses it.
+    var importDialogOpen by remember { mutableStateOf(false) }
 
     var selectedFormat by remember { mutableStateOf(ExportFormat.JSON) }
     var encryptExport by remember { mutableStateOf(true) }
@@ -138,6 +160,12 @@ fun BackupScreen(
     }
 
     LaunchedEffect(state) {
+        if (state is ImportExportUiState.ImportPreview) {
+            importDialogOpen = true
+        }
+        // While the import dialog is open it owns its own success/error rendering —
+        // suppress the generic result dialog so they don't stack.
+        if (importDialogOpen) return@LaunchedEffect
         when (val s = state) {
             is ImportExportUiState.Success -> {
                 resultDialogSuccess = true
@@ -161,7 +189,8 @@ fun BackupScreen(
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                 },
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -284,12 +313,40 @@ fun BackupScreen(
 
     // ── Import preview dialog ─────────────────────────────────────────────────
 
-    val previewState = state as? ImportExportUiState.ImportPreview
-    if (previewState != null) {
+    if (importDialogOpen) {
+        val coroutineScope = rememberCoroutineScope()
         ImportPreviewDialog(
-            state = previewState,
+            state = state,
             onConfirm = { opts -> viewModel.confirmImport(opts) },
-            onDismiss = { viewModel.cancelPendingImport() },
+            onCancelPreview = {
+                importDialogOpen = false
+                viewModel.cancelPendingImport()
+            },
+            onRetry = { opts -> viewModel.confirmImport(opts) },
+            onAcknowledgeError = {
+                importDialogOpen = false
+                viewModel.cancelPendingImport()
+            },
+            onDone = { result ->
+                importDialogOpen = false
+                viewModel.acknowledgeResult()
+                if (result.imported > 0) {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = if (result.imported == 1)
+                                "✓ 1 credential added to your vault"
+                            else
+                                "✓ ${result.imported} credentials added to your vault",
+                            duration = SnackbarDuration.Short,
+                        )
+                    }
+                }
+            },
+            onViewVault = {
+                importDialogOpen = false
+                viewModel.acknowledgeResult()
+                onNavigateToVault()
+            },
         )
     }
 
@@ -806,23 +863,49 @@ private fun TransferRow(good: Boolean, text: String) {
 
 // ── Import preview ────────────────────────────────────────────────────────────
 
+private enum class ImportDialogPhase { Preview, Importing, Success, Error, Other }
+
+private fun ImportExportUiState.toDialogPhase(): ImportDialogPhase = when (this) {
+    is ImportExportUiState.ImportPreview -> ImportDialogPhase.Preview
+    is ImportExportUiState.Loading -> ImportDialogPhase.Importing
+    is ImportExportUiState.ImportSuccess -> ImportDialogPhase.Success
+    is ImportExportUiState.Error -> ImportDialogPhase.Error
+    else -> ImportDialogPhase.Other
+}
+
 @Composable
 private fun ImportPreviewDialog(
-    state: ImportExportUiState.ImportPreview,
+    state: ImportExportUiState,
     onConfirm: (ImportFieldOptions) -> Unit,
-    onDismiss: () -> Unit,
+    onCancelPreview: () -> Unit,
+    onRetry: (ImportFieldOptions) -> Unit,
+    onAcknowledgeError: () -> Unit,
+    onDone: (ImportResult) -> Unit,
+    onViewVault: () -> Unit,
 ) {
-    var opts by remember {
-        mutableStateOf(ImportFieldOptions(customFieldKeys = state.customFieldKeys.toSet()))
+    // Capture the most recent ImportPreview so the preview body, opts state, and retry
+    // path all have stable parsed/keys context across phase transitions to Loading,
+    // ImportSuccess, and Error.
+    var capturedPreview by remember { mutableStateOf<ImportExportUiState.ImportPreview?>(null) }
+    LaunchedEffect(state) {
+        if (state is ImportExportUiState.ImportPreview) capturedPreview = state
     }
-    val totalCount = state.parsed.credentials.size
-    val failedCount = state.parsed.failed.size
+    val preview = capturedPreview ?: return
+
+    var opts by remember(preview) {
+        mutableStateOf(ImportFieldOptions(customFieldKeys = preview.customFieldKeys.toSet()))
+    }
+
+    val phase = state.toDialogPhase()
+    val totalCount = preview.parsed.credentials.size
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (phase == ImportDialogPhase.Preview) onCancelPreview() },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
+            // Back-press only closes during Preview — other phases require explicit
+            // user choice so we don't lose state mid-transaction.
+            dismissOnBackPress = phase == ImportDialogPhase.Preview,
             dismissOnClickOutside = false,
         ),
     ) {
@@ -833,184 +916,558 @@ private fun ImportPreviewDialog(
             shape = MaterialTheme.shapes.large,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-
-                // ── Header (compact: title + count on left, close on right) ────
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Import Preview", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            buildString {
-                                append(if (totalCount == 1) "1 credential" else "$totalCount credentials")
-                                if (failedCount > 0) append(" · $failedCount failed to parse")
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Cancel import")
-                    }
-                }
+                ImportDialogHeader(
+                    phase = phase,
+                    totalCount = totalCount,
+                    failedCount = preview.parsed.failed.size,
+                    onCancelPreview = onCancelPreview,
+                )
                 HorizontalDivider()
 
-                // ── Preview band (top, horizontal scroll, peek) ───────────────
-                if (state.previewItems.isNotEmpty()) {
-                    PreviewCarousel(
-                        items = state.previewItems,
-                        opts = opts,
-                        sensitiveCustomFieldKeys = state.sensitiveCustomFieldKeys,
-                    )
-                    HorizontalDivider()
-                } else if (totalCount == 0) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            "No credentials were found in this file.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Body — animated phase transitions. Default fade+scale gives a
+                // gentle handoff between phases without a structural reflow.
+                AnimatedContent(
+                    targetState = phase,
+                    modifier = Modifier.weight(1f),
+                    label = "import dialog phase",
+                ) { p ->
+                    when (p) {
+                        ImportDialogPhase.Preview -> PreviewPhaseBody(
+                            preview = preview,
+                            opts = opts,
+                            onOptsChange = { opts = it },
                         )
+                        ImportDialogPhase.Importing -> ImportingPhaseBody()
+                        ImportDialogPhase.Success -> {
+                            val res = (state as? ImportExportUiState.ImportSuccess)?.result
+                            if (res != null) SuccessPhaseBody(res) else Box(Modifier.fillMaxSize())
+                        }
+                        ImportDialogPhase.Error -> {
+                            val msg = (state as? ImportExportUiState.Error)?.message
+                                ?: "Import failed"
+                            ErrorPhaseBody(message = msg)
+                        }
+                        ImportDialogPhase.Other -> Box(Modifier.fillMaxSize())
                     }
-                    HorizontalDivider()
                 }
 
-                // ── Toggles (middle, scrollable) ──────────────────────────────
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                HorizontalDivider()
+                ImportDialogActions(
+                    phase = phase,
+                    totalCount = totalCount,
+                    onCancelPreview = onCancelPreview,
+                    onConfirm = { onConfirm(opts) },
+                    onRetry = { onRetry(opts) },
+                    onAcknowledgeError = onAcknowledgeError,
+                    onDone = {
+                        (state as? ImportExportUiState.ImportSuccess)
+                            ?.let { onDone(it.result) }
+                    },
+                    onViewVault = onViewVault,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportDialogHeader(
+    phase: ImportDialogPhase,
+    totalCount: Int,
+    failedCount: Int,
+    onCancelPreview: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                when (phase) {
+                    ImportDialogPhase.Importing -> "Importing"
+                    ImportDialogPhase.Success -> "Import complete"
+                    ImportDialogPhase.Error -> "Import failed"
+                    else -> "Import Preview"
+                },
+                style = MaterialTheme.typography.titleLarge,
+            )
+            if (phase == ImportDialogPhase.Preview) {
+                Text(
+                    buildString {
+                        append(if (totalCount == 1) "1 credential" else "$totalCount credentials")
+                        if (failedCount > 0) append(" · $failedCount failed to parse")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (phase == ImportDialogPhase.Preview) {
+            IconButton(onClick = onCancelPreview) {
+                Icon(Icons.Default.Close, contentDescription = "Cancel import")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImportDialogActions(
+    phase: ImportDialogPhase,
+    totalCount: Int,
+    onCancelPreview: () -> Unit,
+    onConfirm: () -> Unit,
+    onRetry: () -> Unit,
+    onAcknowledgeError: () -> Unit,
+    onDone: () -> Unit,
+    onViewVault: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        when (phase) {
+            ImportDialogPhase.Preview -> {
+                OutlinedButton(onClick = onCancelPreview, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(
+                    onClick = onConfirm,
+                    modifier = Modifier.weight(1f),
+                    enabled = totalCount > 0,
                 ) {
                     Text(
-                        "Fields to import",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        if (totalCount == 1) "Import 1 Credential"
+                        else "Import $totalCount Credentials"
                     )
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        ),
-                    ) {
-                        Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                            FieldToggleRow("Username", Icons.Default.Person, opts.username) {
-                                opts = opts.copy(username = it)
-                            }
-                            FieldToggleRow("Password", Icons.Default.Lock, opts.password) {
-                                opts = opts.copy(password = it)
-                            }
-                            FieldToggleRow("Website URL", Icons.Default.Language, opts.url) {
-                                opts = opts.copy(url = it)
-                            }
-                            FieldToggleRow("Notes", Icons.Default.StickyNote2, opts.notes) {
-                                opts = opts.copy(notes = it)
-                            }
-                            FieldToggleRow("2FA / TOTP secret", Icons.Default.Shield, opts.totp) {
-                                opts = opts.copy(totp = it)
-                            }
-                            FieldToggleRow("Categories / tags", Icons.Default.Label, opts.tags) {
-                                opts = opts.copy(tags = it)
-                            }
-                            if (state.customFieldKeys.isEmpty()) {
-                                FieldToggleRow(
-                                    label = "Custom fields (none in file)",
-                                    icon = Icons.Default.Tune,
-                                    checked = false,
-                                    enabled = false,
-                                ) {}
-                            } else {
-                                val allCfSelected = state.customFieldKeys.all { it in opts.customFieldKeys }
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Default.Tune,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(20.dp),
-                                        tint = if (allCfSelected) MaterialTheme.colorScheme.primary
-                                               else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                }
+            }
+            ImportDialogPhase.Importing -> {
+                // No actions while the save is in flight — leaving the dialog mid-write
+                // could orphan partial state.
+                Spacer(modifier = Modifier.weight(1f).height(40.dp))
+            }
+            ImportDialogPhase.Success -> {
+                OutlinedButton(onClick = onDone, modifier = Modifier.weight(1f)) {
+                    Text("Done")
+                }
+                Button(onClick = onViewVault, modifier = Modifier.weight(1f)) {
+                    Text("View Vault")
+                }
+            }
+            ImportDialogPhase.Error -> {
+                OutlinedButton(onClick = onAcknowledgeError, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(onClick = onRetry, modifier = Modifier.weight(1f)) {
+                    Text("Try Again")
+                }
+            }
+            ImportDialogPhase.Other -> {
+                Spacer(modifier = Modifier.weight(1f).height(40.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewPhaseBody(
+    preview: ImportExportUiState.ImportPreview,
+    opts: ImportFieldOptions,
+    onOptsChange: (ImportFieldOptions) -> Unit,
+) {
+    val totalCount = preview.parsed.credentials.size
+    Column(modifier = Modifier.fillMaxSize()) {
+        if (preview.previewItems.isNotEmpty()) {
+            PreviewCarousel(
+                items = preview.previewItems,
+                opts = opts,
+                sensitiveCustomFieldKeys = preview.sensitiveCustomFieldKeys,
+            )
+            HorizontalDivider()
+        } else if (totalCount == 0) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "No credentials were found in this file.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            HorizontalDivider()
+        }
+
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                "Fields to import",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                ),
+            ) {
+                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                    FieldToggleRow("Username", Icons.Default.Person, opts.username) {
+                        onOptsChange(opts.copy(username = it))
+                    }
+                    FieldToggleRow("Password", Icons.Default.Lock, opts.password) {
+                        onOptsChange(opts.copy(password = it))
+                    }
+                    FieldToggleRow("Website URL", Icons.Default.Language, opts.url) {
+                        onOptsChange(opts.copy(url = it))
+                    }
+                    FieldToggleRow("Notes", Icons.Default.StickyNote2, opts.notes) {
+                        onOptsChange(opts.copy(notes = it))
+                    }
+                    FieldToggleRow("2FA / TOTP secret", Icons.Default.Shield, opts.totp) {
+                        onOptsChange(opts.copy(totp = it))
+                    }
+                    FieldToggleRow("Categories / tags", Icons.Default.Label, opts.tags) {
+                        onOptsChange(opts.copy(tags = it))
+                    }
+                    if (preview.customFieldKeys.isEmpty()) {
+                        FieldToggleRow(
+                            label = "Custom fields (none in file)",
+                            icon = Icons.Default.Tune,
+                            checked = false,
+                            enabled = false,
+                        ) {}
+                    } else {
+                        val allCfSelected = preview.customFieldKeys.all { it in opts.customFieldKeys }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                Icons.Default.Tune,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp),
+                                tint = if (allCfSelected) MaterialTheme.colorScheme.primary
+                                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            )
+                            Text(
+                                "Custom fields (${preview.customFieldKeys.size})",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                                color = if (allCfSelected) MaterialTheme.colorScheme.onSurface
+                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(
+                                onClick = {
+                                    onOptsChange(
+                                        if (allCfSelected) opts.copy(customFieldKeys = emptySet())
+                                        else opts.copy(customFieldKeys = preview.customFieldKeys.toSet())
                                     )
-                                    Text(
-                                        "Custom fields (${state.customFieldKeys.size})",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.weight(1f),
-                                        color = if (allCfSelected) MaterialTheme.colorScheme.onSurface
-                                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    TextButton(
-                                        onClick = {
-                                            opts = if (allCfSelected)
-                                                opts.copy(customFieldKeys = emptySet())
-                                            else
-                                                opts.copy(customFieldKeys = state.customFieldKeys.toSet())
-                                        },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                    ) {
-                                        Text(
-                                            if (allCfSelected) "None" else "All",
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
-                                    }
-                                }
-                                state.customFieldKeys.forEach { key ->
-                                    val isSensitive = key in state.sensitiveCustomFieldKeys
-                                    FieldToggleRow(
-                                        label = key,
-                                        icon = if (isSensitive) Icons.Default.Lock else Icons.Default.Tune,
-                                        checked = key in opts.customFieldKeys,
-                                        indent = true,
-                                    ) { checked ->
-                                        opts = if (checked)
-                                            opts.copy(customFieldKeys = opts.customFieldKeys + key)
-                                        else
-                                            opts.copy(customFieldKeys = opts.customFieldKeys - key)
-                                    }
-                                }
+                                },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            ) {
+                                Text(
+                                    if (allCfSelected) "None" else "All",
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
                             }
-                            FieldToggleRow("Favourites", Icons.Default.Favorite, opts.isFavorite) {
-                                opts = opts.copy(isFavorite = it)
+                        }
+                        preview.customFieldKeys.forEach { key ->
+                            val isSensitive = key in preview.sensitiveCustomFieldKeys
+                            FieldToggleRow(
+                                label = key,
+                                icon = if (isSensitive) Icons.Default.Lock else Icons.Default.Tune,
+                                checked = key in opts.customFieldKeys,
+                                indent = true,
+                            ) { checked ->
+                                onOptsChange(
+                                    if (checked) opts.copy(customFieldKeys = opts.customFieldKeys + key)
+                                    else opts.copy(customFieldKeys = opts.customFieldKeys - key)
+                                )
                             }
                         }
                     }
-                }
-
-                // ── Action row (sticky bottom) ────────────────────────────────
-                HorizontalDivider()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Cancel") }
-                    Button(
-                        onClick = { onConfirm(opts) },
-                        modifier = Modifier.weight(1f),
-                        enabled = totalCount > 0,
-                    ) {
-                        Text(
-                            if (totalCount == 1) "Import 1 Credential"
-                            else "Import $totalCount Credentials"
-                        )
+                    FieldToggleRow("Favourites", Icons.Default.Favorite, opts.isFavorite) {
+                        onOptsChange(opts.copy(isFavorite = it))
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun ImportingPhaseBody() {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(40.dp), strokeWidth = 3.dp)
+            Text(
+                "Adding credentials to your vault…",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SuccessPhaseBody(result: ImportResult) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        AnimatedCheckmark(size = 88.dp)
+        Spacer(Modifier.height(4.dp))
+        CountUpText(
+            target = result.imported,
+            style = MaterialTheme.typography.displayMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            if (result.imported == 1) "credential imported" else "credentials imported",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (result.skipped.isNotEmpty() || result.failed.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            ResultBreakdownCard(result = result)
+        }
+    }
+}
+
+@Composable
+private fun ErrorPhaseBody(message: String) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(
+                        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                        shape = CircleShape,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.PriorityHigh,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            Text(
+                "We couldn't finish the import",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                "Your data is unchanged. Try again or cancel — your file selection and choices are preserved.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ResultBreakdownCard(result: ImportResult) {
+    var skippedExpanded by remember { mutableStateOf(false) }
+    var failedExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        ),
+    ) {
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            BreakdownRow(
+                icon = Icons.Default.CheckCircle,
+                tint = MaterialTheme.colorScheme.primary,
+                label = "Imported",
+                count = result.imported,
+                expandable = false,
+                expanded = false,
+                onToggleExpand = {},
+                detail = {},
+            )
+            if (result.skipped.isNotEmpty()) {
+                BreakdownRow(
+                    icon = Icons.Default.Block,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    label = "Skipped (already in vault)",
+                    count = result.skipped.size,
+                    expandable = true,
+                    expanded = skippedExpanded,
+                    onToggleExpand = { skippedExpanded = !skippedExpanded },
+                    detail = {
+                        Column {
+                            result.skipped.forEach { sk ->
+                                Text(
+                                    sk.title.ifBlank { "(no title)" } +
+                                        if (sk.username.isNotBlank()) " — ${sk.username}" else "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 48.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+            if (result.failed.isNotEmpty()) {
+                BreakdownRow(
+                    icon = Icons.Default.ErrorOutline,
+                    tint = MaterialTheme.colorScheme.error,
+                    label = "Failed to parse",
+                    count = result.failed.size,
+                    expandable = true,
+                    expanded = failedExpanded,
+                    onToggleExpand = { failedExpanded = !failedExpanded },
+                    detail = {
+                        Column {
+                            result.failed.forEach { f ->
+                                Text(
+                                    "Row ${f.rowIndex}: ${f.reason}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 48.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BreakdownRow(
+    icon: ImageVector,
+    tint: Color,
+    label: String,
+    count: Int,
+    expandable: Boolean,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    detail: @Composable () -> Unit,
+) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { if (expandable) it.clickable(onClick = onToggleExpand) else it }
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+            Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+            Text(count.toString(), style = MaterialTheme.typography.titleSmall, color = tint)
+            if (expandable) {
+                Icon(
+                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        AnimatedVisibility(visible = expanded) { detail() }
+    }
+}
+
+@Composable
+private fun AnimatedCheckmark(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    size: Dp = 64.dp,
+) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, tween(durationMillis = 600, easing = FastOutSlowInEasing))
+    }
+    Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        drawCircle(
+            color = color.copy(alpha = 0.12f),
+            radius = w / 2,
+            center = Offset(w / 2, h / 2),
+        )
+        val path = Path().apply {
+            moveTo(w * 0.28f, h * 0.52f)
+            lineTo(w * 0.45f, h * 0.68f)
+            lineTo(w * 0.74f, h * 0.36f)
+        }
+        val measure = PathMeasure().apply { setPath(path, false) }
+        val partial = Path()
+        measure.getSegment(0f, measure.length * progress.value, partial, true)
+        drawPath(
+            partial,
+            color = color,
+            style = Stroke(
+                width = w * 0.085f,
+                cap = StrokeCap.Round,
+                join = StrokeJoin.Round,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun CountUpText(
+    target: Int,
+    modifier: Modifier = Modifier,
+    style: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.displayMedium,
+    color: Color = LocalContentColor.current,
+) {
+    val animated by animateIntAsState(
+        targetValue = target,
+        animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        label = "count up",
+    )
+    Text(
+        text = animated.toString(),
+        style = style,
+        color = color,
+        modifier = modifier,
+    )
 }
 
 /**

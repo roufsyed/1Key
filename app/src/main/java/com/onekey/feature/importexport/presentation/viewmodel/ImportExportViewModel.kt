@@ -237,12 +237,17 @@ class ImportExportViewModel @Inject constructor(
     /** Called when the user confirms the import preview with their chosen field options. */
     fun confirmImport(fieldOptions: ImportFieldOptions) {
         val parsed = pendingParsedImport ?: return
-        pendingParsedImport = null
         viewModelScope.launch {
             _uiState.value = ImportExportUiState.Loading
             when (val result = importVault.saveImport(parsed, fieldOptions)) {
-                is AppResult.Success -> _uiState.value = ImportExportUiState.ImportSuccess(result.data)
-                is AppResult.Error -> _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
+                is AppResult.Success -> {
+                    // Only clear on success — keep parsed alive on error so the user can
+                    // retry from the dialog without re-picking the file.
+                    pendingParsedImport = null
+                    _uiState.value = ImportExportUiState.ImportSuccess(result.data)
+                }
+                is AppResult.Error ->
+                    _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
             }
         }
     }
@@ -289,6 +294,9 @@ class ImportExportViewModel @Inject constructor(
     }
 
     fun acknowledgeResult() {
+        // Defensive — confirmImport already nulls on success, but if any path lands
+        // here with stale parsed data, drop it so we don't leak across imports.
+        pendingParsedImport = null
         _uiState.value = ImportExportUiState.Idle
     }
 

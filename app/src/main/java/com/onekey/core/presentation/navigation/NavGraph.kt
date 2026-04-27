@@ -246,7 +246,15 @@ fun OneKeyNavGraph(
                 }
 
                 composable(Screen.Backup.route) {
-                    BackupScreen(onBack = { navController.popBackStack() })
+                    BackupScreen(
+                        onBack = { navController.popBackStack() },
+                        onNavigateToVault = {
+                            navController.navigate(Screen.Vault.route) {
+                                popUpTo(Screen.Vault.route) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
+                    )
                 }
 
                 composable(Screen.SetupPin.route) {
