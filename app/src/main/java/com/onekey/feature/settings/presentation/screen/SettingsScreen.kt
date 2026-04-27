@@ -106,14 +106,11 @@ fun SettingsScreen(
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
     var deleteVaultConfirmed by remember { mutableStateOf(false) }
+    // Pending state is scoped inside each dialog's `if (show…)` block (not here) so that
+    // every reopen seeds the radio from the current saved value, not the previous
+    // session's lingering preview selection.
     var showBackgroundLockDialog by remember { mutableStateOf(false) }
-    var pendingBackgroundLockTimeout by remember(backgroundLockTimeout) {
-        mutableStateOf(backgroundLockTimeout)
-    }
     var showInactivityLockDialog by remember { mutableStateOf(false) }
-    var pendingInactivityLockTimeout by remember(inactivityLockTimeout) {
-        mutableStateOf(inactivityLockTimeout)
-    }
     var tagToDelete by remember { mutableStateOf<Tag?>(null) }
 
     val topAppBarState = rememberTopAppBarState()
@@ -673,6 +670,9 @@ fun SettingsScreen(
     }
 
     if (showBackgroundLockDialog) {
+        var pendingBackgroundLockTimeout by remember {
+            mutableStateOf(backgroundLockTimeout)
+        }
         AlertDialog(
             onDismissRequest = { showBackgroundLockDialog = false },
             icon = { Icon(Icons.Default.Timer, contentDescription = null) },
@@ -725,6 +725,9 @@ fun SettingsScreen(
     }
 
     if (showInactivityLockDialog) {
+        var pendingInactivityLockTimeout by remember {
+            mutableStateOf(inactivityLockTimeout)
+        }
         AlertDialog(
             onDismissRequest = { showInactivityLockDialog = false },
             icon = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
