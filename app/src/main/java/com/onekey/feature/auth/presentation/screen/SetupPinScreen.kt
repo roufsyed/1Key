@@ -6,6 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
@@ -24,11 +25,14 @@ fun SetupPinScreen(
     onBack: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val isPinAlreadySetup by viewModel.isPinSetup.collectAsStateWithLifecycle()
 
-    var pin by remember { mutableStateOf("") }
-    var confirmPin by remember { mutableStateOf("") }
-    var step by remember { mutableStateOf(0) }
-    var showMismatch by remember { mutableStateOf(false) }
+    // rememberSaveable so a config change (rotation, theme switch) doesn't bounce the
+    // user back to step 0 mid-flow.
+    var pin by rememberSaveable { mutableStateOf("") }
+    var confirmPin by rememberSaveable { mutableStateOf("") }
+    var step by rememberSaveable { mutableStateOf(0) }
+    var showMismatch by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state) {
         if (state is AuthUiState.SetupComplete) {
@@ -45,10 +49,13 @@ fun SetupPinScreen(
         }
     }
 
+    val screenTitle = if (isPinAlreadySetup) "Change PIN" else "Set PIN"
+    val stepZeroBody = if (isPinAlreadySetup) "Enter a new 6-digit PIN" else "Enter a 6-digit PIN"
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (step == 0) "Set PIN" else "Confirm PIN") },
+                title = { Text(if (step == 0) screenTitle else "Confirm PIN") },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (step == 1) {
@@ -73,12 +80,15 @@ fun SetupPinScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                if (step == 0) "Enter a 6-digit PIN" else "Confirm your PIN",
+                if (step == 0) stepZeroBody else "Confirm your PIN",
                 style = MaterialTheme.typography.bodyLarge,
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Your PIN unlocks access to the vault key stored in Android KeyStore. The PIN digits themselves are never saved.",
+                if (isPinAlreadySetup)
+                    "Your existing PIN will be replaced with this new one. The PIN digits themselves are never saved."
+                else
+                    "Your PIN unlocks access to the vault key stored in Android KeyStore. The PIN digits themselves are never saved.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -107,7 +117,7 @@ fun SetupPinScreen(
                         } else {
                             confirmPin = new
                             if (new.length == 6) {
-                                if (pin == new) viewModel.setupPin(pin)
+                                if (pin == new) viewModel.setupPin(pin.toCharArray())
                                 else showMismatch = true
                             }
                         }

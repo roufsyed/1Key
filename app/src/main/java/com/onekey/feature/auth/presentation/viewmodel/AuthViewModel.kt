@@ -28,6 +28,11 @@ sealed class AuthUiState {
     data object SetupComplete : AuthUiState()
 }
 
+sealed class AuthEvent {
+    /** Three wrong PINs in a row — LockScreen forces the master-password fallback. */
+    data object PinAttemptsExhausted : AuthEvent()
+}
+
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val authRepository: AuthRepository,
@@ -39,6 +44,11 @@ class AuthViewModel @Inject constructor(
 
     private val _state = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
+
+    private val _events = MutableSharedFlow<AuthEvent>(extraBufferCapacity = 1)
+    val events: SharedFlow<AuthEvent> = _events.asSharedFlow()
+
+    private var pinAttemptsRemaining = MAX_PIN_ATTEMPTS
 
     val isSetupComplete: StateFlow<Boolean> = authRepository.isSetupComplete()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -89,12 +99,33 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun unlockWithPin(pin: String) {
+    fun unlockWithPin(pin: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            _state.value = when (val result = unlockVault.withPin(pin)) {
-                is AppResult.Success -> AuthUiState.Unlocked
-                is AppResult.Error -> AuthUiState.Error(result.message ?: "Invalid PIN")
+            // PBKDF2 derivation runs on Default; state mutation resumes on Main.
+            val result = withContext(Dispatchers.Default) { unlockVault.withPin(pin) }
+            when (result) {
+                is AppResult.Success -> {
+                    pinAttemptsRemaining = MAX_PIN_ATTEMPTS
+                    _state.value = AuthUiState.Unlocked
+                }
+                is AppResult.Error -> {
+                    pinAttemptsRemaining--
+                    if (pinAttemptsRemaining <= 0) {
+                        pinAttemptsRemaining = MAX_PIN_ATTEMPTS
+                        _events.emit(AuthEvent.PinAttemptsExhausted)
+                        _state.value = AuthUiState.Error(
+                            "Too many wrong PINs — please use your master password."
+                        )
+                    } else {
+                        _state.value = AuthUiState.Error(
+                            if (pinAttemptsRemaining == 1)
+                                "Wrong PIN — 1 attempt remaining."
+                            else
+                                "Wrong PIN — $pinAttemptsRemaining attempts remaining."
+                        )
+                    }
+                }
             }
         }
     }
@@ -109,10 +140,11 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun setupPin(pin: String) {
+    fun setupPin(pin: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            _state.value = when (val result = authRepository.setupPin(pin)) {
+            val result = withContext(Dispatchers.Default) { authRepository.setupPin(pin) }
+            _state.value = when (result) {
                 is AppResult.Success -> AuthUiState.SetupComplete
                 is AppResult.Error -> AuthUiState.Error(result.message ?: "Failed to set PIN")
             }
@@ -126,6 +158,10 @@ class AuthViewModel @Inject constructor(
     fun setBiometricError(message: String) { _state.value = AuthUiState.Error(message) }
 
     fun clearError() { if (_state.value is AuthUiState.Error) _state.value = AuthUiState.Idle }
+
+    private companion object {
+        const val MAX_PIN_ATTEMPTS = 3
+    }
 
     /**
      * Decrypts an encrypted 1Key backup, creates the vault using the backup password as the

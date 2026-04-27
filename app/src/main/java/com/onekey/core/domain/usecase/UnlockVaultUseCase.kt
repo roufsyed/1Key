@@ -10,6 +10,6 @@ class UnlockVaultUseCase @Inject constructor(
     suspend fun withPassword(password: CharArray): AppResult<Unit> =
         repository.unlockWithPassword(password)
 
-    suspend fun withPin(pin: String): AppResult<Unit> =
+    suspend fun withPin(pin: CharArray): AppResult<Unit> =
         repository.unlockWithPin(pin)
 }

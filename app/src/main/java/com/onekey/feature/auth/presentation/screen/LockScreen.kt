@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -50,6 +51,7 @@ import com.onekey.core.presentation.animation.PremiumMorphEasing
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
 import com.onekey.core.presentation.viewmodel.AppViewModel
+import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import kotlinx.coroutines.coroutineScope
@@ -72,6 +74,19 @@ fun LockScreen(
     val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lockScreenExitProgress = remember { Animatable(0f) }
+
+    // Local fallback flag — flipped by the "Forgot PIN? Use master password" button or
+    // when the VM signals exhausted PIN attempts. While true, the password section
+    // renders even though a PIN exists. rememberSaveable so config changes don't bounce
+    // the user back to PIN mid-fallback.
+    var forcePasswordFallback by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is AuthEvent.PinAttemptsExhausted -> { forcePasswordFallback = true }
+            }
+        }
+    }
 
     // Logo celebration plays first; then we hand the morph off to the app-root UnlockOverlay
     // so it can sit above the Scaffold and bottom nav while navigation completes.
@@ -197,17 +212,32 @@ fun LockScreen(
                     state = state,
                     onPasswordSubmit = { viewModel.unlockWithPassword(it) },
                 )
-            } else if (isPinSetup) {
+            } else if (isPinSetup && !forcePasswordFallback) {
                 PinUnlockSection(
                     state = state,
-                    onPinSubmit = { viewModel.unlockWithPin(it) },
-                    onFallbackToPassword = { viewModel.clearError() },
+                    onPinSubmit = { pin -> viewModel.unlockWithPin(pin.toCharArray()) },
+                    onFallbackToPassword = {
+                        forcePasswordFallback = true
+                        viewModel.clearError()
+                    },
                 )
             } else {
                 PasswordUnlockSection(
                     state = state,
                     onPasswordSubmit = { viewModel.unlockWithPassword(it) },
                 )
+                if (isPinSetup && forcePasswordFallback && !requiresMasterPasswordRecheck) {
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        onClick = {
+                            forcePasswordFallback = false
+                            viewModel.clearError()
+                        },
+                    ) {
+                        Text("Use PIN instead")
+                    }
+                }
             }
 
             Box(
