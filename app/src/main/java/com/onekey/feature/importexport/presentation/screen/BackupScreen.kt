@@ -323,6 +323,7 @@ fun BackupScreen(
                 viewModel.cancelPendingImport()
             },
             onRetry = { opts -> viewModel.confirmImport(opts) },
+            onBackToSelection = { viewModel.returnToImportPreview() },
             onAcknowledgeError = {
                 importDialogOpen = false
                 viewModel.cancelPendingImport()
@@ -879,6 +880,7 @@ private fun ImportPreviewDialog(
     onConfirm: (ImportFieldOptions) -> Unit,
     onCancelPreview: () -> Unit,
     onRetry: (ImportFieldOptions) -> Unit,
+    onBackToSelection: () -> Unit,
     onAcknowledgeError: () -> Unit,
     onDone: (ImportResult) -> Unit,
     onViewVault: () -> Unit,
@@ -958,6 +960,7 @@ private fun ImportPreviewDialog(
                     onCancelPreview = onCancelPreview,
                     onConfirm = { onConfirm(opts) },
                     onRetry = { onRetry(opts) },
+                    onBackToSelection = onBackToSelection,
                     onAcknowledgeError = onAcknowledgeError,
                     onDone = {
                         (state as? ImportExportUiState.ImportSuccess)
@@ -1020,6 +1023,7 @@ private fun ImportDialogActions(
     onCancelPreview: () -> Unit,
     onConfirm: () -> Unit,
     onRetry: () -> Unit,
+    onBackToSelection: () -> Unit,
     onAcknowledgeError: () -> Unit,
     onDone: () -> Unit,
     onViewVault: () -> Unit,
@@ -1060,11 +1064,16 @@ private fun ImportDialogActions(
                 }
             }
             ImportDialogPhase.Error -> {
+                // Three options on error: drop the import, return to the toggles to
+                // adjust selection (often fixes opt-related failures), or retry as-is.
                 OutlinedButton(onClick = onAcknowledgeError, modifier = Modifier.weight(1f)) {
                     Text("Cancel")
                 }
+                OutlinedButton(onClick = onBackToSelection, modifier = Modifier.weight(1f)) {
+                    Text("Back")
+                }
                 Button(onClick = onRetry, modifier = Modifier.weight(1f)) {
-                    Text("Try Again")
+                    Text("Retry")
                 }
             }
             ImportDialogPhase.Other -> {

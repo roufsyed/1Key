@@ -262,6 +262,21 @@ class ImportExportViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Re-emits the [ImportExportUiState.ImportPreview] state from the still-alive
+     * [pendingParsedImport]. Used by the dialog's "Back" action on the Error phase so
+     * the user can change their field selection and retry without re-picking the file.
+     */
+    fun returnToImportPreview() {
+        val parsed = pendingParsedImport ?: return
+        _uiState.value = ImportExportUiState.ImportPreview(
+            parsed = parsed,
+            previewItems = buildPreviewItems(parsed.credentials),
+            customFieldKeys = buildCustomFieldKeys(parsed.credentials),
+            sensitiveCustomFieldKeys = buildSensitiveCustomFieldKeys(parsed.credentials),
+        )
+    }
+
     // ── Export password verification (attempts-limited) ───────────────────────
 
     fun verifyPasswordForExport(password: CharArray) {
