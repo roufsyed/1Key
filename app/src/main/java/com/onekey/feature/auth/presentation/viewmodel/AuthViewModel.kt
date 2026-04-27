@@ -74,7 +74,9 @@ class AuthViewModel @Inject constructor(
     fun setup(password: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            val result = setupMasterPassword(password)
+            // Two PBKDF2 derivations (~600-1600ms total) — keep them off Main so the
+            // Loading spinner actually paints and the button visibly transitions.
+            val result = withContext(Dispatchers.Default) { setupMasterPassword(password) }
             if (result is AppResult.Success) {
                 appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
             }
@@ -88,7 +90,10 @@ class AuthViewModel @Inject constructor(
     fun unlockWithPassword(password: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            val result = unlockVault.withPassword(password)
+            // PBKDF2 verifier check (~300-800ms) — keep off Main so the button properly
+            // shows its spinner and disables on first tap, instead of freezing the UI
+            // and leaving the button looking unresponsive on subsequent retries.
+            val result = withContext(Dispatchers.Default) { unlockVault.withPassword(password) }
             if (result is AppResult.Success) {
                 appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
             }
@@ -179,7 +184,9 @@ class AuthViewModel @Inject constructor(
                     context.contentResolver.openInputStream(uri)
                         ?.use { inp -> tmpFile.outputStream().use { inp.copyTo(it) } }
                 }
-                when (val result = setupFromBackup(password, tmpFile.absolutePath)) {
+                when (val result = withContext(Dispatchers.Default) {
+                    setupFromBackup(password, tmpFile.absolutePath)
+                }) {
                     is AppResult.Success -> {
                         appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
                         _state.value = AuthUiState.SetupComplete

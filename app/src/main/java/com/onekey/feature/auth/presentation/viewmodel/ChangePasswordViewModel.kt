@@ -5,10 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 sealed class ChangePasswordUiState {
@@ -29,7 +31,12 @@ class ChangePasswordViewModel @Inject constructor(
     fun changePassword(oldPassword: CharArray, newPassword: CharArray) {
         viewModelScope.launch {
             _state.value = ChangePasswordUiState.Loading
-            _state.value = when (val result = authRepository.changePassword(oldPassword, newPassword)) {
+            // Two PBKDF2 derivations (verify old + derive new verifier) on Default so
+            // the loading state paints and the button doesn't freeze.
+            val result = withContext(Dispatchers.Default) {
+                authRepository.changePassword(oldPassword, newPassword)
+            }
+            _state.value = when (result) {
                 is AppResult.Success -> ChangePasswordUiState.Success
                 is AppResult.Error -> ChangePasswordUiState.Error(result.message ?: "Failed to change password")
             }
