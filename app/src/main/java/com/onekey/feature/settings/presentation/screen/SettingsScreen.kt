@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -107,7 +108,20 @@ fun SettingsScreen(
     var pendingLockTimeout by remember(lockTimeout) { mutableStateOf(lockTimeout) }
     var tagToDelete by remember { mutableStateOf<Tag?>(null) }
 
+    val topAppBarState = rememberTopAppBarState()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
+        state = topAppBarState,
+        canScroll = { isHideTopBarOnScroll },
+    )
+    LaunchedEffect(isHideTopBarOnScroll) {
+        if (!isHideTopBarOnScroll) {
+            topAppBarState.heightOffset = 0f
+            topAppBarState.contentOffset = 0f
+        }
+    }
+
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
@@ -116,6 +130,7 @@ fun SettingsScreen(
                         IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                     }
                 },
+                scrollBehavior = scrollBehavior,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
