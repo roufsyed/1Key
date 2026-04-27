@@ -93,11 +93,10 @@ fun TwoFaListScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
             ) {
                 items(entriesList, key = { it.credential.id }) { entry ->
-                    TotpEntryCard(
+                    TotpEntryRow(
                         entry = entry,
                         onLongClick = { pendingDelete = entry },
                         onCopyCode = { code ->
@@ -139,6 +138,7 @@ fun TwoFaListScreen(
                             }
                         },
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
         }
@@ -178,68 +178,69 @@ fun TwoFaListScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TotpEntryCard(
+private fun TotpEntryRow(
     entry: TotpEntry,
     onLongClick: () -> Unit,
     onCopyCode: (String) -> Unit,
 ) {
-    Card(
+    // Flat clickable row to match the home / all-items list language. The TOTP code stays
+    // the visual hero — same monospace + countdown ring, just without card chrome.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick),
+            .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(entry.credential.title, style = MaterialTheme.typography.titleMedium)
-            if (entry.credential.username.isNotEmpty()) {
+        Text(entry.credential.title, style = MaterialTheme.typography.titleMedium)
+        if (entry.credential.username.isNotEmpty()) {
+            Text(
+                entry.credential.username,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (entry.isLinkedCredential) {
+            val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
+            Spacer(Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    modifier = Modifier.size(11.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
                 Text(
-                    entry.credential.username,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    categoryLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
-            if (entry.isLinkedCredential) {
-                val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Icon(
-                        Icons.Default.Lock,
-                        contentDescription = null,
-                        modifier = Modifier.size(11.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        categoryLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = entry.code.chunked(3).joinToString(" "),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 32.sp,
-                        letterSpacing = 4.sp,
-                    ),
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = entry.code.chunked(3).joinToString(" "),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 32.sp,
+                    letterSpacing = 4.sp,
+                ),
+                color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(
+                    progress = { entry.progress },
+                    modifier = Modifier.size(36.dp),
+                    strokeWidth = 3.dp,
                     color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
+                            else MaterialTheme.colorScheme.primary,
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(
-                        progress = { entry.progress },
-                        modifier = Modifier.size(36.dp),
-                        strokeWidth = 3.dp,
-                        color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.primary,
-                    )
-                    Text("${entry.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
-                }
+                Text("${entry.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
             }
         }
     }
