@@ -4,10 +4,16 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,6 +38,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportResult
@@ -826,40 +834,61 @@ private fun ImportPreviewDialog(
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
 
-                // ── Header ────────────────────────────────────────────────────
+                // ── Header (compact: title + count on left, close on right) ────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 20.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                        .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Import Preview", style = MaterialTheme.typography.titleLarge)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Import Preview", style = MaterialTheme.typography.titleLarge)
+                        Text(
+                            buildString {
+                                append(if (totalCount == 1) "1 credential" else "$totalCount credentials")
+                                if (failedCount > 0) append(" · $failedCount failed to parse")
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Cancel import")
                     }
                 }
                 HorizontalDivider()
 
-                // ── Scrollable body ───────────────────────────────────────────
+                // ── Preview band (top, horizontal scroll, peek) ───────────────
+                if (state.previewItems.isNotEmpty()) {
+                    PreviewCarousel(
+                        items = state.previewItems,
+                        opts = opts,
+                        sensitiveCustomFieldKeys = state.sensitiveCustomFieldKeys,
+                    )
+                    HorizontalDivider()
+                } else if (totalCount == 0) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "No credentials were found in this file.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider()
+                }
+
+                // ── Toggles (middle, scrollable) ──────────────────────────────
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    // Summary
-                    Text(
-                        buildString {
-                            append(if (totalCount == 1) "1 credential found" else "$totalCount credentials found")
-                            if (failedCount > 0) append(" · $failedCount could not be parsed")
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    // Field toggles
                     Text(
                         "Fields to import",
                         style = MaterialTheme.typography.titleSmall,
@@ -954,33 +983,9 @@ private fun ImportPreviewDialog(
                             }
                         }
                     }
-
-                    // Per-category sample
-                    if (state.previewItems.isNotEmpty()) {
-                        HorizontalDivider()
-                        Text(
-                            "Sample — one from each category",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            "This is how each credential will look after import with the fields selected above.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        state.previewItems.forEach { credential ->
-                            PreviewCredentialCard(credential = credential, opts = opts)
-                        }
-                    } else if (totalCount == 0) {
-                        Text(
-                            "No credentials were found in this file.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
 
-                // ── Action row ────────────────────────────────────────────────
+                // ── Action row (sticky bottom) ────────────────────────────────
                 HorizontalDivider()
                 Row(
                     modifier = Modifier
@@ -1004,6 +1009,57 @@ private fun ImportPreviewDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Horizontally scrolling preview band. Cards are 82% of dialog width so the next card
+ * "peeks" in — that's the affordance for "swipe to see more". Pager counter shows
+ * "n of total" below the row when there's more than one sample.
+ */
+@Composable
+private fun PreviewCarousel(
+    items: List<Credential>,
+    opts: ImportFieldOptions,
+    sensitiveCustomFieldKeys: Set<String>,
+) {
+    val listState = rememberLazyListState()
+    val currentIndex by remember(items) {
+        derivedStateOf {
+            (listState.firstVisibleItemIndex + 1).coerceAtMost(items.size).coerceAtLeast(1)
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 6.dp)) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxWidth().height(280.dp),
+        ) {
+            val cardWidth = maxWidth * 0.82f
+            LazyRow(
+                state = listState,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(items) { credential ->
+                    PreviewCredentialCard(
+                        credential = credential,
+                        opts = opts,
+                        sensitiveCustomFieldKeys = sensitiveCustomFieldKeys,
+                        modifier = Modifier.width(cardWidth).fillMaxHeight(),
+                    )
+                }
+            }
+        }
+        if (items.size > 1) {
+            Text(
+                "$currentIndex of ${items.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            )
         }
     }
 }
@@ -1058,24 +1114,37 @@ private fun FieldToggleRow(
 }
 
 @Composable
-private fun PreviewCredentialCard(credential: Credential, opts: ImportFieldOptions) {
+private fun PreviewCredentialCard(
+    credential: Credential,
+    opts: ImportFieldOptions,
+    sensitiveCustomFieldKeys: Set<String>,
+    modifier: Modifier = Modifier,
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface,
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            // Title row — always shown
+            // Title row with type icon — always shown.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                Icon(
+                    imageVector = previewTypeIcon(credential.type),
+                    contentDescription = credential.type.displayName,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
                 Text(
                     credential.title.ifBlank { "(no title)" },
                     style = MaterialTheme.typography.bodyMedium,
@@ -1094,25 +1163,27 @@ private fun PreviewCredentialCard(credential: Credential, opts: ImportFieldOptio
                 }
             }
 
-            if (opts.username && credential.username.isNotBlank())
+            // Each row wraps in AnimatedVisibility so toggle flips animate the row in/out
+            // while the user can see the card. This is the "live cross-talk" — the panel
+            // below the card (toggles) directly drives motion in the card above.
+            AnimatedRow(visible = opts.username && credential.username.isNotBlank()) {
                 PreviewFieldRow(Icons.Default.Person, credential.username)
-
-            if (opts.password && credential.password.isNotBlank())
+            }
+            AnimatedRow(visible = opts.password && credential.password.isNotBlank()) {
                 PreviewFieldRow(Icons.Default.Lock, "••••••••")
-
-            if (opts.url && credential.url.isNotBlank())
+            }
+            AnimatedRow(visible = opts.url && credential.url.isNotBlank()) {
                 PreviewFieldRow(Icons.Default.Language, credential.url)
-
-            if (opts.notes && credential.notes.isNotBlank()) {
-                val preview = if (credential.notes.length > 80)
-                    credential.notes.take(80) + "…" else credential.notes
+            }
+            AnimatedRow(visible = opts.notes && credential.notes.isNotBlank()) {
+                val preview = if (credential.notes.length > 60)
+                    credential.notes.take(60) + "…" else credential.notes
                 PreviewFieldRow(Icons.Default.StickyNote2, preview)
             }
-
-            if (opts.totp && credential.totpSecret != null)
+            AnimatedRow(visible = opts.totp && credential.totpSecret != null) {
                 PreviewFieldRow(Icons.Default.Shield, "2FA / TOTP enabled")
-
-            if (opts.tags && credential.tags.isNotEmpty()) {
+            }
+            AnimatedRow(visible = opts.tags && credential.tags.isNotEmpty()) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1142,31 +1213,59 @@ private fun PreviewCredentialCard(credential: Credential, opts: ImportFieldOptio
                 }
             }
 
-            val visibleCustomFields = credential.customFields.filter { it.key in opts.customFieldKeys }
-            visibleCustomFields.forEach { field ->
-                PreviewFieldRow(
-                    if (field.isSensitive) Icons.Default.Lock else Icons.Default.Tune,
-                    "${field.key}: ${if (field.isSensitive) "••••••••" else field.value}",
-                )
+            credential.customFields.forEach { field ->
+                AnimatedRow(visible = field.key in opts.customFieldKeys) {
+                    val sensitive = field.isSensitive || field.key in sensitiveCustomFieldKeys
+                    PreviewFieldRow(
+                        icon = if (sensitive) Icons.Default.Lock else Icons.Default.Tune,
+                        value = "${field.key}: ${if (field.isSensitive) "••••••••" else field.value}",
+                    )
+                }
             }
 
-            // Warn when all optional fields are hidden
+            // Empty-state — shown when every optional field is toggled off.
             val anyVisible = (opts.username && credential.username.isNotBlank()) ||
                 (opts.password && credential.password.isNotBlank()) ||
                 (opts.url && credential.url.isNotBlank()) ||
                 (opts.notes && credential.notes.isNotBlank()) ||
                 (opts.totp && credential.totpSecret != null) ||
                 (opts.tags && credential.tags.isNotEmpty()) ||
-                visibleCustomFields.isNotEmpty()
-            if (!anyVisible) {
+                credential.customFields.any { it.key in opts.customFieldKeys }
+            AnimatedRow(visible = !anyVisible) {
                 Text(
-                    "Only the title will be imported with current field selection.",
+                    "Only the title will be imported.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
                 )
             }
         }
     }
+}
+
+@Composable
+private fun AnimatedRow(visible: Boolean, content: @Composable () -> Unit) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn() + expandVertically(),
+        exit = fadeOut() + shrinkVertically(),
+    ) {
+        content()
+    }
+}
+
+// Local copy of the type→icon mapping used by CredentialDetailScreen. Kept private here
+// so this screen has no cross-feature dependency; if a third caller appears, lift to a util.
+private fun previewTypeIcon(type: CredentialType) = when (type) {
+    CredentialType.LOGIN -> Icons.Default.Lock
+    CredentialType.SECURE_NOTE -> Icons.Default.Description
+    CredentialType.CREDIT_CARD -> Icons.Default.CreditCard
+    CredentialType.PASSWORD -> Icons.Default.Key
+    CredentialType.BANK_ACCOUNT -> Icons.Default.AccountBalance
+    CredentialType.DATABASE -> Icons.Default.Storage
+    CredentialType.EMAIL -> Icons.Default.Email
+    CredentialType.SERVER -> Icons.Default.Computer
+    CredentialType.OTHER -> Icons.Default.Label
 }
 
 @Composable
