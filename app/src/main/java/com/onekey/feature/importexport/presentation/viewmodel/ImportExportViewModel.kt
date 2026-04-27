@@ -93,7 +93,10 @@ class ImportExportViewModel @Inject constructor(
             val tmpFile = File(context.cacheDir, "export.${format.name.lowercase()}")
             try {
                 withContext(Dispatchers.IO) { tmpFile.createNewFile() }
-                when (val result = exportVault(format, tmpFile.absolutePath)) {
+                // Off-main: gathers + decrypts every credential, then serialises with gson.
+                when (val result = withContext(Dispatchers.Default) {
+                    exportVault(format, tmpFile.absolutePath)
+                }) {
                     is AppResult.Success -> {
                         withContext(Dispatchers.IO) {
                             context.contentResolver.openOutputStream(uri)
@@ -131,7 +134,11 @@ class ImportExportViewModel @Inject constructor(
             val tmpFile = File(context.cacheDir, "export_enc.1key")
             try {
                 withContext(Dispatchers.IO) { tmpFile.createNewFile() }
-                when (val result = exportVault.encrypted(format, pw, tmpFile.absolutePath)) {
+                // Off-main: serialise + AES-GCM encrypt the whole vault with the user's
+                // backup password. Heavier than plain export.
+                when (val result = withContext(Dispatchers.Default) {
+                    exportVault.encrypted(format, pw, tmpFile.absolutePath)
+                }) {
                     is AppResult.Success -> {
                         withContext(Dispatchers.IO) {
                             context.contentResolver.openOutputStream(uri)
@@ -176,12 +183,19 @@ class ImportExportViewModel @Inject constructor(
                     context.contentResolver.openInputStream(uri)
                         ?.use { inp -> tmpFile.outputStream().use { inp.copyTo(it) } }
                 }
-                if (importVault.isEncrypted(tmpFile.absolutePath)) {
+                val encrypted = withContext(Dispatchers.IO) {
+                    importVault.isEncrypted(tmpFile.absolutePath)
+                }
+                if (encrypted) {
                     pendingImportFile = tmpFile
                     keepFile = true
                     _uiState.value = ImportExportUiState.AwaitingImportPassword()
                 } else {
-                    when (val result = importVault.parseOnly(tmpFile.absolutePath)) {
+                    // Off-main: read entire file + JSON/CSV parse. With multi-MB exports
+                    // this can take hundreds of ms.
+                    when (val result = withContext(Dispatchers.Default) {
+                        importVault.parseOnly(tmpFile.absolutePath)
+                    }) {
                         is AppResult.Success -> {
                             val parsed = result.data
                             pendingParsedImport = parsed
@@ -208,7 +222,10 @@ class ImportExportViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = ImportExportUiState.Loading
             try {
-                when (val result = importVault.parseOnlyEncrypted(file.absolutePath, password)) {
+                // Off-main: PBKDF2 + AES-GCM decrypt of the backup file before parse.
+                when (val result = withContext(Dispatchers.Default) {
+                    importVault.parseOnlyEncrypted(file.absolutePath, password)
+                }) {
                     is AppResult.Success -> {
                         val parsed = result.data
                         withContext(Dispatchers.IO) { file.delete() }
@@ -239,7 +256,11 @@ class ImportExportViewModel @Inject constructor(
         val parsed = pendingParsedImport ?: return
         viewModelScope.launch {
             _uiState.value = ImportExportUiState.Loading
-            when (val result = importVault.saveImport(parsed, fieldOptions)) {
+            // Off-main: full-vault dedupe (decrypts every existing credential) plus
+            // encrypt + write of every new row. Easily the heaviest action in the app.
+            when (val result = withContext(Dispatchers.Default) {
+                importVault.saveImport(parsed, fieldOptions)
+            }) {
                 is AppResult.Success -> {
                     // Only clear on success — keep parsed alive on error so the user can
                     // retry from the dialog without re-picking the file.

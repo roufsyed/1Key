@@ -9,6 +9,7 @@ import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
 import com.onekey.feature.twofa.domain.TotpGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -43,6 +44,8 @@ class TwoFaListViewModel @Inject constructor(
     val hideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    // HMAC-SHA1 work for every TOTP row, recomputed every second. flowOn keeps the
+    // ticking loop and code generation off the main thread.
     val entries: StateFlow<List<TotpEntry>?> = credentialRepository.observeWithTotp()
         .transformLatest { credentials ->
             while (true) {
@@ -55,6 +58,7 @@ class TwoFaListViewModel @Inject constructor(
                 delay(1_000L)
             }
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun removeTotp(entry: TotpEntry) {
