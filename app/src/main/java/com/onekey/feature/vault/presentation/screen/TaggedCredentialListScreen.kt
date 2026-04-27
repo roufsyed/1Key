@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -53,6 +54,22 @@ fun TaggedCredentialListScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    // Top bar collapses on scroll to give the list more room. canScroll is gated on
+    // selection-mode so the action bar (Cancel / Delete) stays pinned while the user
+    // is mid-action; we also snap the bar back to visible the moment selection starts
+    // in case it had collapsed before.
+    val topAppBarState = rememberTopAppBarState()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
+        state = topAppBarState,
+        canScroll = { !isSelectionMode },
+    )
+    LaunchedEffect(isSelectionMode) {
+        if (isSelectionMode) {
+            topAppBarState.heightOffset = 0f
+            topAppBarState.contentOffset = 0f
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.event.collectLatest { event ->
             when (event) {
@@ -71,6 +88,7 @@ fun TaggedCredentialListScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             if (isSelectionMode) {
                 TopAppBar(
@@ -89,6 +107,7 @@ fun TaggedCredentialListScreen(
                             )
                         }
                     },
+                    scrollBehavior = scrollBehavior,
                 )
             } else {
                 TopAppBar(
@@ -122,6 +141,7 @@ fun TaggedCredentialListScreen(
                             }
                         }
                     },
+                    scrollBehavior = scrollBehavior,
                 )
             }
         },

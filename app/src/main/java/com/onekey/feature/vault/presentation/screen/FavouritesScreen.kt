@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
@@ -52,6 +53,20 @@ fun FavouritesScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
+    // Top bar collapses on scroll except during selection mode, where action buttons
+    // need to stay visible. Snap back to fully expanded the moment selection starts.
+    val topAppBarState = rememberTopAppBarState()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
+        state = topAppBarState,
+        canScroll = { !isSelectionMode },
+    )
+    LaunchedEffect(isSelectionMode) {
+        if (isSelectionMode) {
+            topAppBarState.heightOffset = 0f
+            topAppBarState.contentOffset = 0f
+        }
+    }
+
     LaunchedEffect(Unit) {
         viewModel.event.collectLatest { event ->
             when (event) {
@@ -70,6 +85,7 @@ fun FavouritesScreen(
     }
 
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             if (isSelectionMode) {
                 TopAppBar(
@@ -88,6 +104,7 @@ fun FavouritesScreen(
                             )
                         }
                     },
+                    scrollBehavior = scrollBehavior,
                 )
             } else {
                 TopAppBar(
@@ -116,6 +133,7 @@ fun FavouritesScreen(
                             }
                         }
                     },
+                    scrollBehavior = scrollBehavior,
                 )
             }
         },
