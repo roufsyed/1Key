@@ -44,6 +44,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.util.toFormattedDateTime
@@ -54,6 +55,21 @@ import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailUiState
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailViewModel
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+
+private data class FieldSuggestion(val label: String, val sensitive: Boolean)
+
+private fun fieldSuggestionsFor(type: CredentialType): List<FieldSuggestion> = when (type) {
+    CredentialType.BANK_ACCOUNT -> listOf(
+        FieldSuggestion("Account Holder", sensitive = false),
+        FieldSuggestion("Account Number", sensitive = true),
+        FieldSuggestion("Bank Name", sensitive = false),
+        FieldSuggestion("IFSC / Routing", sensitive = true),
+        FieldSuggestion("IBAN", sensitive = true),
+        FieldSuggestion("Branch", sensitive = false),
+        FieldSuggestion("PIN", sensitive = true),
+    )
+    else -> emptyList()
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -153,37 +169,41 @@ private fun CredentialViewContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (credential.username.isNotEmpty()) {
-                DetailField(
-                    label = "Username",
-                    value = credential.username,
-                    trailing = {
-                        IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.username)) }) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy username")
-                        }
-                    }
-                )
-            }
-            if (credential.password.isNotEmpty()) {
-                DetailField(
-                    label = "Password",
-                    value = if (showPassword) credential.password else "••••••••",
-                    trailing = {
-                        Row {
-                            IconButton(onClick = { showPassword = !showPassword }) {
-                                Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                            }
-                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.password)) }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy password")
+            if (credential.type == CredentialType.SECURE_NOTE) {
+                if (credential.notes.isNotEmpty()) DetailField("Content", credential.notes)
+            } else {
+                if (credential.username.isNotEmpty()) {
+                    DetailField(
+                        label = "Username",
+                        value = credential.username,
+                        trailing = {
+                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.username)) }) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy username")
                             }
                         }
-                    }
-                )
-            }
-            if (credential.url.isNotEmpty()) DetailField("URL", credential.url)
-            if (credential.notes.isNotEmpty()) DetailField("Notes", credential.notes)
-            if (credential.totpSecret != null) {
-                TotpWidget(secret = credential.totpSecret)
+                    )
+                }
+                if (credential.password.isNotEmpty()) {
+                    DetailField(
+                        label = "Password",
+                        value = if (showPassword) credential.password else "••••••••",
+                        trailing = {
+                            Row {
+                                IconButton(onClick = { showPassword = !showPassword }) {
+                                    Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                                }
+                                IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.password)) }) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy password")
+                                }
+                            }
+                        }
+                    )
+                }
+                if (credential.url.isNotEmpty()) DetailField("URL", credential.url)
+                if (credential.notes.isNotEmpty()) DetailField("Notes", credential.notes)
+                if (credential.totpSecret != null && credential.type != CredentialType.BANK_ACCOUNT) {
+                    TotpWidget(secret = credential.totpSecret)
+                }
             }
             credential.customFields.forEach { field ->
                 DetailField(
@@ -434,60 +454,85 @@ private fun CredentialEditContent(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
-            OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
-                label = { Text("Username") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(onClick = { showOcrScanner = true }) {
-                        Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                    }
-                },
-            )
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text(if (credential.type.requiresPassword) "Password *" else "Password") },
-                modifier = Modifier.fillMaxWidth(),
-                isError = credential.type.requiresPassword && password.isBlank(),
-                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                trailingIcon = {
-                    Row {
-                        IconButton(onClick = { showPasswordGenerator = true }) {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = "Generate password")
+
+            // Type-aware body. SECURE_NOTE drops auth fields entirely and promotes
+            // `notes` to a primary content area; BANK_ACCOUNT hides TOTP since 2FA-on-bank
+            // doesn't fit this app's TOTP shape. Other types keep the full Login layout.
+            when (credential.type) {
+                CredentialType.SECURE_NOTE -> {
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Content") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 12,
+                        maxLines = 30,
+                        trailingIcon = {
+                            IconButton(onClick = { showOcrScanner = true }) {
+                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                            }
+                        },
+                    )
+                }
+                else -> {
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("Username") },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            IconButton(onClick = { showOcrScanner = true }) {
+                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                            }
+                        },
+                    )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(if (credential.type.requiresPassword) "Password *" else "Password") },
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = credential.type.requiresPassword && password.isBlank(),
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            Row {
+                                IconButton(onClick = { showPasswordGenerator = true }) {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Generate password")
+                                }
+                                IconButton(onClick = { showPassword = !showPassword }) {
+                                    Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                                }
+                            }
                         }
-                        IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                        }
+                    )
+                    OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("Notes") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        trailingIcon = {
+                            IconButton(onClick = { showOcrScanner = true }) {
+                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                            }
+                        },
+                    )
+                    if (credential.type != CredentialType.BANK_ACCOUNT) {
+                        OutlinedTextField(
+                            value = totpSecret,
+                            onValueChange = { totpSecret = it },
+                            label = { Text("TOTP Secret (base32)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            trailingIcon = {
+                                IconButton(onClick = { showTotpScanner = true }) {
+                                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR code")
+                                }
+                            },
+                        )
                     }
                 }
-            )
-            OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                label = { Text("Notes") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                trailingIcon = {
-                    IconButton(onClick = { showOcrScanner = true }) {
-                        Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                    }
-                },
-            )
-            OutlinedTextField(
-                value = totpSecret,
-                onValueChange = { totpSecret = it },
-                label = { Text("TOTP Secret (base32)") },
-                modifier = Modifier.fillMaxWidth(),
-                trailingIcon = {
-                    IconButton(onClick = { showTotpScanner = true }) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR code")
-                    }
-                },
-            )
+            }
 
             // Category (chip-based, non-editable)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -525,6 +570,49 @@ private fun CredentialEditContent(
                             )
                         },
                     )
+                }
+            }
+
+            // Type-specific quick-add suggestions. Tapping a chip drops a pre-labeled
+            // CustomField with a sensible sensitive default — no reserved storage, no
+            // schema impact. Already-added labels are filtered out to avoid duplicates.
+            val suggestions = fieldSuggestionsFor(credential.type)
+            val activeSuggestions = suggestions.filter { suggestion ->
+                customFields.none { it.key.equals(suggestion.label, ignoreCase = true) }
+            }
+            if (activeSuggestions.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        "Suggested fields",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        activeSuggestions.forEach { suggestion ->
+                            AssistChip(
+                                onClick = {
+                                    if (canAddField) {
+                                        customFields = customFields + CustomField(
+                                            key = suggestion.label,
+                                            value = "",
+                                            isSensitive = suggestion.sensitive,
+                                        )
+                                    }
+                                },
+                                label = { Text(suggestion.label) },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(AssistChipDefaults.IconSize),
+                                    )
+                                },
+                            )
+                        }
+                    }
                 }
             }
 
