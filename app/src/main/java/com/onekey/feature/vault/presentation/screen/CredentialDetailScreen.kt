@@ -68,7 +68,53 @@ private fun fieldSuggestionsFor(type: CredentialType): List<FieldSuggestion> = w
         FieldSuggestion("Branch", sensitive = false),
         FieldSuggestion("PIN", sensitive = true),
     )
+    CredentialType.CREDIT_CARD -> listOf(
+        FieldSuggestion("Cardholder", sensitive = false),
+        FieldSuggestion("Card Number", sensitive = true),
+        FieldSuggestion("Expiry", sensitive = false),
+        FieldSuggestion("CVV", sensitive = true),
+        FieldSuggestion("PIN", sensitive = true),
+        FieldSuggestion("Billing Zip", sensitive = false),
+        FieldSuggestion("Network", sensitive = false),
+    )
+    CredentialType.SERVER -> listOf(
+        FieldSuggestion("Host", sensitive = false),
+        FieldSuggestion("Port", sensitive = false),
+        FieldSuggestion("SSH Key Path", sensitive = false),
+        FieldSuggestion("API Token", sensitive = true),
+    )
+    CredentialType.DATABASE -> listOf(
+        FieldSuggestion("Host", sensitive = false),
+        FieldSuggestion("Port", sensitive = false),
+        FieldSuggestion("Database", sensitive = false),
+        FieldSuggestion("Connection String", sensitive = true),
+    )
+    CredentialType.EMAIL -> listOf(
+        FieldSuggestion("IMAP Host", sensitive = false),
+        FieldSuggestion("SMTP Host", sensitive = false),
+        FieldSuggestion("App Password", sensitive = true),
+    )
     else -> emptyList()
+}
+
+// Types that don't surface auth (username/password/url/totp) inputs at all. Notes still
+// flows through `notes` — sometimes promoted to a primary content area.
+private val NO_AUTH_TYPES = setOf(
+    CredentialType.SECURE_NOTE,
+    CredentialType.CREDIT_CARD,
+    CredentialType.OTHER,
+)
+
+private fun typeIcon(type: CredentialType) = when (type) {
+    CredentialType.LOGIN -> Icons.Default.Lock
+    CredentialType.SECURE_NOTE -> Icons.Default.Description
+    CredentialType.CREDIT_CARD -> Icons.Default.CreditCard
+    CredentialType.PASSWORD -> Icons.Default.Key
+    CredentialType.BANK_ACCOUNT -> Icons.Default.AccountBalance
+    CredentialType.DATABASE -> Icons.Default.Storage
+    CredentialType.EMAIL -> Icons.Default.Email
+    CredentialType.SERVER -> Icons.Default.Computer
+    CredentialType.OTHER -> Icons.Default.Label
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -144,7 +190,18 @@ private fun CredentialViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(credential.title) },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = typeIcon(credential.type),
+                            contentDescription = credential.type.displayName,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(credential.title)
+                    }
+                },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
                 actions = {
                     IconButton(onClick = onToggleFavorite) {
@@ -169,8 +226,13 @@ private fun CredentialViewContent(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            if (credential.type == CredentialType.SECURE_NOTE) {
-                if (credential.notes.isNotEmpty()) DetailField("Content", credential.notes)
+            if (credential.type in NO_AUTH_TYPES) {
+                if (credential.notes.isNotEmpty()) {
+                    DetailField(
+                        label = if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes",
+                        value = credential.notes,
+                    )
+                }
             } else {
                 if (credential.username.isNotEmpty()) {
                     DetailField(
@@ -455,17 +517,20 @@ private fun CredentialEditContent(
         ) {
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
 
-            // Type-aware body. SECURE_NOTE drops auth fields entirely and promotes
-            // `notes` to a primary content area; BANK_ACCOUNT hides TOTP since 2FA-on-bank
-            // doesn't fit this app's TOTP shape. Other types keep the full Login layout.
-            when (credential.type) {
-                CredentialType.SECURE_NOTE -> {
+            // Type-aware body. NO_AUTH types (Secure Note, Credit Card, Other) drop
+            // auth fields entirely and either promote notes to a primary content area
+            // or render notes inline. BANK_ACCOUNT hides TOTP since 2FA-on-bank doesn't
+            // fit this app's TOTP shape. Login-shaped types keep the full layout.
+            when {
+                credential.type in NO_AUTH_TYPES -> {
                     OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
-                        label = { Text("Content") },
+                        label = {
+                            Text(if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes")
+                        },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 12,
+                        minLines = if (credential.type == CredentialType.SECURE_NOTE) 12 else 4,
                         maxLines = 30,
                         trailingIcon = {
                             IconButton(onClick = { showOcrScanner = true }) {
