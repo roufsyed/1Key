@@ -52,14 +52,14 @@ class CredentialRepositoryImpl @Inject constructor(
                 Pager(
                     config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false, prefetchDistance = 10),
                     pagingSourceFactory = { dao.pagingSourceRaw(sql) },
-                ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+                ).flow.map { pagingData -> pagingData.toDomainPaging() }
             }
         }
 
     override fun observeCredential(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(null)
-            else dao.observeById(id).map { it?.toDomain() }
+            else dao.observeById(id).map { it?.toDomainOrNull() }
         }.distinctUntilChanged()
 
     override suspend fun getCredential(id: String): AppResult<Credential> = runCatchingResult {
@@ -75,7 +75,7 @@ class CredentialRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getAllCredentials(): AppResult<List<Credential>> = runCatchingResult {
-        dao.getAll().map { it.toDomain() }
+        dao.getAll().mapNotNull { it.toDomainOrNull() }
     }
 
     override suspend fun importCredentials(credentials: List<Credential>): AppResult<Int> =
@@ -95,7 +95,7 @@ class CredentialRepositoryImpl @Inject constructor(
     override fun observeFavorites(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeFavorites().map { list -> list.map { it.toDomain() } }
+            else dao.observeFavorites().map { list -> list.toDomainListSafe() }
         }
 
     override fun observeFavoritesPaged(sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
@@ -108,7 +108,7 @@ class CredentialRepositoryImpl @Inject constructor(
                 Pager(
                     config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
                     pagingSourceFactory = { dao.favoritesPagingSourceRaw(sql) },
-                ).flow.map { pagingData -> pagingData.map { it.toDomain() } }
+                ).flow.map { pagingData -> pagingData.toDomainPaging() }
             }
         }
 
@@ -119,7 +119,7 @@ class CredentialRepositoryImpl @Inject constructor(
         )
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
+            else dao.observeListRaw(sql).map { list -> list.toDomainListSafe() }
         }
     }
 
@@ -129,7 +129,7 @@ class CredentialRepositoryImpl @Inject constructor(
         )
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeListRaw(sql).map { list -> list.map { it.toDomain() } }
+            else dao.observeListRaw(sql).map { list -> list.toDomainListSafe() }
         }
     }
 
@@ -148,7 +148,7 @@ class CredentialRepositoryImpl @Inject constructor(
     override fun observeWithTotp(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeWithTotp().map { list -> list.map { it.toDomain() } }
+            else dao.observeWithTotp().map { list -> list.toDomainListSafe() }
         }
 
     override suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit> =
@@ -158,6 +158,47 @@ class CredentialRepositoryImpl @Inject constructor(
         runCatchingResult { dao.deleteAll() }
 
     // ── Mapping ──────────────────────────────────────────────────────────────
+
+    /**
+     * Decrypts a list of entities, swallowing per-row failures. The race we're protecting
+     * against: vault locks while `toDomain()` is iterating a list emitted by Room. Once
+     * the lock fires, `keyHolder.requireKey()` starts throwing partway through the loop;
+     * if the exception escapes the [map] block here, it propagates up the Flow chain and
+     * permanently kills the upstream `stateIn`, causing every subsequent observation to
+     * sit on stale or empty data until the process restarts.
+     */
+    private fun List<CredentialEntity>.toDomainListSafe(): List<Credential> =
+        mapNotNull { it.toDomainOrNull() }
+
+    private fun CredentialEntity.toDomainOrNull(): Credential? =
+        runCatching { toDomain() }.getOrNull()
+
+    /**
+     * Decrypts entities for Paging. PagingData<T> requires T : Any so we can't filter
+     * out per-row failures the way the list helper does. Instead, an unrecoverable
+     * decrypt error yields a placeholder credential — visible in the list but harmless,
+     * and crucially the Flow stays alive so the StateFlow doesn't lock up.
+     */
+    private fun PagingData<CredentialEntity>.toDomainPaging(): PagingData<Credential> =
+        map { entity ->
+            runCatching { entity.toDomain() }.getOrElse { placeholderCredential(entity) }
+        }
+
+    private fun placeholderCredential(entity: CredentialEntity): Credential = Credential(
+        id = entity.id,
+        title = entity.title,
+        username = "",
+        password = "",
+        url = "",
+        notes = "",
+        totpSecret = null,
+        tags = entity.tags,
+        customFields = emptyList(),
+        isFavorite = entity.isFavorite,
+        createdAt = entity.createdAt,
+        updatedAt = entity.updatedAt,
+        type = CredentialType.fromNameOrDefault(entity.type),
+    )
 
     private fun CredentialEntity.toDomain(): Credential {
         val key = keyHolder.requireKey()

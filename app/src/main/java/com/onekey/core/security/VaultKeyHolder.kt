@@ -26,8 +26,12 @@ class VaultKeyHolder @Inject constructor() {
     fun requireKey(): SecretKey = checkNotNull(_key) { "Vault is locked" }
 
     fun lock() {
-        _key = null
+        // Flip the unlocked flag *before* dropping the key reference. Subscribers gated
+        // on isUnlocked (the credential observers in CredentialRepositoryImpl) get the
+        // false signal first and switch to emptyList(), while any in-flight decryption
+        // loop on a worker thread still has a valid key reference until it finishes.
         _isUnlocked.value = false
+        _key = null
     }
 
     fun isUnlocked(): Boolean = _key != null
