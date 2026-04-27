@@ -186,6 +186,7 @@ class CredentialRepositoryImpl @Inject constructor(
             isFavorite = isFavorite,
             createdAt = createdAt,
             updatedAt = updatedAt,
+            type = CredentialType.fromNameOrDefault(type),
         )
     }
 
@@ -228,6 +229,7 @@ class CredentialRepositoryImpl @Inject constructor(
             isFavorite = isFavorite,
             createdAt = if (createdAt == 0L) now else createdAt,
             updatedAt = now,
+            type = type.name,
         )
     }
 }

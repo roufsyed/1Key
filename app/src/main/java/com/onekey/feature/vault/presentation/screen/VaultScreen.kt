@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.TagWithCount
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
 import kotlinx.coroutines.delay
@@ -35,7 +36,7 @@ const val TAG_FAVORITES = "_favorites"
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VaultScreen(
-    onAddClick: (String) -> Unit,
+    onAddClick: (CredentialType) -> Unit,
     onTagClick: (String) -> Unit,
     onCredentialClick: (String) -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
@@ -222,7 +223,7 @@ fun VaultScreen(
             sheetState = sheetState,
         ) {
             Text(
-                "Choose a category",
+                "What are you saving?",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -233,19 +234,19 @@ fun VaultScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 32.dp),
             ) {
-                tagCounts.forEach { tagWithCount ->
+                NEW_CREDENTIAL_TYPE_ORDER.forEach { type ->
                     ListItem(
                         leadingContent = {
                             Icon(
-                                tagIcon(tagWithCount.tag.name),
+                                tagIcon(type.displayName),
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                         },
-                        headlineContent = { Text(tagWithCount.tag.name) },
+                        headlineContent = { Text(type.displayName) },
                         modifier = Modifier.clickable {
                             showBottomSheet = false
-                            onAddClick(tagWithCount.tag.name)
+                            onAddClick(type)
                         },
                     )
                 }
@@ -260,19 +261,31 @@ fun VaultScreen(
                     },
                     headlineContent = {
                         Text(
-                            "No Category",
+                            "Other",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     },
                     modifier = Modifier.clickable {
                         showBottomSheet = false
-                        onAddClick("")
+                        onAddClick(CredentialType.OTHER)
                     },
                 )
             }
         }
     }
 }
+
+// Display order for the "add credential" sheet. OTHER is rendered separately as a fallback.
+private val NEW_CREDENTIAL_TYPE_ORDER = listOf(
+    CredentialType.LOGIN,
+    CredentialType.SECURE_NOTE,
+    CredentialType.CREDIT_CARD,
+    CredentialType.PASSWORD,
+    CredentialType.BANK_ACCOUNT,
+    CredentialType.DATABASE,
+    CredentialType.EMAIL,
+    CredentialType.SERVER,
+)
 
 @Composable
 private fun SearchResultsContent(

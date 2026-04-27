@@ -28,6 +28,8 @@ data class CredentialEntity(
     @ColumnInfo(name = "iv_notes") val ivNotes: ByteArray,
     @ColumnInfo(name = "iv_totp") val ivTotp: ByteArray?,
     @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
+    // Stored as enum name string (e.g. "LOGIN"). Default keeps existing rows unchanged.
+    @ColumnInfo(name = "type") val type: String = "LOGIN",
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

@@ -10,7 +10,12 @@ class SaveCredentialUseCase @Inject constructor(
     private val repository: CredentialRepository,
 ) {
     suspend operator fun invoke(credential: Credential): AppResult<Unit> {
-        if (credential.title.isBlank()) return AppResult.Error(IllegalArgumentException("Title is required"))
+        if (credential.title.isBlank()) {
+            return AppResult.Error(IllegalArgumentException("Title is required"))
+        }
+        if (credential.type.requiresPassword && credential.password.isBlank()) {
+            return AppResult.Error(IllegalArgumentException("Password is required for ${credential.type.displayName}"))
+        }
         if (credential.customFields.size > CustomField.MAX_FIELDS) {
             return AppResult.Error(IllegalArgumentException("Max ${CustomField.MAX_FIELDS} custom fields allowed"))
         }

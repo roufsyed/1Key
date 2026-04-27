@@ -16,6 +16,7 @@ data class Credential(
     val isFavorite: Boolean = false,
     val createdAt: Long,
     val updatedAt: Long,
+    val type: CredentialType = CredentialType.LOGIN,
 )
 
 @Immutable

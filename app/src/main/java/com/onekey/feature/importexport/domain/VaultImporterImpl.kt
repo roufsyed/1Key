@@ -5,6 +5,7 @@ import com.google.gson.reflect.TypeToken
 import com.opencsv.CSVReader
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.usecase.ExportFormat
@@ -102,6 +103,9 @@ class VaultImporterImpl @Inject constructor(
                         customFields = allCustomFields,
                         createdAt = (map["created_at"] as? Double)?.toLong() ?: now,
                         updatedAt = (map["updated_at"] as? Double)?.toLong() ?: now,
+                        // Forward-compat: missing `type` (older exports, third-party files)
+                        // becomes LOGIN, matching the migration default for legacy rows.
+                        type = CredentialType.fromNameOrDefault(map["type"] as? String),
                     )
                 )
             }.onFailure { e ->
@@ -193,7 +197,7 @@ class VaultImporterImpl @Inject constructor(
         private val KNOWN_JSON_KEYS = setOf(
             "id", "title", "username", "password", "url", "notes",
             "totp_secret", "tags", "custom_fields", "created_at", "updated_at",
-            "is_favorite", "favorite",
+            "is_favorite", "favorite", "type",
         )
 
         private val CSV_HEADER_MAP = mapOf(

@@ -65,6 +65,7 @@ class VaultExporterImpl @Inject constructor(
 
     private fun Credential.toDto() = mapOf(
         "id" to id,
+        "type" to type.name,
         "title" to title,
         "username" to username,
         "password" to password,

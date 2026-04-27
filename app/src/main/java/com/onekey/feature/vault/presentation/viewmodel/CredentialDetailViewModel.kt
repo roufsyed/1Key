@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
@@ -43,6 +44,9 @@ class CredentialDetailViewModel @Inject constructor(
         ?.takeIf { it != "new" }
 
     private val initialTag: String = savedStateHandle.get<String>("initialTag") ?: ""
+
+    private val initialType: CredentialType =
+        CredentialType.fromNameOrDefault(savedStateHandle.get<String>("initialType"))
 
     private val _uiState = MutableStateFlow<CredentialDetailUiState>(CredentialDetailUiState.Loading)
     val uiState: StateFlow<CredentialDetailUiState> = _uiState.asStateFlow()
@@ -125,5 +129,6 @@ class CredentialDetailViewModel @Inject constructor(
         notes = "", totpSecret = null,
         tags = if (initialTag.isNotEmpty()) listOf(initialTag) else emptyList(),
         customFields = emptyList(), createdAt = 0L, updatedAt = 0L,
+        type = initialType,
     )
 }

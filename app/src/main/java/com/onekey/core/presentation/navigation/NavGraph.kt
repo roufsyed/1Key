@@ -29,6 +29,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.animation.UnlockOverlay
 import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.feature.auth.presentation.screen.ChangePasswordScreen
@@ -50,9 +51,9 @@ sealed class Screen(val route: String) {
     data object Lock : Screen("lock")
     data object Vault : Screen("vault")
     data object Favourites : Screen("favourites")
-    data object CredentialDetail : Screen("credential/{credentialId}?initialTag={initialTag}") {
-        fun createRoute(id: String?, initialTag: String = "") =
-            "credential/${id ?: "new"}?initialTag=${Uri.encode(initialTag)}"
+    data object CredentialDetail : Screen("credential/{credentialId}?initialTag={initialTag}&initialType={initialType}") {
+        fun createRoute(id: String?, initialTag: String = "", initialType: String = "") =
+            "credential/${id ?: "new"}?initialTag=${Uri.encode(initialTag)}&initialType=${Uri.encode(initialType)}"
     }
     data object TwoFaList : Screen("two_fa_list")
     data object Settings : Screen("settings")
@@ -174,8 +175,14 @@ fun OneKeyNavGraph(
 
                 composable(Screen.Vault.route) {
                     VaultScreen(
-                        onAddClick = { tag ->
-                            navController.navigate(Screen.CredentialDetail.createRoute(null, tag))
+                        onAddClick = { type ->
+                            // Auto-apply matching tag (Bank Account, Login, …) so the new
+                            // credential lands in the user's existing tag-based grouping.
+                            // OTHER stays untagged.
+                            val initialTag = if (type == CredentialType.OTHER) "" else type.displayName
+                            navController.navigate(
+                                Screen.CredentialDetail.createRoute(null, initialTag, type.name)
+                            )
                         },
                         onTagClick = { tagName ->
                             navController.navigate(Screen.TaggedList.createRoute(tagName))
@@ -199,6 +206,7 @@ fun OneKeyNavGraph(
                     arguments = listOf(
                         navArgument("credentialId") { type = NavType.StringType },
                         navArgument("initialTag") { type = NavType.StringType; defaultValue = "" },
+                        navArgument("initialType") { type = NavType.StringType; defaultValue = "" },
                     ),
                 ) {
                     CredentialDetailScreen(
