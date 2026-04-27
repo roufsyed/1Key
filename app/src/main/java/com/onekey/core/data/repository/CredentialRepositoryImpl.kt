@@ -13,6 +13,7 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import com.onekey.core.di.ApplicationScope
 import com.onekey.core.domain.model.CredentialSortOrder
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import java.util.UUID
@@ -60,7 +61,9 @@ class CredentialRepositoryImpl @Inject constructor(
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(null)
             else dao.observeById(id).map { it?.toDomainOrNull() }
-        }.distinctUntilChanged()
+        }
+            .flowOn(Dispatchers.Default)
+            .distinctUntilChanged()
 
     override suspend fun getCredential(id: String): AppResult<Credential> = runCatchingResult {
         dao.getById(id)?.toDomain() ?: throw NoSuchElementException("Credential $id not found")
@@ -96,7 +99,7 @@ class CredentialRepositoryImpl @Inject constructor(
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
             else dao.observeFavorites().map { list -> list.toDomainListSafe() }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override fun observeFavoritesPaged(sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
@@ -120,7 +123,7 @@ class CredentialRepositoryImpl @Inject constructor(
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
             else dao.observeListRaw(sql).map { list -> list.toDomainListSafe() }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> {
@@ -130,7 +133,7 @@ class CredentialRepositoryImpl @Inject constructor(
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
             else dao.observeListRaw(sql).map { list -> list.toDomainListSafe() }
-        }
+        }.flowOn(Dispatchers.Default)
     }
 
     override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
@@ -149,7 +152,7 @@ class CredentialRepositoryImpl @Inject constructor(
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
             else dao.observeWithTotp().map { list -> list.toDomainListSafe() }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit> =
         runCatchingResult { dao.setFavorite(id, isFavorite) }
