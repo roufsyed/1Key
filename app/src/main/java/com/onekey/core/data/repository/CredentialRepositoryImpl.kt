@@ -78,7 +78,11 @@ class CredentialRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getAllCredentials(): AppResult<List<Credential>> = runCatchingResult {
-        dao.getAll().mapNotNull { it.toDomainOrNull() }
+        // One-shot suspend call — let decrypt failures surface as AppResult.Error to the
+        // caller (export, import dedupe) instead of silently dropping rows. Long-lived
+        // observers use the per-row safe path because a transient throw there poisons
+        // the StateFlow; here a throw is just a normal error to the user.
+        dao.getAll().map { it.toDomain() }
     }
 
     override suspend fun importCredentials(credentials: List<Credential>): AppResult<Int> =
