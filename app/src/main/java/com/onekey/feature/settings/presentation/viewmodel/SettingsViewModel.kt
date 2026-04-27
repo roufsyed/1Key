@@ -63,7 +63,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, BackgroundLockTimeout.IMMEDIATE)
 
     val inactivityLockTimeout: StateFlow<InactivityLockTimeout> = appPrefs.getInactivityLockTimeout()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, InactivityLockTimeout.FIVE_MINUTES)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, InactivityLockTimeout.THIRTY_SECONDS)
 
     val isMasterPasswordRecheckEnabled: StateFlow<Boolean> = appPrefs.isMasterPasswordRecheckEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)

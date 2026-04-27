@@ -31,6 +31,8 @@ private val KEY_SCREENSHOTS_ENABLED = booleanPreferencesKey("screenshots_enabled
 private val KEY_LOCK_TIMEOUT = stringPreferencesKey("lock_timeout") // legacy (read-only for migration)
 private val KEY_BACKGROUND_LOCK_TIMEOUT = stringPreferencesKey("background_lock_timeout")
 private val KEY_INACTIVITY_LOCK_TIMEOUT = stringPreferencesKey("inactivity_lock_timeout")
+
+private val DEFAULT_INACTIVITY_LOCK = InactivityLockTimeout.THIRTY_SECONDS
 private val KEY_MP_RECHECK_ENABLED = booleanPreferencesKey("mp_recheck_enabled")
 private val KEY_MP_RECHECK_INTERVAL = stringPreferencesKey("mp_recheck_interval")
 private val KEY_LAST_MP_TIMESTAMP = longPreferencesKey("last_mp_timestamp")
@@ -95,16 +97,15 @@ class AppPreferencesRepositoryImpl @Inject constructor(
             val stored = p[KEY_INACTIVITY_LOCK_TIMEOUT]
             if (stored != null) {
                 InactivityLockTimeout.entries.find { it.name == stored }
-                    ?: InactivityLockTimeout.FIVE_MINUTES
+                    ?: DEFAULT_INACTIVITY_LOCK
             } else {
-                // Legacy IMMEDIATE meant "no idle timer was scheduled" — preserve that as
-                // NEVER. Otherwise mirror the chosen window. Default for fresh installs is
-                // 5 minutes.
+                // Default for everyone (fresh installs and legacy users mid-upgrade) is
+                // 30 seconds. ONE_MINUTE / FIVE_MINUTES are honoured because users who
+                // explicitly picked them clearly wanted a longer idle window.
                 when (p[KEY_LOCK_TIMEOUT]) {
-                    "IMMEDIATE" -> InactivityLockTimeout.NEVER
                     "ONE_MINUTE", "TWO_MINUTES" -> InactivityLockTimeout.ONE_MINUTE
                     "FIVE_MINUTES" -> InactivityLockTimeout.FIVE_MINUTES
-                    else -> InactivityLockTimeout.FIVE_MINUTES
+                    else -> DEFAULT_INACTIVITY_LOCK
                 }
             }
         }.distinctUntilChanged()
