@@ -462,22 +462,6 @@ fun SettingsScreen(
                 PrivacyLine("Exports are unencrypted plaintext — treat them as sensitive files.")
             }
 
-            // ── Licences ──────────────────────────────────────────────────────
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Open Source Licences")
-            ExpandableInfoCard(
-                title = "Third-party libraries",
-                icon = Icons.Default.Description,
-            ) {
-                LicenceRow("Kotlin", "Apache License 2.0", "JetBrains")
-                LicenceRow("Jetpack Compose", "Apache License 2.0", "Google")
-                LicenceRow("Room", "Apache License 2.0", "Google")
-                LicenceRow("Hilt / Dagger", "Apache License 2.0", "Google")
-                LicenceRow("OkHttp / Retrofit", "Apache License 2.0", "Square")
-                LicenceRow("Kotlinx Coroutines", "Apache License 2.0", "JetBrains")
-                LicenceRow("Gson", "Apache License 2.0", "Google")
-                LicenceRow("Android Biometric", "Apache License 2.0", "Google")
-            }
             Spacer(Modifier.height(8.dp))
             Text(
                 "Your vault is encrypted and stored only on this device.",
@@ -853,14 +837,6 @@ private fun PrivacyLine(text: String) {
         Text("•", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
         Spacer(Modifier.width(10.dp))
         Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun LicenceRow(name: String, licence: String, author: String) {
-    Column {
-        Text(name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-        Text("$licence · $author", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
