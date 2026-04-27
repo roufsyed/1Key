@@ -21,6 +21,8 @@ import javax.inject.Inject
 
 sealed class CredentialListEvent {
     data class DeleteError(val count: Int) : CredentialListEvent()
+    data class FavouriteUpdated(val count: Int, val markedAs: Boolean) : CredentialListEvent()
+    data class FavouriteError(val count: Int) : CredentialListEvent()
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -71,6 +73,17 @@ class TaggedCredentialListViewModel @Inject constructor(
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    // Drives the selection-mode favourite icon: when all selected are already
+    // favourited the action becomes "remove from favourites", otherwise it adds.
+    val selectedAreAllFavourite: StateFlow<Boolean> =
+        combine(_selectedIds, credentials) { ids, list ->
+            if (ids.isEmpty() || list.isNullOrEmpty()) false
+            else {
+                val byId = list.associateBy { it.id }
+                ids.all { id -> byId[id]?.isFavorite == true }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _event = MutableSharedFlow<CredentialListEvent>(extraBufferCapacity = 1)
     val event: SharedFlow<CredentialListEvent> = _event.asSharedFlow()
 
@@ -92,6 +105,24 @@ class TaggedCredentialListViewModel @Inject constructor(
                 .count { it is AppResult.Error }
             if (failures > 0) {
                 _event.emit(CredentialListEvent.DeleteError(failures))
+            }
+        }
+    }
+
+    fun setFavouriteOnSelected(makeFavourite: Boolean) {
+        viewModelScope.launch {
+            val ids = _selectedIds.value.toList()
+            _selectedIds.value = emptySet()
+            val failures = ids
+                .map { id -> async { credentialRepository.toggleFavorite(id, makeFavourite) } }
+                .awaitAll()
+                .count { it is AppResult.Error }
+            val updated = ids.size - failures
+            if (updated > 0) {
+                _event.emit(CredentialListEvent.FavouriteUpdated(updated, makeFavourite))
+            }
+            if (failures > 0) {
+                _event.emit(CredentialListEvent.FavouriteError(failures))
             }
         }
     }

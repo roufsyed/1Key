@@ -47,6 +47,18 @@ class FavouritesViewModel @Inject constructor(
         .map { it.isNotEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    // On the favourites tab every visible row is already favourited, so the action will
+    // always default to "remove from favourites" — but the flag is computed the same way
+    // for symmetry with TaggedCredentialListViewModel.
+    val selectedAreAllFavourite: StateFlow<Boolean> =
+        combine(_selectedIds, credentials) { ids, list ->
+            if (ids.isEmpty() || list.isNullOrEmpty()) false
+            else {
+                val byId = list.associateBy { it.id }
+                ids.all { id -> byId[id]?.isFavorite == true }
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _event = MutableSharedFlow<CredentialListEvent>(extraBufferCapacity = 1)
     val event: SharedFlow<CredentialListEvent> = _event.asSharedFlow()
 
@@ -68,6 +80,24 @@ class FavouritesViewModel @Inject constructor(
                 .count { it is AppResult.Error }
             if (failures > 0) {
                 _event.emit(CredentialListEvent.DeleteError(failures))
+            }
+        }
+    }
+
+    fun setFavouriteOnSelected(makeFavourite: Boolean) {
+        viewModelScope.launch {
+            val ids = _selectedIds.value.toList()
+            _selectedIds.value = emptySet()
+            val failures = ids
+                .map { id -> async { credentialRepository.toggleFavorite(id, makeFavourite) } }
+                .awaitAll()
+                .count { it is AppResult.Error }
+            val updated = ids.size - failures
+            if (updated > 0) {
+                _event.emit(CredentialListEvent.FavouriteUpdated(updated, makeFavourite))
+            }
+            if (failures > 0) {
+                _event.emit(CredentialListEvent.FavouriteError(failures))
             }
         }
     }

@@ -44,6 +44,7 @@ fun FavouritesScreen(
     val favorites by viewModel.credentials.collectAsStateWithLifecycle()
     val selectedIds by viewModel.selectedIds.collectAsStateWithLifecycle()
     val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
+    val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
     val letterIndex by viewModel.letterIndex.collectAsStateWithLifecycle()
 
@@ -72,6 +73,14 @@ fun FavouritesScreen(
             when (event) {
                 is CredentialListEvent.DeleteError ->
                     snackbarHostState.showSnackbar("Failed to delete ${event.count} item(s)")
+                is CredentialListEvent.FavouriteUpdated -> {
+                    val verb = if (event.markedAs) "Added" else "Removed"
+                    val noun = if (event.count == 1) "credential" else "credentials"
+                    val direction = if (event.markedAs) "to" else "from"
+                    snackbarHostState.showSnackbar("$verb ${event.count} $noun $direction favourites")
+                }
+                is CredentialListEvent.FavouriteError ->
+                    snackbarHostState.showSnackbar("Failed to update ${event.count} favourite(s)")
             }
         }
     }
@@ -96,6 +105,21 @@ fun FavouritesScreen(
                         }
                     },
                     actions = {
+                        IconButton(
+                            onClick = { viewModel.setFavouriteOnSelected(!selectedAreAllFavourite) },
+                        ) {
+                            Icon(
+                                imageVector = if (selectedAreAllFavourite)
+                                    Icons.Default.Favorite
+                                else
+                                    Icons.Default.FavoriteBorder,
+                                contentDescription = if (selectedAreAllFavourite)
+                                    "Remove from favourites"
+                                else
+                                    "Mark as favourite",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                         IconButton(onClick = { showDeleteDialog = true }) {
                             Icon(
                                 Icons.Default.Delete,
