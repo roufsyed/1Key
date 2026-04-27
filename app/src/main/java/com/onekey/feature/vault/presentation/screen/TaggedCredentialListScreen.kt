@@ -147,8 +147,7 @@ fun TaggedCredentialListScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
             ) {
                 items(
                     items = credList,
@@ -164,6 +163,7 @@ fun TaggedCredentialListScreen(
                         onLongClick = { viewModel.toggleSelection(credential.id) },
                         onTagClick = {},
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
 

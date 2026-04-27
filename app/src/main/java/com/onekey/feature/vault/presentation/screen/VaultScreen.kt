@@ -151,6 +151,7 @@ fun VaultScreen(
                                 onClick = { onCredentialClick(credential.id) },
                                 onTagClick = {},
                             )
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         }
                     }
                 },
@@ -344,8 +345,7 @@ private fun SearchResultsContent(
         else -> {
             LazyColumn(
                 modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
                 content = results,
             )
         }
