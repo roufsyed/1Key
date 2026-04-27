@@ -23,7 +23,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.BackgroundLockTimeout
+import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.Tag
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
@@ -47,7 +48,8 @@ fun SettingsScreen(
     val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
     val isShowFavourites by settingsVm.isShowFavourites.collectAsStateWithLifecycle()
     val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
-    val lockTimeout by settingsVm.lockTimeout.collectAsStateWithLifecycle()
+    val backgroundLockTimeout by settingsVm.backgroundLockTimeout.collectAsStateWithLifecycle()
+    val inactivityLockTimeout by settingsVm.inactivityLockTimeout.collectAsStateWithLifecycle()
     val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
@@ -104,8 +106,14 @@ fun SettingsScreen(
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
     var deleteVaultConfirmed by remember { mutableStateOf(false) }
-    var showLockTimeoutDialog by remember { mutableStateOf(false) }
-    var pendingLockTimeout by remember(lockTimeout) { mutableStateOf(lockTimeout) }
+    var showBackgroundLockDialog by remember { mutableStateOf(false) }
+    var pendingBackgroundLockTimeout by remember(backgroundLockTimeout) {
+        mutableStateOf(backgroundLockTimeout)
+    }
+    var showInactivityLockDialog by remember { mutableStateOf(false) }
+    var pendingInactivityLockTimeout by remember(inactivityLockTimeout) {
+        mutableStateOf(inactivityLockTimeout)
+    }
     var tagToDelete by remember { mutableStateOf<Tag?>(null) }
 
     val topAppBarState = rememberTopAppBarState()
@@ -262,11 +270,19 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
-                        headlineContent = { Text("Auto-lock") },
-                        supportingContent = { Text(lockTimeout.displayName) },
+                        headlineContent = { Text("Lock when app in background") },
+                        supportingContent = { Text(backgroundLockTimeout.displayName) },
                         leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
                         trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showLockTimeoutDialog = true },
+                        modifier = Modifier.clickable { showBackgroundLockDialog = true },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Lock after inactivity") },
+                        supportingContent = { Text(inactivityLockTimeout.displayName) },
+                        leadingContent = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable { showInactivityLockDialog = true },
                     )
                     if (isPinSetup) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -656,35 +672,35 @@ fun SettingsScreen(
         )
     }
 
-    if (showLockTimeoutDialog) {
+    if (showBackgroundLockDialog) {
         AlertDialog(
-            onDismissRequest = { showLockTimeoutDialog = false },
+            onDismissRequest = { showBackgroundLockDialog = false },
             icon = { Icon(Icons.Default.Timer, contentDescription = null) },
-            title = { Text("Auto-lock") },
+            title = { Text("Lock when app in background") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "Choose how long 1Key waits before locking when you leave the app or stop interacting. The vault key is wiped from memory when auto-lock triggers — shorter timeout means a smaller window of exposure.",
+                        "How quickly the vault locks after you leave the app. Shorter is more secure — the vault key is wiped from memory when this fires.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
-                    LockTimeout.entries.forEach { option ->
+                    BackgroundLockTimeout.entries.forEach { option ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { pendingLockTimeout = option }
+                                .clickable { pendingBackgroundLockTimeout = option }
                                 .padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             RadioButton(
-                                selected = pendingLockTimeout == option,
-                                onClick = { pendingLockTimeout = option },
+                                selected = pendingBackgroundLockTimeout == option,
+                                onClick = { pendingBackgroundLockTimeout = option },
                             )
                             Column {
                                 Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
-                                if (option == LockTimeout.IMMEDIATE) {
+                                if (option == BackgroundLockTimeout.IMMEDIATE) {
                                     Text(
                                         "Lock the moment you leave the app",
                                         style = MaterialTheme.typography.bodySmall,
@@ -698,12 +714,55 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    settingsVm.setLockTimeout(pendingLockTimeout)
-                    showLockTimeoutDialog = false
+                    settingsVm.setBackgroundLockTimeout(pendingBackgroundLockTimeout)
+                    showBackgroundLockDialog = false
                 }) { Text("Apply") }
             },
             dismissButton = {
-                TextButton(onClick = { showLockTimeoutDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showBackgroundLockDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showInactivityLockDialog) {
+        AlertDialog(
+            onDismissRequest = { showInactivityLockDialog = false },
+            icon = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
+            title = { Text("Lock after inactivity") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "How long the vault stays unlocked while the app is open but you're not using it. \"Never\" disables the idle timer (the background timer still applies).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    InactivityLockTimeout.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pendingInactivityLockTimeout = option }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(
+                                selected = pendingInactivityLockTimeout == option,
+                                onClick = { pendingInactivityLockTimeout = option },
+                            )
+                            Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    settingsVm.setInactivityLockTimeout(pendingInactivityLockTimeout)
+                    showInactivityLockDialog = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInactivityLockDialog = false }) { Text("Cancel") }
             },
         )
     }

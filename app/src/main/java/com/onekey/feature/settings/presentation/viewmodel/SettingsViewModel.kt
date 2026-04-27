@@ -3,7 +3,8 @@ package com.onekey.feature.settings.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
-import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.BackgroundLockTimeout
+import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.AppPreferencesRepository
@@ -58,8 +59,11 @@ class SettingsViewModel @Inject constructor(
     val isScreenshotsEnabled: StateFlow<Boolean> = appPrefs.isScreenshotsEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    val lockTimeout: StateFlow<LockTimeout> = appPrefs.getLockTimeout()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, LockTimeout.IMMEDIATE)
+    val backgroundLockTimeout: StateFlow<BackgroundLockTimeout> = appPrefs.getBackgroundLockTimeout()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, BackgroundLockTimeout.IMMEDIATE)
+
+    val inactivityLockTimeout: StateFlow<InactivityLockTimeout> = appPrefs.getInactivityLockTimeout()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, InactivityLockTimeout.FIVE_MINUTES)
 
     val isMasterPasswordRecheckEnabled: StateFlow<Boolean> = appPrefs.isMasterPasswordRecheckEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -117,8 +121,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { appPrefs.setScreenshotsEnabled(enabled) }
     }
 
-    fun setLockTimeout(timeout: LockTimeout) {
-        viewModelScope.launch { appPrefs.setLockTimeout(timeout) }
+    fun setBackgroundLockTimeout(timeout: BackgroundLockTimeout) {
+        viewModelScope.launch { appPrefs.setBackgroundLockTimeout(timeout) }
+    }
+
+    fun setInactivityLockTimeout(timeout: InactivityLockTimeout) {
+        viewModelScope.launch { appPrefs.setInactivityLockTimeout(timeout) }
     }
 
     fun setMasterPasswordRecheckEnabled(enabled: Boolean) {

@@ -3,7 +3,7 @@ package com.onekey.core.security
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.onekey.core.domain.model.LockTimeout
+import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import kotlinx.coroutines.CoroutineScope
@@ -79,9 +79,9 @@ class AutoLockManager @Inject constructor(
         idleJob = null
         backgroundJob?.cancel()
         backgroundJob = scope.launch {
-            val timeout = appPrefs.getLockTimeout().first()
+            val timeout = appPrefs.getBackgroundLockTimeout().first()
             if (pickerActive) return@launch
-            if (timeout == LockTimeout.IMMEDIATE) {
+            if (timeout == BackgroundLockTimeout.IMMEDIATE) {
                 authRepository.lock()
             } else {
                 delay(timeout.millis)
@@ -99,8 +99,8 @@ class AutoLockManager @Inject constructor(
     private fun resetIdleTimer() {
         idleJob?.cancel()
         idleJob = scope.launch {
-            val timeout = appPrefs.getLockTimeout().first()
-            if (timeout == LockTimeout.IMMEDIATE) return@launch
+            val timeout = appPrefs.getInactivityLockTimeout().first()
+            if (!timeout.isEnabled) return@launch
             delay(timeout.millis)
             if (isVaultUnlocked) authRepository.lock()
         }
