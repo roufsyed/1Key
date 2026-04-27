@@ -5,18 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Label
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -27,7 +18,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.onekey.core.domain.model.Credential
-import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.util.toRelativeTime
 
 /**
@@ -59,11 +49,15 @@ internal fun CredentialCard(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Icon comes from the credential's first tag rather than its type — legacy
+        // rows (pre-Phase 1) all carry type = LOGIN, so a type-based icon would render
+        // every row as a lock no matter which category list the user is in. Tags
+        // match the home rows' icon language anyway, so list views read as one family.
         Icon(
             imageVector = if (isSelected)
                 Icons.Default.CheckCircle
             else
-                credentialTypeIcon(credential.type),
+                tagIcon(credential.tags.firstOrNull() ?: ""),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(if (isSelected) 24.dp else 22.dp),
@@ -156,14 +150,3 @@ private fun TagPill(text: String, onClick: () -> Unit) {
     }
 }
 
-private fun credentialTypeIcon(type: CredentialType) = when (type) {
-    CredentialType.LOGIN -> Icons.Default.Lock
-    CredentialType.SECURE_NOTE -> Icons.Default.Description
-    CredentialType.CREDIT_CARD -> Icons.Default.CreditCard
-    CredentialType.PASSWORD -> Icons.Default.Key
-    CredentialType.BANK_ACCOUNT -> Icons.Default.AccountBalance
-    CredentialType.DATABASE -> Icons.Default.Storage
-    CredentialType.EMAIL -> Icons.Default.Email
-    CredentialType.SERVER -> Icons.Default.Computer
-    CredentialType.OTHER -> Icons.Default.Label
-}
