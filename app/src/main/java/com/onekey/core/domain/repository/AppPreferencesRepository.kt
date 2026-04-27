@@ -24,4 +24,6 @@ interface AppPreferencesRepository {
     suspend fun setShowFavourites(show: Boolean)
     fun getCredentialSortOrder(): Flow<CredentialSortOrder>
     suspend fun setCredentialSortOrder(order: CredentialSortOrder)
+    fun isHideTopBarOnScroll(): Flow<Boolean>
+    suspend fun setHideTopBarOnScroll(enabled: Boolean)
 }

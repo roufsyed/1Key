@@ -6,6 +6,7 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.TagWithCount
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.GetPagedCredentialsUseCase
@@ -20,10 +21,14 @@ class VaultViewModel @Inject constructor(
     private val tagRepository: TagRepository,
     private val credentialRepository: CredentialRepository,
     private val getPagedCredentials: GetPagedCredentialsUseCase,
+    appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
     val tagCounts: StateFlow<List<TagWithCount>> = tagRepository.observeTagsWithCounts()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val hideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val totalCount: StateFlow<Int> = credentialRepository.observeCount()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)

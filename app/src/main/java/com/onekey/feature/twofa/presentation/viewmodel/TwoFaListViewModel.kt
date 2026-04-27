@@ -3,6 +3,7 @@ package com.onekey.feature.twofa.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
@@ -36,7 +37,11 @@ class TwoFaListViewModel @Inject constructor(
     private val totpGenerator: TotpGenerator,
     private val deleteCredential: DeleteCredentialUseCase,
     private val saveCredential: SaveCredentialUseCase,
+    appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
+
+    val hideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val entries: StateFlow<List<TotpEntry>?> = credentialRepository.observeWithTotp()
         .transformLatest { credentials ->

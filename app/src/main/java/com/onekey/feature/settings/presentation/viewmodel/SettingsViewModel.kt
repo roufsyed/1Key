@@ -71,6 +71,9 @@ class SettingsViewModel @Inject constructor(
     val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val isHideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -128,6 +131,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setShowFavourites(show: Boolean) {
         viewModelScope.launch { appPrefs.setShowFavourites(show) }
+    }
+
+    fun setHideTopBarOnScroll(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setHideTopBarOnScroll(enabled) }
     }
 
     fun addTag(name: String) {

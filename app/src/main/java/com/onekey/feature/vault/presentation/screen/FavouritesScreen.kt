@@ -47,6 +47,7 @@ fun FavouritesScreen(
     val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
     val letterIndex by viewModel.letterIndex.collectAsStateWithLifecycle()
+    val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -59,10 +60,10 @@ fun FavouritesScreen(
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         state = topAppBarState,
-        canScroll = { !isSelectionMode },
+        canScroll = { hideTopBarOnScroll && !isSelectionMode },
     )
-    LaunchedEffect(isSelectionMode) {
-        if (isSelectionMode) {
+    LaunchedEffect(isSelectionMode, hideTopBarOnScroll) {
+        if (isSelectionMode || !hideTopBarOnScroll) {
             topAppBarState.heightOffset = 0f
             topAppBarState.contentOffset = 0f
         }

@@ -48,6 +48,7 @@ fun TaggedCredentialListScreen(
     val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
     val letterIndex by viewModel.letterIndex.collectAsStateWithLifecycle()
+    val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -62,10 +63,12 @@ fun TaggedCredentialListScreen(
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         state = topAppBarState,
-        canScroll = { !isSelectionMode },
+        canScroll = { hideTopBarOnScroll && !isSelectionMode },
     )
-    LaunchedEffect(isSelectionMode) {
-        if (isSelectionMode) {
+    // Snap the bar back to fully visible when collapse is disabled, or when entering
+    // selection mode — otherwise the user could land on a hidden bar with no way to act.
+    LaunchedEffect(isSelectionMode, hideTopBarOnScroll) {
+        if (isSelectionMode || !hideTopBarOnScroll) {
             topAppBarState.heightOffset = 0f
             topAppBarState.contentOffset = 0f
         }

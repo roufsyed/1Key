@@ -27,6 +27,9 @@ class FavouritesViewModel @Inject constructor(
     val sortOrder: StateFlow<CredentialSortOrder> = appPrefs.getCredentialSortOrder()
         .stateIn(viewModelScope, SharingStarted.Eagerly, CredentialSortOrder.NEWEST_FIRST)
 
+    val hideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val credentials: StateFlow<List<Credential>?> = sortOrder
         .flatMapLatest { order -> credentialRepository.observeFavoritesSorted(order) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)

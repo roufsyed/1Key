@@ -46,6 +46,7 @@ fun VaultScreen(
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
     // Always collected unconditionally to satisfy Compose snapshot rules.
     val searchResults = viewModel.searchResults.collectAsLazyPagingItems()
 
@@ -54,7 +55,17 @@ fun VaultScreen(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val focusRequester = remember { FocusRequester() }
 
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(rememberTopAppBarState())
+    val topAppBarState = rememberTopAppBarState()
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
+        state = topAppBarState,
+        canScroll = { hideTopBarOnScroll },
+    )
+    LaunchedEffect(hideTopBarOnScroll) {
+        if (!hideTopBarOnScroll) {
+            topAppBarState.heightOffset = 0f
+            topAppBarState.contentOffset = 0f
+        }
+    }
 
     BackHandler(enabled = isSearchActive) {
         isSearchActive = false

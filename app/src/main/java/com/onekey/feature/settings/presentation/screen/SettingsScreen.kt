@@ -45,6 +45,7 @@ fun SettingsScreen(
     val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
     val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
     val isShowFavourites by settingsVm.isShowFavourites.collectAsStateWithLifecycle()
+    val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
     val lockTimeout by settingsVm.lockTimeout.collectAsStateWithLifecycle()
     val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
@@ -164,6 +165,25 @@ fun SettingsScreen(
                             Switch(
                                 checked = isShowFavourites,
                                 onCheckedChange = { settingsVm.setShowFavourites(it) },
+                            )
+                        },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Hide top bar on scroll") },
+                        supportingContent = {
+                            Text(
+                                if (isHideTopBarOnScroll) "Top bar collapses as you scroll lists"
+                                else "Top bar stays pinned while scrolling"
+                            )
+                        },
+                        leadingContent = {
+                            Icon(Icons.Default.UnfoldLess, contentDescription = null)
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isHideTopBarOnScroll,
+                                onCheckedChange = { settingsVm.setHideTopBarOnScroll(it) },
                             )
                         },
                     )
