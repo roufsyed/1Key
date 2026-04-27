@@ -505,7 +505,7 @@ private fun CredentialEditContent(
                                 customFields = customFields,
                             ))
                         },
-                        enabled = title.isNotBlank() && (!credential.type.requiresPassword || password.isNotBlank() || totpSecret.isNotBlank()),
+                        enabled = title.isNotBlank(),
                     ) { Text("Save") }
                 }
             )
@@ -554,9 +554,8 @@ private fun CredentialEditContent(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text(if (credential.type.requiresPassword) "Password *" else "Password") },
+                        label = { Text("Password") },
                         modifier = Modifier.fillMaxWidth(),
-                        isError = credential.type.requiresPassword && password.isBlank(),
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         trailingIcon = {
@@ -760,7 +759,7 @@ private fun CredentialEditContent(
                             customFields = customFields,
                         ))
                     },
-                    enabled = title.isNotBlank() && (!credential.type.requiresPassword || password.isNotBlank()),
+                    enabled = title.isNotBlank(),
                 ) { Text("Save") }
             },
             dismissButton = {

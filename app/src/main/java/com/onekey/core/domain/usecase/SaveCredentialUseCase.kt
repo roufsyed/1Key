@@ -13,14 +13,6 @@ class SaveCredentialUseCase @Inject constructor(
         if (credential.title.isBlank()) {
             return AppResult.Error(IllegalArgumentException("Title is required"))
         }
-        // Password-required types accept either a password or a TOTP secret as the auth
-        // material — the 2FA QR scan flow saves credentials with totpSecret and an empty
-        // password, and that's a legitimate "TOTP-only" entry.
-        val hasAuthMaterial = credential.password.isNotBlank() ||
-            !credential.totpSecret.isNullOrBlank()
-        if (credential.type.requiresPassword && !hasAuthMaterial) {
-            return AppResult.Error(IllegalArgumentException("Password or TOTP secret is required for ${credential.type.displayName}"))
-        }
         if (credential.customFields.size > CustomField.MAX_FIELDS) {
             return AppResult.Error(IllegalArgumentException("Max ${CustomField.MAX_FIELDS} custom fields allowed"))
         }
