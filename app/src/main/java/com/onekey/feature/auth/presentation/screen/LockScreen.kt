@@ -4,14 +4,12 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
@@ -30,7 +28,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -48,20 +45,24 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.R
+import com.onekey.core.presentation.animation.AppIconBlue
+import com.onekey.core.presentation.animation.PremiumMorphEasing
+import com.onekey.core.presentation.animation.UnlockTransitionPhase
+import com.onekey.core.presentation.animation.UnlockTransitionTimings
+import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlin.math.hypot
 
 private val PinSuccessColor = Color(0xFF4CAF50)
-private val AppIconBlue = Color(0xFF1A56DB)
-private val PremiumMorphEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
 @Composable
 fun LockScreen(
     viewModel: AuthViewModel,
+    appViewModel: AppViewModel,
     onUnlocked: () -> Unit,
     onSetupPin: () -> Unit = {},
 ) {
@@ -70,26 +71,16 @@ fun LockScreen(
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val successMorphProgress = remember { Animatable(0f) }
     val lockScreenExitProgress = remember { Animatable(0f) }
 
-    // Run logo success first, then morph to app blue before transitioning.
+    // Logo celebration plays first; then we hand the morph off to the app-root UnlockOverlay
+    // so it can sit above the Scaffold and bottom nav while navigation completes.
     LaunchedEffect(state) {
         if (state is AuthUiState.Unlocked) {
-            successMorphProgress.snapTo(0f)
             lockScreenExitProgress.snapTo(0f)
-            delay(430)
+            delay(UnlockTransitionTimings.LOGO_CELEBRATION_DELAY_MS)
+            appViewModel.beginUnlockMorph()
             coroutineScope {
-                launch {
-                    successMorphProgress.animateTo(
-                        targetValue = 0.66f,
-                        animationSpec = tween(durationMillis = 540, easing = LinearOutSlowInEasing),
-                    )
-                    successMorphProgress.animateTo(
-                        targetValue = 1f,
-                        animationSpec = tween(durationMillis = 460, easing = PremiumMorphEasing),
-                    )
-                }
                 launch {
                     delay(230)
                     lockScreenExitProgress.animateTo(
@@ -97,12 +88,15 @@ fun LockScreen(
                         animationSpec = tween(durationMillis = 860, easing = PremiumMorphEasing),
                     )
                 }
+                launch {
+                    appViewModel.unlockPhase.first { it is UnlockTransitionPhase.Held }
+                    delay(UnlockTransitionTimings.POST_HELD_NAV_BUFFER_MS)
+                    onUnlocked()
+                }
             }
-            delay(90)
-            onUnlocked()
         } else {
-            successMorphProgress.snapTo(0f)
             lockScreenExitProgress.snapTo(0f)
+            appViewModel.resetUnlockMorph()
         }
     }
 
@@ -254,39 +248,6 @@ fun LockScreen(
                 }
             }
             Spacer(Modifier.height(10.dp))
-        }
-        SuccessMorphOverlay(
-            progress = successMorphProgress.value,
-            color = AppIconBlue,
-        )
-    }
-}
-
-@Composable
-private fun SuccessMorphOverlay(
-    progress: Float,
-    color: Color,
-) {
-    if (progress <= 0f) return
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val easedProgress = PremiumMorphEasing.transform(progress.coerceIn(0f, 1f))
-        val maxRadius = hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.1f
-        val radius = maxRadius * easedProgress
-        val origin = Offset(
-            x = size.width * 0.17f,
-            y = size.height * 0.24f,
-        )
-
-        drawCircle(
-            color = color.copy(alpha = 0.82f + (0.16f * easedProgress)),
-            radius = radius,
-            center = origin,
-        )
-
-        if (progress > 0.72f) {
-            val fillAlpha = ((progress - 0.72f) / 0.28f).coerceIn(0f, 1f)
-            drawRect(color = color.copy(alpha = fillAlpha))
         }
     }
 }
