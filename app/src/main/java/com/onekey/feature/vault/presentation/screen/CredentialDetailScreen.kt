@@ -876,6 +876,18 @@ private fun TotpCameraPreview(
     val onDetectedState = rememberUpdatedState(onSecretDetected)
     val detected = remember { AtomicBoolean(false) }
 
+    // Transient "not a 2FA QR" pill state, throttled so ML Kit's 30 fps re-detection
+    // of the same wrong QR doesn't restart the dismiss timer in a tight loop.
+    var showInvalidQr by remember { mutableStateOf(false) }
+    val onInvalidQrDetected = rememberUpdatedState({ showInvalidQr = true })
+    var lastInvalidAtMs by remember { mutableStateOf(0L) }
+    LaunchedEffect(showInvalidQr) {
+        if (showInvalidQr) {
+            kotlinx.coroutines.delay(2_500)
+            showInvalidQr = false
+        }
+    }
+
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
     val barcodeScanner = remember {
         BarcodeScanning.getClient(
@@ -913,8 +925,17 @@ private fun TotpCameraPreview(
                                 )
                                 barcodeScanner.process(input)
                                     .addOnSuccessListener { barcodes ->
-                                        val raw = barcodes.firstOrNull()?.rawValue ?: return@addOnSuccessListener
-                                        val params = OtpAuthUriParser.parse(raw) ?: return@addOnSuccessListener
+                                        val raw = barcodes.firstOrNull()?.rawValue
+                                            ?: return@addOnSuccessListener
+                                        val params = OtpAuthUriParser.parse(raw)
+                                        if (params == null) {
+                                            val now = android.os.SystemClock.elapsedRealtime()
+                                            if (now - lastInvalidAtMs >= 2_500L) {
+                                                lastInvalidAtMs = now
+                                                onInvalidQrDetected.value()
+                                            }
+                                            return@addOnSuccessListener
+                                        }
                                         if (detected.compareAndSet(false, true)) {
                                             onDetectedState.value(params.secret)
                                         }
@@ -961,6 +982,25 @@ private fun TotpCameraPreview(
                         shape = RoundedCornerShape(16.dp),
                     ),
             )
+        }
+
+        AnimatedVisibility(
+            visible = showInvalidQr,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp),
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.medium,
+            ) {
+                Text(
+                    "Not a 2FA QR code — try a different one.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                )
+            }
         }
     }
 }

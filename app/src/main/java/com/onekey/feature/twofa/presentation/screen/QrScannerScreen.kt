@@ -34,6 +34,7 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.onekey.feature.twofa.domain.OtpAuthParams
 import com.onekey.feature.twofa.presentation.viewmodel.QrScannerViewModel
+import com.onekey.feature.twofa.presentation.viewmodel.ScanEvent
 import com.onekey.feature.twofa.presentation.viewmodel.ScanState
 import java.util.concurrent.Executors
 
@@ -46,6 +47,7 @@ fun QrScannerScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var hasPermission by remember {
         mutableStateOf(
@@ -63,6 +65,28 @@ fun QrScannerScreen(
 
     LaunchedEffect(state) {
         if (state is ScanState.Saved) onSaved()
+    }
+
+    // Surface a transient snackbar when the camera reads a QR that isn't a 2FA code,
+    // and surface save failures with the actual error message.
+    LaunchedEffect(Unit) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is ScanEvent.InvalidQr -> snackbarHostState.showSnackbar(
+                    message = "Not a 2FA QR code — try a different one.",
+                    duration = SnackbarDuration.Short,
+                )
+            }
+        }
+    }
+    LaunchedEffect(state) {
+        if (state is ScanState.Error) {
+            snackbarHostState.showSnackbar(
+                message = (state as ScanState.Error).message,
+                duration = SnackbarDuration.Short,
+            )
+            viewModel.dismissDetected()
+        }
     }
 
     Scaffold(
@@ -85,6 +109,7 @@ fun QrScannerScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Box(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -110,7 +135,7 @@ fun QrScannerScreen(
             onDismiss = viewModel::dismissDetected,
         )
         is ScanState.Saving -> SavingDialog()
-        is ScanState.Error -> LaunchedEffect(s.message) { viewModel.dismissDetected() }
+        // Error already handled by the snackbar LaunchedEffect above.
         else -> Unit
     }
 }
@@ -164,8 +189,10 @@ private fun CameraPreviewWithOverlay(
                                 )
                                 barcodeScanner.process(input)
                                     .addOnSuccessListener { barcodes ->
+                                        // Pass every QR through to the VM — it parses and
+                                        // decides between a valid otpauth URI and an
+                                        // InvalidQr event.
                                         barcodes.firstOrNull()?.rawValue
-                                            ?.takeIf { it.startsWith("otpauth://") }
                                             ?.let { onDetectedState.value(it) }
                                     }
                                     .addOnCompleteListener { imageProxy.close() }
