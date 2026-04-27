@@ -13,6 +13,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -218,13 +219,14 @@ private fun CredentialViewContent(
             )
         }
     ) { padding ->
+        // Flat divider-separated sections — same visual language as the home and list
+        // screens. No card chrome, no per-row gap; dividers carry the structural rhythm.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .padding(top = 8.dp, bottom = 16.dp),
         ) {
             if (credential.type in NO_AUTH_TYPES) {
                 if (credential.notes.isNotEmpty()) {
@@ -232,6 +234,7 @@ private fun CredentialViewContent(
                         label = if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes",
                         value = credential.notes,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             } else {
                 if (credential.username.isNotEmpty()) {
@@ -244,6 +247,7 @@ private fun CredentialViewContent(
                             }
                         }
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 if (credential.password.isNotEmpty()) {
                     DetailField(
@@ -260,11 +264,19 @@ private fun CredentialViewContent(
                             }
                         }
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
-                if (credential.url.isNotEmpty()) DetailField("URL", credential.url)
-                if (credential.notes.isNotEmpty()) DetailField("Notes", credential.notes)
+                if (credential.url.isNotEmpty()) {
+                    DetailField("URL", credential.url)
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
+                if (credential.notes.isNotEmpty()) {
+                    DetailField("Notes", credential.notes)
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
                 if (credential.totpSecret != null && credential.type != CredentialType.BANK_ACCOUNT) {
                     TotpWidget(secret = credential.totpSecret)
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
             credential.customFields.forEach { field ->
@@ -272,17 +284,18 @@ private fun CredentialViewContent(
                     label = field.key,
                     value = if (field.isSensitive) "••••••••" else field.value,
                 )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
 
             if (credential.tags.isNotEmpty()) {
-                TagsViewCard(tags = credential.tags)
+                TagsView(tags = credential.tags)
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
 
-            // Metadata card
-            MetadataCard(credential = credential)
+            MetadataSection(credential = credential)
 
-            // History section
             if (history.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 HistorySection(
                     history = history,
                     expanded = historyExpanded,
@@ -306,27 +319,27 @@ private fun CredentialViewContent(
 }
 
 @Composable
-private fun MetadataCard(credential: Credential) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+private fun MetadataSection(credential: Credential) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            if (credential.createdAt > 0L) {
-                Text(
-                    "Created: ${credential.createdAt.toFormattedDateTime()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (credential.updatedAt > 0L) {
-                Text(
-                    "Modified: ${credential.updatedAt.toFormattedDateTime()}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        Text("Details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        if (credential.createdAt > 0L) {
+            Text(
+                "Created: ${credential.createdAt.toFormattedDateTime()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (credential.updatedAt > 0L) {
+            Text(
+                "Modified: ${credential.updatedAt.toFormattedDateTime()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -337,36 +350,35 @@ private fun HistorySection(
     expanded: Boolean,
     onToggle: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("History", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "${history.size} ${if (history.size == 1) "revision" else "revisions"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onToggle) {
-                    Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse history" else "Expand history",
-                    )
-                }
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // Header row is the entire tap target — matches the section-row affordance the
+        // home and list screens use. No card chrome.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("History", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "${history.size} ${if (history.size == 1) "revision" else "revisions"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            AnimatedVisibility(visible = expanded) {
-                Column {
-                    HorizontalDivider()
-                    history.forEachIndexed { index, entry ->
-                        HistoryEntryRow(entry = entry)
-                        if (index < history.lastIndex) HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    }
+            Icon(
+                if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = if (expanded) "Collapse history" else "Expand history",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        AnimatedVisibility(visible = expanded) {
+            Column {
+                history.forEachIndexed { index, entry ->
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    HistoryEntryRow(entry = entry)
                 }
             }
         }
@@ -426,16 +438,20 @@ private fun DetailField(
     value: String,
     trailing: @Composable (() -> Unit)? = null,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                SelectionContainer {
-                    Text(value, style = MaterialTheme.typography.bodyMedium)
-                }
+    // Flat row to match home / list pattern. Container handles the divider after.
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            SelectionContainer {
+                Text(value, style = MaterialTheme.typography.bodyMedium)
             }
-            trailing?.invoke()
         }
+        trailing?.invoke()
     }
 }
 
@@ -950,17 +966,20 @@ private fun TotpCameraPreview(
 }
 
 @Composable
-private fun TagsViewCard(tags: List<String>) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Category", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                tags.forEach { tag ->
-                    SuggestionChip(onClick = {}, label = { Text(tag) })
-                }
+private fun TagsView(tags: List<String>) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Category", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            tags.forEach { tag ->
+                SuggestionChip(onClick = {}, label = { Text(tag) })
             }
         }
     }

@@ -23,32 +23,34 @@ fun TotpWidget(
 
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("2FA Code", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = state.code.chunked(3).joinToString(" "),
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        fontSize = 32.sp,
-                        letterSpacing = 4.sp,
-                    ),
-                    modifier = Modifier.weight(1f),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text("2FA Code", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = state.code.chunked(3).joinToString(" "),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    fontSize = 32.sp,
+                    letterSpacing = 4.sp,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                CircularProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.size(36.dp),
+                    strokeWidth = 3.dp,
+                    color = if (state.remainingSeconds <= 5)
+                        MaterialTheme.colorScheme.error
+                    else
+                        MaterialTheme.colorScheme.primary,
                 )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier.size(36.dp),
-                        strokeWidth = 3.dp,
-                        color = if (state.remainingSeconds <= 5)
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.primary,
-                    )
-                    Text("${state.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
-                }
+                Text("${state.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
             }
         }
     }
