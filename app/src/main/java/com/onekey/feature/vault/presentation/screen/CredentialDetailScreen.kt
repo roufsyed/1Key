@@ -505,7 +505,7 @@ private fun CredentialEditContent(
                                 customFields = customFields,
                             ))
                         },
-                        enabled = title.isNotBlank() && (!credential.type.requiresPassword || password.isNotBlank()),
+                        enabled = title.isNotBlank() && (!credential.type.requiresPassword || password.isNotBlank() || totpSecret.isNotBlank()),
                     ) { Text("Save") }
                 }
             )
