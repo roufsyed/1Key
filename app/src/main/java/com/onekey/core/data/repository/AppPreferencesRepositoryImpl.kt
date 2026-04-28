@@ -40,6 +40,7 @@ private val KEY_LAST_MP_TIMESTAMP = longPreferencesKey("last_mp_timestamp")
 private val KEY_HIDE_TOP_BAR_ON_SCROLL = booleanPreferencesKey("hide_top_bar_on_scroll")
 private val KEY_RECYCLE_BIN_RETENTION = stringPreferencesKey("recycle_bin_retention")
 private val KEY_RECYCLE_BIN_ENABLED = booleanPreferencesKey("recycle_bin_enabled")
+private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -180,5 +181,12 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setRecycleBinEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_RECYCLE_BIN_ENABLED] = enabled }
+    }
+
+    override fun isVaultFooterVisible(): Flow<Boolean> =
+        prefs.map { it[KEY_VAULT_FOOTER_VISIBLE] ?: true }.distinctUntilChanged()
+
+    override suspend fun setVaultFooterVisible(visible: Boolean) {
+        dataStore.edit { it[KEY_VAULT_FOOTER_VISIBLE] = visible }
     }
 }

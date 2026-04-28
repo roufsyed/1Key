@@ -30,6 +30,9 @@ class VaultViewModel @Inject constructor(
     val hideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val isVaultFooterVisible: StateFlow<Boolean> = appPrefs.isVaultFooterVisible()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val totalCount: StateFlow<Int> = credentialRepository.observeCount()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 

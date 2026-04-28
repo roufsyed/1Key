@@ -47,6 +47,7 @@ fun VaultScreen(
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val recycleBinCount by viewModel.recycleBinCount.collectAsStateWithLifecycle()
+    val isVaultFooterVisible by viewModel.isVaultFooterVisible.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
     // Always collected unconditionally to satisfy Compose snapshot rules.
@@ -236,13 +237,15 @@ fun VaultScreen(
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
 
-                item(key = "privacy_footer") {
-                    Text(
-                        "Your vault is encrypted and stored only on this device.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    )
+                if (isVaultFooterVisible) {
+                    item(key = "privacy_footer") {
+                        Text(
+                            "Your vault is encrypted and stored only on this device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        )
+                    }
                 }
             }
         }

@@ -30,6 +30,8 @@ interface AppPreferencesRepository {
     suspend fun setCredentialSortOrder(order: CredentialSortOrder)
     fun isHideTopBarOnScroll(): Flow<Boolean>
     suspend fun setHideTopBarOnScroll(enabled: Boolean)
+    fun isVaultFooterVisible(): Flow<Boolean>
+    suspend fun setVaultFooterVisible(visible: Boolean)
     fun getRecycleBinRetention(): Flow<RecycleBinRetention>
     suspend fun setRecycleBinRetention(retention: RecycleBinRetention)
     fun isRecycleBinEnabled(): Flow<Boolean>

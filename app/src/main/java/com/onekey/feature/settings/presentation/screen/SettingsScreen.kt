@@ -208,6 +208,26 @@ fun SettingsScreen(
                             )
                         },
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    val isVaultFooterVisible by settingsVm.isVaultFooterVisible.collectAsStateWithLifecycle()
+                    ListItem(
+                        headlineContent = { Text("Show privacy footer") },
+                        supportingContent = {
+                            Text(
+                                if (isVaultFooterVisible)
+                                    "\"Your vault is encrypted and stored only on this device.\" appears below the vault list"
+                                else
+                                    "Footer hidden from the vault list",
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Shield, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isVaultFooterVisible,
+                                onCheckedChange = { settingsVm.setVaultFooterVisible(it) },
+                            )
+                        },
+                    )
                 }
             }
 

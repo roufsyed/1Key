@@ -85,6 +85,9 @@ class SettingsViewModel @Inject constructor(
     val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val isVaultFooterVisible: StateFlow<Boolean> = appPrefs.isVaultFooterVisible()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -158,6 +161,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setRecycleBinEnabled(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setRecycleBinEnabled(enabled) }
+    }
+
+    fun setVaultFooterVisible(visible: Boolean) {
+        viewModelScope.launch { appPrefs.setVaultFooterVisible(visible) }
     }
 
     fun addTag(name: String) {
