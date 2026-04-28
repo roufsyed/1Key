@@ -70,6 +70,7 @@ fun SettingsScreen(
                 SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
                 SettingsEvent.VaultContentsDeleted -> onVaultReset()
                 is SettingsEvent.SeedComplete -> snackbarHostState.showSnackbar("${event.count} sample credentials added")
+                is SettingsEvent.TwoFaSeedComplete -> snackbarHostState.showSnackbar("${event.count} sample 2FA codes added — open the 2FA tab")
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 SettingsEvent.BiometricEnabled -> {
                     showBiometricConfirmDialog = false
@@ -630,19 +631,37 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 SectionHeader("Developer Options")
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    ListItem(
-                        headlineContent = { Text("Seed Sample Data") },
-                        supportingContent = { Text("Insert 9 sample credentials covering all categories") },
-                        leadingContent = {
-                            if (isSeedingData) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.Storage, contentDescription = null)
-                            }
-                        },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable(enabled = !isSeedingData) { settingsVm.seedData() },
-                    )
+                    Column {
+                        ListItem(
+                            headlineContent = { Text("Seed Sample Data") },
+                            supportingContent = { Text("Insert 9 sample credentials covering all categories") },
+                            leadingContent = {
+                                if (isSeedingData) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Storage, contentDescription = null)
+                                }
+                            },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable(enabled = !isSeedingData) { settingsVm.seedData() },
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Seed Dummy 2FA Codes") },
+                            supportingContent = {
+                                Text("Adds 8 sample logins each with a working TOTP secret — codes appear in the 2FA tab")
+                            },
+                            leadingContent = {
+                                if (isSeedingData) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.Security, contentDescription = null)
+                                }
+                            },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable(enabled = !isSeedingData) { settingsVm.seedTwoFaData() },
+                        )
+                    }
                 }
             }
 

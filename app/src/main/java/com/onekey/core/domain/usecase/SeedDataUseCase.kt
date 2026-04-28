@@ -19,6 +19,62 @@ class SeedDataUseCase @Inject constructor(
         return AppResult.Success(count)
     }
 
+    /**
+     * Seeds standalone Login credentials each carrying a working RFC6238 TOTP secret,
+     * so the 2FA tab populates immediately without scanning a QR code by hand.
+     * Titles are suffixed `(2FA Demo)` so they don't collide with [sampleCredentials].
+     */
+    suspend fun seedTwoFa(): AppResult<Int> {
+        val now = System.currentTimeMillis()
+        var count = 0
+        for (credential in sampleTwoFaCredentials(now)) {
+            val result = credentialRepository.saveCredential(credential)
+            if (result is AppResult.Success) count++
+        }
+        return AppResult.Success(count)
+    }
+
+    private fun sampleTwoFaCredentials(now: Long): List<Credential> = listOf(
+        twoFa(now, "Google (2FA Demo)", "demo.user@gmail.com", "https://accounts.google.com",
+            "JBSWY3DPEHPK3PXP", offsetDays = 0),
+        twoFa(now, "GitHub (2FA Demo)", "demo-user", "https://github.com",
+            "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", offsetDays = 1),
+        twoFa(now, "AWS Console (2FA Demo)", "demo-aws@example.com", "https://console.aws.amazon.com",
+            "MFRGGZDFMZTWQ2LKNNWG23TPN5XGS3DM", offsetDays = 2),
+        twoFa(now, "Coinbase (2FA Demo)", "demo.user@gmail.com", "https://coinbase.com",
+            "ONSWG4TFOQQGS4ZAONSWG4TFOQQGS4ZA", offsetDays = 3),
+        twoFa(now, "Discord (2FA Demo)", "demo_user#1234", "https://discord.com",
+            "OBQXG43XN5ZGI4DPNZQXG2LJNZUW4ZZA", offsetDays = 4),
+        twoFa(now, "Steam (2FA Demo)", "demo_user_gaming", "https://steamcommunity.com",
+            "NRSXOIDBEBSXEYLDNF2GCZ3FORZGS3TH", offsetDays = 5),
+        twoFa(now, "Twitter / X (2FA Demo)", "demo_user_x", "https://x.com",
+            "MZXW6YTBOI======", offsetDays = 6),
+        twoFa(now, "Reddit (2FA Demo)", "demo_user_reddit", "https://reddit.com",
+            "KRSXG5BAONUW45BAONUW45BAONUW45BA", offsetDays = 7),
+    )
+
+    private fun twoFa(
+        now: Long,
+        title: String,
+        username: String,
+        url: String,
+        secretBase32: String,
+        offsetDays: Int,
+    ): Credential = Credential(
+        id = "",
+        title = title,
+        username = username,
+        password = "DemoP@ssw0rd!2024",
+        url = url,
+        notes = "Seeded for 2FA testing — code rotates every 30 seconds.",
+        totpSecret = secretBase32,
+        tags = listOf("Login"),
+        customFields = emptyList(),
+        isFavorite = false,
+        createdAt = now - offsetDays * 86_400_000L,
+        updatedAt = now - offsetDays * 86_400_000L,
+    )
+
     private fun sampleCredentials(now: Long): List<Credential> = listOf(
         Credential(
             id = "",

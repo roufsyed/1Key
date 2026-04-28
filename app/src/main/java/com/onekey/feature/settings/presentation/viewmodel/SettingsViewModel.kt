@@ -23,6 +23,7 @@ sealed class SettingsEvent {
     data object PinReset : SettingsEvent()
     data object VaultContentsDeleted : SettingsEvent()
     data class SeedComplete(val count: Int) : SettingsEvent()
+    data class TwoFaSeedComplete(val count: Int) : SettingsEvent()
     data class Error(val message: String) : SettingsEvent()
     data object BiometricEnabled : SettingsEvent()
     data class BiometricConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
@@ -212,6 +213,19 @@ class SettingsViewModel @Inject constructor(
             when (result) {
                 is AppResult.Success -> _event.emit(SettingsEvent.SeedComplete(result.data))
                 is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to seed data"))
+            }
+        }
+    }
+
+    fun seedTwoFaData() {
+        if (_isSeedingData.value) return
+        viewModelScope.launch {
+            _isSeedingData.value = true
+            val result = seedDataUseCase.seedTwoFa()
+            _isSeedingData.value = false
+            when (result) {
+                is AppResult.Success -> _event.emit(SettingsEvent.TwoFaSeedComplete(result.data))
+                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to seed 2FA data"))
             }
         }
     }
