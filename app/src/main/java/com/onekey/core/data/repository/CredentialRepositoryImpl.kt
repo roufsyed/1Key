@@ -65,6 +65,14 @@ class CredentialRepositoryImpl @Inject constructor(
             .flowOn(Dispatchers.Default)
             .distinctUntilChanged()
 
+    override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(null)
+            else dao.observeByIdIncludingDeleted(id).map { it?.toDomainOrNull() }
+        }
+            .flowOn(Dispatchers.Default)
+            .distinctUntilChanged()
+
     override suspend fun getCredential(id: String): AppResult<Credential> = runCatchingResult {
         dao.getById(id)?.toDomain() ?: throw NoSuchElementException("Credential $id not found")
     }

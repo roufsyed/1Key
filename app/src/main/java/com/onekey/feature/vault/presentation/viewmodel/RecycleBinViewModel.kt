@@ -10,7 +10,7 @@ import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.EmptyRecycleBinUseCase
 import com.onekey.core.domain.usecase.PurgeFromRecycleBinUseCase
-import com.onekey.core.domain.usecase.RestoreCredentialUseCase
+import com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,16 +33,23 @@ data class RecycleBinItem(
 @Immutable
 sealed class RecycleBinEvent {
     data class Restored(val title: String) : RecycleBinEvent()
+    data class Merged(val title: String) : RecycleBinEvent()
     data class Purged(val title: String) : RecycleBinEvent()
     data class Emptied(val count: Int) : RecycleBinEvent()
     data class Error(val message: String) : RecycleBinEvent()
 }
 
+@Immutable
+data class RestoreConflict(
+    val binItem: Credential,
+    val existing: Credential,
+)
+
 @HiltViewModel
 class RecycleBinViewModel @Inject constructor(
     repository: CredentialRepository,
     appPrefs: AppPreferencesRepository,
-    private val restoreCredential: RestoreCredentialUseCase,
+    private val restoreFromBin: RestoreFromRecycleBinUseCase,
     private val purgeFromBin: PurgeFromRecycleBinUseCase,
     private val emptyBin: EmptyRecycleBinUseCase,
 ) : ViewModel() {
@@ -63,15 +70,54 @@ class RecycleBinViewModel @Inject constructor(
     private val _events = Channel<RecycleBinEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
+    private val _pendingConflict = MutableStateFlow<RestoreConflict?>(null)
+    val pendingConflict: StateFlow<RestoreConflict?> = _pendingConflict.asStateFlow()
+
     fun restore(item: RecycleBinItem) {
         viewModelScope.launch {
             _isWorking.value = true
-            when (val result = restoreCredential(item.credential.id)) {
+            val conflict = restoreFromBin.findConflict(item.credential)
+            if (conflict != null) {
+                _pendingConflict.value = RestoreConflict(item.credential, conflict)
+                _isWorking.value = false
+                return@launch
+            }
+            when (val result = restoreFromBin.restore(item.credential.id)) {
                 is AppResult.Success -> _events.send(RecycleBinEvent.Restored(item.credential.title))
                 is AppResult.Error -> _events.send(RecycleBinEvent.Error(result.message ?: "Restore failed"))
             }
             _isWorking.value = false
         }
+    }
+
+    fun resolveConflictByMerging() {
+        val conflict = _pendingConflict.value ?: return
+        viewModelScope.launch {
+            _isWorking.value = true
+            when (val result = restoreFromBin.mergeInto(conflict.existing, conflict.binItem)) {
+                is AppResult.Success -> _events.send(RecycleBinEvent.Merged(conflict.binItem.title))
+                is AppResult.Error -> _events.send(RecycleBinEvent.Error(result.message ?: "Merge failed"))
+            }
+            _pendingConflict.value = null
+            _isWorking.value = false
+        }
+    }
+
+    fun resolveConflictByKeepingBoth() {
+        val conflict = _pendingConflict.value ?: return
+        viewModelScope.launch {
+            _isWorking.value = true
+            when (val result = restoreFromBin.restore(conflict.binItem.id)) {
+                is AppResult.Success -> _events.send(RecycleBinEvent.Restored(conflict.binItem.title))
+                is AppResult.Error -> _events.send(RecycleBinEvent.Error(result.message ?: "Restore failed"))
+            }
+            _pendingConflict.value = null
+            _isWorking.value = false
+        }
+    }
+
+    fun cancelConflict() {
+        _pendingConflict.value = null
     }
 
     fun purge(item: RecycleBinItem) {

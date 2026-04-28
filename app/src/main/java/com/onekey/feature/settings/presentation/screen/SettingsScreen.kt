@@ -704,7 +704,7 @@ fun SettingsScreen(
                 PrivacyLine("1Key does not require an account or internet connection.")
                 PrivacyLine("No analytics, telemetry, or crash reporting of any kind.")
                 PrivacyLine("Your master password never leaves your device — not even a hash.")
-                PrivacyLine("Exports are unencrypted plaintext — treat them as sensitive files.")
+                PrivacyLine("Encrypted .1key backups are protected by your master password. Plain JSON or CSV exports are unencrypted — treat those files as sensitive.")
             }
 
             Spacer(Modifier.height(8.dp))

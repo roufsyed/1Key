@@ -13,6 +13,8 @@ interface CredentialRepository {
         sortOrder: CredentialSortOrder = CredentialSortOrder.NEWEST_FIRST,
     ): Flow<PagingData<Credential>>
     fun observeCredential(id: String): Flow<Credential?>
+    /** Emits regardless of soft-delete state — the detail screen needs to render bin items too. */
+    fun observeCredentialIncludingDeleted(id: String): Flow<Credential?>
     suspend fun getCredential(id: String): AppResult<Credential>
     suspend fun saveCredential(credential: Credential): AppResult<Unit>
     /** Soft-deletes — moves the credential to the recycle bin. */

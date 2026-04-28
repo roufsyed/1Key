@@ -156,9 +156,11 @@ fun CredentialDetailScreen(
                     credential = state.credential,
                     history = history,
                     binEnabled = binEnabled,
+                    isInRecycleBin = state.credential.deletedAt != null,
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
                     onDeleteNow = viewModel::deleteNow,
+                    onRestore = viewModel::restore,
                     onBack = onBack,
                     onToggleFavorite = viewModel::toggleFavorite,
                 )
@@ -174,6 +176,17 @@ fun CredentialDetailScreen(
         }
         else -> Unit
     }
+
+    val pendingConflict by viewModel.pendingRestoreConflict.collectAsStateWithLifecycle()
+    pendingConflict?.let { conflict ->
+        RestoreConflictDialog(
+            title = conflict.binItem.title,
+            username = conflict.binItem.username,
+            onMerge = viewModel::resolveRestoreByMerging,
+            onKeepBoth = viewModel::resolveRestoreByKeepingBoth,
+            onCancel = viewModel::cancelRestoreConflict,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -182,9 +195,11 @@ private fun CredentialViewContent(
     credential: Credential,
     history: List<CredentialHistoryEntry>,
     binEnabled: Boolean,
+    isInRecycleBin: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDeleteNow: () -> Unit,
+    onRestore: () -> Unit,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
@@ -210,16 +225,18 @@ private fun CredentialViewContent(
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
                 actions = {
-                    IconButton(onClick = onToggleFavorite) {
-                        Icon(
-                            if (credential.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = if (credential.isFavorite) "Remove from favourites" else "Add to favourites",
-                            tint = if (credential.isFavorite) MaterialTheme.colorScheme.primary
-                                   else LocalContentColor.current,
-                        )
+                    if (!isInRecycleBin) {
+                        IconButton(onClick = onToggleFavorite) {
+                            Icon(
+                                if (credential.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = if (credential.isFavorite) "Remove from favourites" else "Add to favourites",
+                                tint = if (credential.isFavorite) MaterialTheme.colorScheme.primary
+                                       else LocalContentColor.current,
+                            )
+                        }
+                        IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "Edit") }
+                        IconButton(onClick = { showDeleteDialog = true }) { Icon(Icons.Default.Delete, "Delete") }
                     }
-                    IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "Edit") }
-                    IconButton(onClick = { showDeleteDialog = true }) { Icon(Icons.Default.Delete, "Delete") }
                 }
             )
         }
@@ -233,6 +250,9 @@ private fun CredentialViewContent(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 8.dp, bottom = 16.dp),
         ) {
+            if (isInRecycleBin) {
+                RecycleBinBanner(onRestore = onRestore)
+            }
             if (credential.type in NO_AUTH_TYPES) {
                 if (credential.notes.isNotEmpty()) {
                     DetailField(
@@ -318,6 +338,48 @@ private fun CredentialViewContent(
             onDeleteNow = { showDeleteDialog = false; onDeleteNow() },
             onCancel = { showDeleteDialog = false },
         )
+    }
+}
+
+@Composable
+private fun RecycleBinBanner(onRestore: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "In recycle bin",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    "Restore to keep this credential, or empty the bin to delete it for good.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            TextButton(onClick = onRestore) {
+                Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Restore")
+            }
+        }
     }
 }
 

@@ -43,6 +43,11 @@ interface CredentialDao {
     @Query("SELECT * FROM credentials WHERE id = :id")
     suspend fun getByIdIncludingDeleted(id: String): CredentialEntity?
 
+    // Reactive variant that emits regardless of soft-delete state so the detail screen
+    // can render a recycle-bin banner instead of hanging forever on the filtered observer.
+    @Query("SELECT * FROM credentials WHERE id = :id")
+    fun observeByIdIncludingDeleted(id: String): Flow<CredentialEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: CredentialEntity)
 

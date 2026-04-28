@@ -63,20 +63,25 @@ class VaultExporterImpl @Inject constructor(
         }
     }
 
-    private fun Credential.toDto() = mapOf(
-        "id" to id,
-        "type" to type.name,
-        "title" to title,
-        "username" to username,
-        "password" to password,
-        "url" to url,
-        "notes" to notes,
-        "tags" to tags,
-        "totp_secret" to (totpSecret ?: ""),
-        "custom_fields" to customFields.map { mapOf("key" to it.key, "value" to it.value, "sensitive" to it.isSensitive) },
-        "created_at" to createdAt,
-        "updated_at" to updatedAt,
-    )
+    private fun Credential.toDto(): Map<String, Any> {
+        val base = mapOf<String, Any>(
+            "id" to id,
+            "type" to type.name,
+            "title" to title,
+            "username" to username,
+            "password" to password,
+            "url" to url,
+            "notes" to notes,
+            "tags" to tags,
+            "totp_secret" to (totpSecret ?: ""),
+            "custom_fields" to customFields.map { mapOf("key" to it.key, "value" to it.value, "sensitive" to it.isSensitive) },
+            "created_at" to createdAt,
+            "updated_at" to updatedAt,
+        )
+        // deletedAt only emitted for bin items so active backups stay byte-compatible
+        // with the previous format (no spurious "deleted_at": null lines everywhere).
+        return if (deletedAt != null) base + ("deleted_at" to deletedAt) else base
+    }
 
     private fun Credential.toCsvRow() = arrayOf(
         title, username, password, url, notes,

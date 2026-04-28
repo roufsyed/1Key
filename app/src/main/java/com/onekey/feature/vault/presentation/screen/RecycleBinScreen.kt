@@ -30,6 +30,7 @@ fun RecycleBinScreen(
     val items by viewModel.items.collectAsStateWithLifecycle()
     val isWorking by viewModel.isWorking.collectAsStateWithLifecycle()
     val retention by viewModel.retention.collectAsStateWithLifecycle()
+    val pendingConflict by viewModel.pendingConflict.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var pendingPurge by remember { mutableStateOf<RecycleBinItem?>(null) }
@@ -39,6 +40,7 @@ fun RecycleBinScreen(
         viewModel.events.collectLatest { event ->
             val message = when (event) {
                 is RecycleBinEvent.Restored -> "Restored \"${event.title}\""
+                is RecycleBinEvent.Merged -> "Merged \"${event.title}\" into the existing item"
                 is RecycleBinEvent.Purged -> "\"${event.title}\" deleted permanently"
                 is RecycleBinEvent.Emptied -> if (event.count == 1) "1 item deleted permanently" else "${event.count} items deleted permanently"
                 is RecycleBinEvent.Error -> event.message
@@ -138,6 +140,16 @@ fun RecycleBinScreen(
             dismissButton = {
                 TextButton(onClick = { showEmptyDialog = false }) { Text("Cancel") }
             },
+        )
+    }
+
+    pendingConflict?.let { conflict ->
+        RestoreConflictDialog(
+            title = conflict.binItem.title,
+            username = conflict.binItem.username,
+            onMerge = viewModel::resolveConflictByMerging,
+            onKeepBoth = viewModel::resolveConflictByKeepingBoth,
+            onCancel = viewModel::cancelConflict,
         )
     }
 }

@@ -106,6 +106,9 @@ class VaultImporterImpl @Inject constructor(
                         // Forward-compat: missing `type` (older exports, third-party files)
                         // becomes LOGIN, matching the migration default for legacy rows.
                         type = CredentialType.fromNameOrDefault(map["type"] as? String),
+                        // Round-trip the recycle-bin marker so a backup→restore preserves
+                        // bin state. Older exports without the field stay active (null).
+                        deletedAt = (map["deleted_at"] as? Double)?.toLong(),
                     )
                 )
             }.onFailure { e ->
@@ -197,7 +200,7 @@ class VaultImporterImpl @Inject constructor(
         private val KNOWN_JSON_KEYS = setOf(
             "id", "title", "username", "password", "url", "notes",
             "totp_secret", "tags", "custom_fields", "created_at", "updated_at",
-            "is_favorite", "favorite", "type",
+            "is_favorite", "favorite", "type", "deleted_at",
         )
 
         private val CSV_HEADER_MAP = mapOf(

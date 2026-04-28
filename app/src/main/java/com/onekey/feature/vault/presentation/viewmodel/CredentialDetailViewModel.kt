@@ -16,6 +16,7 @@ import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.GetCredentialUseCase
 import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
+import com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -38,6 +39,7 @@ class CredentialDetailViewModel @Inject constructor(
     private val saveCredential: SaveCredentialUseCase,
     private val deleteCredential: DeleteCredentialUseCase,
     private val hardDeleteCredential: HardDeleteCredentialUseCase,
+    private val restoreFromBin: RestoreFromRecycleBinUseCase,
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
     private val tagRepository: TagRepository,
@@ -46,6 +48,9 @@ class CredentialDetailViewModel @Inject constructor(
 
     val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    private val _pendingRestoreConflict = MutableStateFlow<RestoreConflict?>(null)
+    val pendingRestoreConflict: StateFlow<RestoreConflict?> = _pendingRestoreConflict.asStateFlow()
 
     private val credentialId: String? = savedStateHandle.get<String>("credentialId")
         ?.takeIf { it != "new" }
@@ -70,15 +75,19 @@ class CredentialDetailViewModel @Inject constructor(
             _uiState.value = CredentialDetailUiState.Success(emptyCredential(), isEditing = true)
         } else {
             viewModelScope.launch {
-                getCredential(credentialId)
-                    .filterNotNull()
+                // includingDeleted so a navigated-to recycle-bin item shows a restore banner
+                // instead of the screen hanging on Loading forever.
+                getCredential.includingDeleted(credentialId)
                     .distinctUntilChanged()
                     .collect { credential ->
                         _uiState.update { state ->
-                            // Preserve terminal states — DB updates must not override Saved/Deleted.
-                            when (state) {
-                                is CredentialDetailUiState.Loading -> CredentialDetailUiState.Success(credential)
-                                is CredentialDetailUiState.Success -> state.copy(credential = credential)
+                            when {
+                                credential == null -> CredentialDetailUiState.Error("Credential not found")
+                                state is CredentialDetailUiState.Loading ->
+                                    CredentialDetailUiState.Success(credential)
+                                state is CredentialDetailUiState.Success ->
+                                    state.copy(credential = credential)
+                                // Preserve terminal states — DB updates must not override Saved/Deleted.
                                 else -> state
                             }
                         }
@@ -125,6 +134,58 @@ class CredentialDetailViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * Restore the currently-displayed bin credential. Detects conflicts with active items
+     * (same trimmed title + username) and exposes [pendingRestoreConflict] for the UI to
+     * show a merge / keep-both choice. Same flow as the recycle-bin screen.
+     */
+    fun restore() {
+        val current = (_uiState.value as? CredentialDetailUiState.Success)?.credential ?: return
+        viewModelScope.launch {
+            val conflict = restoreFromBin.findConflict(current)
+            if (conflict != null) {
+                _pendingRestoreConflict.value = RestoreConflict(current, conflict)
+                return@launch
+            }
+            val result = restoreFromBin.restore(current.id)
+            if (result is AppResult.Error) {
+                _uiState.value = CredentialDetailUiState.Error(result.message ?: "Restore failed")
+            }
+            // On success the observe flow re-emits with deletedAt = null; the banner hides itself.
+        }
+    }
+
+    fun resolveRestoreByMerging() {
+        val conflict = _pendingRestoreConflict.value ?: return
+        viewModelScope.launch {
+            val result = restoreFromBin.mergeInto(conflict.existing, conflict.binItem)
+            _pendingRestoreConflict.value = null
+            if (result is AppResult.Error) {
+                _uiState.value = CredentialDetailUiState.Error(result.message ?: "Merge failed")
+            } else {
+                // The bin item was permanently removed during merge — pop back to the prior screen.
+                _uiState.value = CredentialDetailUiState.Deleted
+            }
+        }
+    }
+
+    fun resolveRestoreByKeepingBoth() {
+        val conflict = _pendingRestoreConflict.value ?: return
+        viewModelScope.launch {
+            val result = restoreFromBin.restore(conflict.binItem.id)
+            _pendingRestoreConflict.value = null
+            if (result is AppResult.Error) {
+                _uiState.value = CredentialDetailUiState.Error(result.message ?: "Restore failed")
+            }
+        }
+    }
+
+    fun cancelRestoreConflict() {
+        _pendingRestoreConflict.value = null
+    }
+
+    data class RestoreConflict(val binItem: Credential, val existing: Credential)
 
     fun toggleFavorite() {
         val state = _uiState.value as? CredentialDetailUiState.Success ?: return
