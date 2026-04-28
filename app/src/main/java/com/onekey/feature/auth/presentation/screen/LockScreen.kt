@@ -184,7 +184,7 @@ fun LockScreen(
                 state = state,
                 modifier = Modifier
                     .align(Alignment.Start)
-                    .padding(start = 8.dp),
+                    .padding(start = 16.dp),
             )
             Spacer(Modifier.height(28.dp))
             Text(
