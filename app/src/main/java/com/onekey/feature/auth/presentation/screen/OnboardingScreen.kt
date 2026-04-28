@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -282,12 +283,14 @@ private fun CreateVaultPage(
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
+    var privacyAccepted by remember { mutableStateOf(false) }
+    var showPolicyDialog by remember { mutableStateOf(false) }
 
     val passwordMismatch by remember {
         derivedStateOf { confirmPassword.isNotEmpty() && password != confirmPassword }
     }
     val passwordTooShort by remember { derivedStateOf { password.isNotEmpty() && password.length < 8 } }
-    val canSubmit = password.length >= 8 && !passwordMismatch && state !is AuthUiState.Loading
+    val canSubmit = password.length >= 8 && !passwordMismatch && privacyAccepted && state !is AuthUiState.Loading
 
     Column(
         modifier = Modifier
@@ -384,7 +387,37 @@ private fun CreateVaultPage(
             )
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(20.dp))
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .clickable(enabled = state !is AuthUiState.Loading) { privacyAccepted = !privacyAccepted },
+        ) {
+            Checkbox(
+                checked = privacyAccepted,
+                onCheckedChange = { privacyAccepted = it },
+                enabled = state !is AuthUiState.Loading,
+            )
+            Text(
+                "I've read and agree to the Privacy Policy",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        TextButton(
+            onClick = { showPolicyDialog = true },
+            modifier = Modifier.align(Alignment.Start).padding(start = 4.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+        ) {
+            Icon(Icons.Default.PrivacyTip, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Read the Privacy Policy", style = MaterialTheme.typography.bodySmall)
+        }
+
+        Spacer(Modifier.height(16.dp))
 
         Button(
             onClick = { onSubmit(password) },
@@ -417,6 +450,34 @@ private fun CreateVaultPage(
 
         Spacer(Modifier.height(24.dp))
     }
+
+    if (showPolicyDialog) {
+        PrivacyPolicyDialog(onDismiss = { showPolicyDialog = false })
+    }
+}
+
+@Composable
+private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
+        title = { Text("Privacy Policy") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                PrivacyPoint("All your data stays on this device, encrypted with AES-256-GCM.")
+                PrivacyPoint("No accounts, no internet connection, no cloud sync.")
+                PrivacyPoint("No analytics, telemetry, or crash reports — ever.")
+                PrivacyPoint("Your master password never leaves your device, not even hashed.")
+                PrivacyPoint("If you forget your master password, your data cannot be recovered.")
+                PrivacyPoint("Exports are unencrypted plaintext — treat backup files as sensitive.")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Got it")
+            }
+        },
+    )
 }
 
 // ── Page 4: Vault ready ───────────────────────────────────────────────────────
