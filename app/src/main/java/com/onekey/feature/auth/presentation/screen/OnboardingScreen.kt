@@ -31,7 +31,7 @@ import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 
 private const val TOTAL_STEPS = 3
-private const val READY_STEP = 3
+private const val READY_STEP = TOTAL_STEPS
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -44,6 +44,13 @@ fun OnboardingScreen(
     var step by remember { mutableStateOf(0) }
     var showRestoreDialog by remember { mutableStateOf(false) }
     var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Hoisted so that navigating Back → Continue between pages doesn't wipe what the user
+    // already typed / accepted. AnimatedContent destroys child composables on transition,
+    // so any state held inside CreateVaultPage would be lost.
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var privacyAccepted by remember { mutableStateOf(false) }
 
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -83,8 +90,18 @@ fun OnboardingScreen(
                 1 -> PrivacyPage(onNext = { step = 2 }, onBack = { step = 0 })
                 2 -> CreateVaultPage(
                     state = state,
-                    onBack = { step = 1 },
-                    onSubmit = { password -> viewModel.setup(password.toCharArray()) },
+                    password = password,
+                    onPasswordChange = { password = it; viewModel.clearError() },
+                    confirmPassword = confirmPassword,
+                    onConfirmPasswordChange = { confirmPassword = it; viewModel.clearError() },
+                    privacyAccepted = privacyAccepted,
+                    onPrivacyAcceptedChange = { privacyAccepted = it },
+                    onBack = {
+                        step = 1
+                        // Clear so a stale error doesn't reappear if the user comes back to step 2.
+                        viewModel.clearError()
+                    },
+                    onSubmit = { viewModel.setup(password.toCharArray()) },
                     onRestoreFromBackup = { restoreLauncher.launch(arrayOf("*/*")) },
                 )
                 READY_STEP -> VaultReadyPage(onContinue = onSetupComplete)
@@ -275,15 +292,18 @@ private fun PrivacyPage(onNext: () -> Unit, onBack: () -> Unit) {
 @Composable
 private fun CreateVaultPage(
     state: AuthUiState,
+    password: String,
+    onPasswordChange: (String) -> Unit,
+    confirmPassword: String,
+    onConfirmPasswordChange: (String) -> Unit,
+    privacyAccepted: Boolean,
+    onPrivacyAcceptedChange: (Boolean) -> Unit,
     onBack: () -> Unit,
-    onSubmit: (String) -> Unit,
+    onSubmit: () -> Unit,
     onRestoreFromBackup: () -> Unit,
 ) {
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
-    var privacyAccepted by remember { mutableStateOf(false) }
     var showPolicyDialog by remember { mutableStateOf(false) }
 
     val passwordMismatch by remember {
@@ -341,7 +361,7 @@ private fun CreateVaultPage(
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = onPasswordChange,
             label = { Text("Master Password") },
             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -362,7 +382,7 @@ private fun CreateVaultPage(
 
         OutlinedTextField(
             value = confirmPassword,
-            onValueChange = { confirmPassword = it },
+            onValueChange = onConfirmPasswordChange,
             label = { Text("Confirm Password") },
             visualTransformation = if (showConfirm) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -394,11 +414,11 @@ private fun CreateVaultPage(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(MaterialTheme.shapes.small)
-                .clickable(enabled = state !is AuthUiState.Loading) { privacyAccepted = !privacyAccepted },
+                .clickable(enabled = state !is AuthUiState.Loading) { onPrivacyAcceptedChange(!privacyAccepted) },
         ) {
             Checkbox(
                 checked = privacyAccepted,
-                onCheckedChange = { privacyAccepted = it },
+                onCheckedChange = onPrivacyAcceptedChange,
                 enabled = state !is AuthUiState.Loading,
             )
             Text(
@@ -420,7 +440,7 @@ private fun CreateVaultPage(
         Spacer(Modifier.height(16.dp))
 
         Button(
-            onClick = { onSubmit(password) },
+            onClick = onSubmit,
             enabled = canSubmit,
             modifier = Modifier.fillMaxWidth().height(52.dp),
         ) {
@@ -469,7 +489,7 @@ private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
                 PrivacyPoint("No analytics, telemetry, or crash reports — ever.")
                 PrivacyPoint("Your master password never leaves your device, not even hashed.")
                 PrivacyPoint("If you forget your master password, your data cannot be recovered.")
-                PrivacyPoint("Exports are unencrypted plaintext — treat backup files as sensitive.")
+                PrivacyPoint("Encrypted .1key backups are protected by your master password. Plain JSON or CSV exports are unencrypted — treat those files as sensitive.")
             }
         },
         confirmButton = {
@@ -654,10 +674,12 @@ private fun VaultSetupStatusLine(isLoading: Boolean) {
         "Almost done…",
     )
 
-    var messageIndex by remember { mutableStateOf(0) }
+    // Keyed on isLoading so a fresh loading cycle (e.g. retry after error) starts at 0
+    // synchronously — without the key the previous index would briefly paint as the
+    // first frame before the LaunchedEffect could reset it.
+    var messageIndex by remember(isLoading) { mutableStateOf(0) }
     LaunchedEffect(isLoading) {
         if (isLoading) {
-            messageIndex = 0
             while (true) {
                 kotlinx.coroutines.delay(1200)
                 if (messageIndex < loadingMessages.lastIndex) messageIndex++

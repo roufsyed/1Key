@@ -180,9 +180,20 @@ class AuthViewModel @Inject constructor(
             _state.value = AuthUiState.Loading
             val tmpFile = File(context.cacheDir, "restore.1key")
             try {
-                withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)
-                        ?.use { inp -> tmpFile.outputStream().use { inp.copyTo(it) } }
+                // Detect a missing or revoked URI explicitly so the user sees a clean message
+                // instead of a cryptic decryption failure further down the pipeline.
+                val copied = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val input = context.contentResolver.openInputStream(uri) ?: return@runCatching false
+                        input.use { inp -> tmpFile.outputStream().use { os -> inp.copyTo(os) } }
+                        true
+                    }.getOrDefault(false)
+                }
+                if (!copied) {
+                    _state.value = AuthUiState.Error(
+                        "Couldn't read the backup file. It may have been moved, deleted, or the app no longer has permission."
+                    )
+                    return@launch
                 }
                 when (val result = withContext(Dispatchers.Default) {
                     setupFromBackup(password, tmpFile.absolutePath)
