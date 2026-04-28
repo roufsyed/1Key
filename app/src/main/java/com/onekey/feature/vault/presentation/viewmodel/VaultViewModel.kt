@@ -36,6 +36,9 @@ class VaultViewModel @Inject constructor(
     val favoriteCount: StateFlow<Int> = credentialRepository.observeFavoriteCount()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
+    val recycleBinCount: StateFlow<Int> = credentialRepository.observeRecycleBinCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 

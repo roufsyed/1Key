@@ -156,6 +156,7 @@ fun CredentialDetailScreen(
                     history = history,
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
+                    onDeleteNow = viewModel::deleteNow,
                     onBack = onBack,
                     onToggleFavorite = viewModel::toggleFavorite,
                 )
@@ -180,6 +181,7 @@ private fun CredentialViewContent(
     history: List<CredentialHistoryEntry>,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    onDeleteNow: () -> Unit,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
@@ -306,14 +308,11 @@ private fun CredentialViewContent(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete credential?") },
-            text = { Text("This action cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = { showDeleteDialog = false; onDelete() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
+        BulkDeleteDialog(
+            count = 1,
+            onMoveToBin = { showDeleteDialog = false; onDelete() },
+            onDeleteNow = { showDeleteDialog = false; onDeleteNow() },
+            onCancel = { showDeleteDialog = false },
         )
     }
 }

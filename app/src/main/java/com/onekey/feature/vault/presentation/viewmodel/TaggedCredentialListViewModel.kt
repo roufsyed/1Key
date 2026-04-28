@@ -9,6 +9,7 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
+import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
 import com.onekey.feature.vault.presentation.screen.TAG_ALL
 import com.onekey.feature.vault.presentation.screen.TAG_FAVORITES
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,10 +32,11 @@ class TaggedCredentialListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val credentialRepository: CredentialRepository,
     private val deleteCredential: DeleteCredentialUseCase,
+    private val hardDeleteCredential: HardDeleteCredentialUseCase,
     private val appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
-    private val rawTag: String = savedStateHandle.get<String>("tagName") ?: ""
+    val rawTag: String = savedStateHandle.get<String>("tagName") ?: ""
 
     val displayName: String = when (rawTag) {
         TAG_ALL       -> "All Items"
@@ -98,12 +100,28 @@ class TaggedCredentialListViewModel @Inject constructor(
         _selectedIds.value = emptySet()
     }
 
+    /** Soft-delete: moves selected to recycle bin. */
     fun deleteSelected() {
         viewModelScope.launch {
             val ids = _selectedIds.value.toList()
             _selectedIds.value = emptySet()
             val failures = ids
                 .map { id -> async { deleteCredential(id) } }
+                .awaitAll()
+                .count { it is AppResult.Error }
+            if (failures > 0) {
+                _event.emit(CredentialListEvent.DeleteError(failures))
+            }
+        }
+    }
+
+    /** Hard-delete: skips the recycle bin and removes selected immediately. */
+    fun deleteSelectedNow() {
+        viewModelScope.launch {
+            val ids = _selectedIds.value.toList()
+            _selectedIds.value = emptySet()
+            val failures = ids
+                .map { id -> async { hardDeleteCredential(id) } }
                 .awaitAll()
                 .count { it is AppResult.Error }
             if (failures > 0) {

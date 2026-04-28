@@ -236,24 +236,17 @@ fun FavouritesScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete ${selectedIds.size} item${if (selectedIds.size == 1) "" else "s"}?") },
-            text = { Text("This cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                        viewModel.deleteSelected()
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) { Text("Delete") }
+        BulkDeleteDialog(
+            count = selectedIds.size,
+            onMoveToBin = {
+                showDeleteDialog = false
+                viewModel.deleteSelected()
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            onDeleteNow = {
+                showDeleteDialog = false
+                viewModel.deleteSelectedNow()
             },
+            onCancel = { showDeleteDialog = false },
         )
     }
 }

@@ -20,7 +20,8 @@ interface TagDao {
 
     @Query("""
         SELECT t.name, t.color, t.icon, t.is_default,
-               (SELECT COUNT(*) FROM credentials WHERE tags LIKE '%' || t.name || '%') AS count
+               (SELECT COUNT(*) FROM credentials
+                WHERE deleted_at IS NULL AND tags LIKE '%' || t.name || '%') AS count
         FROM tags t
         ORDER BY t.name ASC
     """)

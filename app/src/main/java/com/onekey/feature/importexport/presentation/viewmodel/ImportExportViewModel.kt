@@ -13,7 +13,9 @@ import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.domain.usecase.ExportVaultUseCase
 import com.onekey.core.domain.usecase.ImportVaultUseCase
 import com.onekey.core.security.AutoLockManager
+import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
+import com.onekey.feature.importexport.domain.ImportPlan
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.ParsedImport
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,6 +52,8 @@ sealed class ImportExportUiState {
         val customFieldKeys: List<String>,
         val sensitiveCustomFieldKeys: Set<String>,
     ) : ImportExportUiState()
+    // Plan computed; some items conflict with existing — user picks merge or add-as-separate.
+    data class ImportReview(val plan: ImportPlan) : ImportExportUiState()
     // Encrypted file detected; error is non-null when decryption failed (retry allowed).
     data class AwaitingImportPassword(val error: String? = null) : ImportExportUiState()
     data class Error(val message: String) : ImportExportUiState()
@@ -74,6 +78,9 @@ class ImportExportViewModel @Inject constructor(
 
     // Held between "parse complete → preview shown" and "user confirms / cancels".
     private var pendingParsedImport: ParsedImport? = null
+
+    // Held between "plan computed with conflicts → review shown" and "user picks resolution".
+    private var pendingPlan: ImportPlan? = null
 
     // Held between "password dialog confirmed" and "picker callback fires".
     private var pendingExportPassword: CharArray? = null
@@ -251,25 +258,55 @@ class ImportExportViewModel @Inject constructor(
         }
     }
 
-    /** Called when the user confirms the import preview with their chosen field options. */
+    /**
+     * Called when the user confirms the import preview with their chosen field options.
+     * Computes a plan and either applies it directly (no conflicts) or transitions to
+     * [ImportExportUiState.ImportReview] so the user can pick merge vs add-as-separate.
+     */
     fun confirmImport(fieldOptions: ImportFieldOptions) {
         val parsed = pendingParsedImport ?: return
         viewModelScope.launch {
             _uiState.value = ImportExportUiState.Loading
-            // Off-main: full-vault dedupe (decrypts every existing credential) plus
-            // encrypt + write of every new row. Easily the heaviest action in the app.
-            when (val result = withContext(Dispatchers.Default) {
-                importVault.saveImport(parsed, fieldOptions)
-            }) {
+            val planResult = withContext(Dispatchers.Default) {
+                importVault.planImport(parsed, fieldOptions)
+            }
+            when (planResult) {
                 is AppResult.Success -> {
-                    // Only clear on success — keep parsed alive on error so the user can
-                    // retry from the dialog without re-picking the file.
-                    pendingParsedImport = null
-                    _uiState.value = ImportExportUiState.ImportSuccess(result.data)
+                    val plan = planResult.data
+                    if (plan.needsConflictResolution) {
+                        pendingPlan = plan
+                        _uiState.value = ImportExportUiState.ImportReview(plan)
+                    } else {
+                        // No conflicts — apply silently and finish.
+                        applyPlan(plan, ConflictResolution.MERGE)
+                    }
                 }
                 is AppResult.Error ->
-                    _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
+                    _uiState.value = ImportExportUiState.Error(planResult.message ?: "Import failed")
             }
+        }
+    }
+
+    /** Called from the Review screen with the user's decision for conflicts. */
+    fun confirmConflictResolution(resolution: ConflictResolution) {
+        val plan = pendingPlan ?: return
+        viewModelScope.launch {
+            _uiState.value = ImportExportUiState.Loading
+            applyPlan(plan, resolution)
+        }
+    }
+
+    private suspend fun applyPlan(plan: ImportPlan, resolution: ConflictResolution) {
+        when (val result = withContext(Dispatchers.Default) {
+            importVault.applyPlan(plan, resolution)
+        }) {
+            is AppResult.Success -> {
+                pendingParsedImport = null
+                pendingPlan = null
+                _uiState.value = ImportExportUiState.ImportSuccess(result.data)
+            }
+            is AppResult.Error ->
+                _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
         }
     }
 
@@ -278,6 +315,7 @@ class ImportExportViewModel @Inject constructor(
             val file = pendingImportFile
             pendingImportFile = null
             pendingParsedImport = null
+            pendingPlan = null
             withContext(Dispatchers.IO) { file?.delete() }
             _uiState.value = ImportExportUiState.Idle
         }

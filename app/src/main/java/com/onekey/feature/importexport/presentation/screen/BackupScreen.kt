@@ -56,7 +56,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
+import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
+import com.onekey.feature.importexport.domain.ImportPlan
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.SkipReason
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportEvent
@@ -348,6 +350,7 @@ fun BackupScreen(
                 viewModel.acknowledgeResult()
                 onNavigateToVault()
             },
+            onConfirmResolution = { resolution -> viewModel.confirmConflictResolution(resolution) },
         )
     }
 
@@ -864,10 +867,11 @@ private fun TransferRow(good: Boolean, text: String) {
 
 // ── Import preview ────────────────────────────────────────────────────────────
 
-private enum class ImportDialogPhase { Preview, Importing, Success, Error, Other }
+private enum class ImportDialogPhase { Preview, Review, Importing, Success, Error, Other }
 
 private fun ImportExportUiState.toDialogPhase(): ImportDialogPhase = when (this) {
     is ImportExportUiState.ImportPreview -> ImportDialogPhase.Preview
+    is ImportExportUiState.ImportReview -> ImportDialogPhase.Review
     is ImportExportUiState.Loading -> ImportDialogPhase.Importing
     is ImportExportUiState.ImportSuccess -> ImportDialogPhase.Success
     is ImportExportUiState.Error -> ImportDialogPhase.Error
@@ -884,6 +888,7 @@ private fun ImportPreviewDialog(
     onAcknowledgeError: () -> Unit,
     onDone: (ImportResult) -> Unit,
     onViewVault: () -> Unit,
+    onConfirmResolution: (ConflictResolution) -> Unit,
 ) {
     // Capture the most recent ImportPreview so the preview body, opts state, and retry
     // path all have stable parsed/keys context across phase transitions to Loading,
@@ -893,6 +898,14 @@ private fun ImportPreviewDialog(
         if (state is ImportExportUiState.ImportPreview) capturedPreview = state
     }
     val preview = capturedPreview ?: return
+
+    // Capture the latest plan so the Review body / actions remain stable across the
+    // Loading / Success / Error transitions that follow user confirmation.
+    var capturedReview by remember { mutableStateOf<ImportExportUiState.ImportReview?>(null) }
+    LaunchedEffect(state) {
+        if (state is ImportExportUiState.ImportReview) capturedReview = state
+    }
+    var resolution by remember { mutableStateOf(ConflictResolution.MERGE) }
 
     var opts by remember(preview) {
         mutableStateOf(ImportFieldOptions(customFieldKeys = preview.customFieldKeys.toSet()))
@@ -939,6 +952,14 @@ private fun ImportPreviewDialog(
                             opts = opts,
                             onOptsChange = { opts = it },
                         )
+                        ImportDialogPhase.Review -> {
+                            val review = capturedReview
+                            if (review != null) ReviewPhaseBody(
+                                plan = review.plan,
+                                resolution = resolution,
+                                onResolutionChange = { resolution = it },
+                            ) else Box(Modifier.fillMaxSize())
+                        }
                         ImportDialogPhase.Importing -> ImportingPhaseBody()
                         ImportDialogPhase.Success -> {
                             val res = (state as? ImportExportUiState.ImportSuccess)?.result
@@ -959,6 +980,7 @@ private fun ImportPreviewDialog(
                     totalCount = totalCount,
                     onCancelPreview = onCancelPreview,
                     onConfirm = { onConfirm(opts) },
+                    onConfirmResolution = { onConfirmResolution(resolution) },
                     onRetry = { onRetry(opts) },
                     onBackToSelection = onBackToSelection,
                     onAcknowledgeError = onAcknowledgeError,
@@ -990,6 +1012,7 @@ private fun ImportDialogHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 when (phase) {
+                    ImportDialogPhase.Review -> "Review import"
                     ImportDialogPhase.Importing -> "Importing"
                     ImportDialogPhase.Success -> "Import complete"
                     ImportDialogPhase.Error -> "Import failed"
@@ -1022,6 +1045,7 @@ private fun ImportDialogActions(
     totalCount: Int,
     onCancelPreview: () -> Unit,
     onConfirm: () -> Unit,
+    onConfirmResolution: () -> Unit,
     onRetry: () -> Unit,
     onBackToSelection: () -> Unit,
     onAcknowledgeError: () -> Unit,
@@ -1048,6 +1072,14 @@ private fun ImportDialogActions(
                         if (totalCount == 1) "Import 1 Credential"
                         else "Import $totalCount Credentials"
                     )
+                }
+            }
+            ImportDialogPhase.Review -> {
+                OutlinedButton(onClick = onCancelPreview, modifier = Modifier.weight(1f)) {
+                    Text("Cancel")
+                }
+                Button(onClick = onConfirmResolution, modifier = Modifier.weight(1f)) {
+                    Text("Continue")
                 }
             }
             ImportDialogPhase.Importing -> {
@@ -1233,6 +1265,171 @@ private fun ImportingPhaseBody() {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+        }
+    }
+}
+
+@Composable
+private fun ReviewPhaseBody(
+    plan: ImportPlan,
+    resolution: ConflictResolution,
+    onResolutionChange: (ConflictResolution) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "Here's what we'll do with your file:",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        ReviewSummaryRow(
+            icon = Icons.Default.Add,
+            color = MaterialTheme.colorScheme.primary,
+            count = plan.newItems.size,
+            singular = "new credential will be added",
+            plural = "new credentials will be added",
+        )
+        if (plan.autoMerges.isNotEmpty()) {
+            ReviewSummaryRow(
+                icon = Icons.Default.Sync,
+                color = MaterialTheme.colorScheme.primary,
+                count = plan.autoMerges.size,
+                singular = "existing credential will be enriched",
+                plural = "existing credentials will be enriched",
+                supporting = "Your file fills in fields you didn't have yet.",
+            )
+        }
+        if (plan.skipped.isNotEmpty()) {
+            ReviewSummaryRow(
+                icon = Icons.Default.RemoveCircleOutline,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                count = plan.skipped.size,
+                singular = "duplicate ID skipped",
+                plural = "duplicate IDs skipped",
+            )
+        }
+
+        Spacer(Modifier.height(4.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            buildString {
+                append(plan.conflicts.size)
+                append(" credential")
+                if (plan.conflicts.size != 1) append("s")
+                append(" already exist")
+                if (plan.conflicts.size == 1) append("s")
+                append(" with different values.")
+            },
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            "Choose what to do with these:",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        ResolutionOptionRow(
+            selected = resolution == ConflictResolution.MERGE,
+            title = "Merge with existing items",
+            description = "Keep your current values. The import only fills in fields you didn't have.",
+            onSelect = { onResolutionChange(ConflictResolution.MERGE) },
+        )
+        ResolutionOptionRow(
+            selected = resolution == ConflictResolution.ADD_AS_SEPARATE,
+            title = "Add as separate items",
+            description = "Keep both versions side by side. Your existing items are untouched.",
+            onSelect = { onResolutionChange(ConflictResolution.ADD_AS_SEPARATE) },
+        )
+
+        if (plan.conflicts.size <= 5) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Items in conflict:",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            plan.conflicts.forEach { conflict ->
+                Text(
+                    "• ${conflict.existing.title.ifBlank { "(untitled)" }} — " +
+                        conflict.conflictingFields.joinToString(", ") + " differ" +
+                        if (conflict.restoreFromBin) " · in recycle bin" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReviewSummaryRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: androidx.compose.ui.graphics.Color,
+    count: Int,
+    singular: String,
+    plural: String,
+    supporting: String? = null,
+) {
+    Row(verticalAlignment = Alignment.Top) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "$count ${if (count == 1) singular else plural}",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (supporting != null) {
+                Text(
+                    supporting,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResolutionOptionRow(
+    selected: Boolean,
+    title: String,
+    description: String,
+    onSelect: () -> Unit,
+) {
+    Surface(
+        onClick = onSelect,
+        shape = MaterialTheme.shapes.medium,
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+        else MaterialTheme.colorScheme.surface,
+        tonalElevation = if (selected) 0.dp else 1.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            RadioButton(selected = selected, onClick = onSelect)
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

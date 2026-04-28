@@ -14,6 +14,7 @@ import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.GetCredentialUseCase
+import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -35,6 +36,7 @@ class CredentialDetailViewModel @Inject constructor(
     private val getCredential: GetCredentialUseCase,
     private val saveCredential: SaveCredentialUseCase,
     private val deleteCredential: DeleteCredentialUseCase,
+    private val hardDeleteCredential: HardDeleteCredentialUseCase,
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
     private val tagRepository: TagRepository,
@@ -97,10 +99,22 @@ class CredentialDetailViewModel @Inject constructor(
         }
     }
 
+    /** Soft-delete: moves credential to recycle bin (recoverable for 30 days). */
     fun delete() {
         val id = credentialId ?: return
         viewModelScope.launch {
             when (val result = deleteCredential(id)) {
+                is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted
+                is AppResult.Error -> _uiState.value = CredentialDetailUiState.Error(result.message ?: "Delete failed")
+            }
+        }
+    }
+
+    /** Hard-delete: skips the recycle bin and removes the credential immediately. */
+    fun deleteNow() {
+        val id = credentialId ?: return
+        viewModelScope.launch {
+            when (val result = hardDeleteCredential(id)) {
                 is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted
                 is AppResult.Error -> _uiState.value = CredentialDetailUiState.Error(result.message ?: "Delete failed")
             }

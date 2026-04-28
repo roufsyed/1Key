@@ -40,11 +40,13 @@ fun VaultScreen(
     onAddClick: (CredentialType) -> Unit,
     onTagClick: (String) -> Unit,
     onCredentialClick: (String) -> Unit,
+    onRecycleBinClick: () -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
 ) {
     val tagCounts by viewModel.tagCounts.collectAsStateWithLifecycle()
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
+    val recycleBinCount by viewModel.recycleBinCount.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
     // Always collected unconditionally to satisfy Compose snapshot rules.
@@ -219,6 +221,17 @@ fun VaultScreen(
                         name = tagWithCount.tag.name,
                         count = tagWithCount.count,
                         onClick = { onTagClick(tagWithCount.tag.name) },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
+
+                // ── Recycle bin ───────────────────────────────────────────────────
+                item(key = "recycle_bin") {
+                    TagRow(
+                        icon = Icons.Default.Delete,
+                        name = "Recycle Bin",
+                        count = recycleBinCount,
+                        onClick = onRecycleBinClick,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }

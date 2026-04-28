@@ -43,6 +43,7 @@ import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
 import com.onekey.feature.twofa.presentation.screen.TwoFaListScreen
 import com.onekey.feature.vault.presentation.screen.CredentialDetailScreen
 import com.onekey.feature.vault.presentation.screen.FavouritesScreen
+import com.onekey.feature.vault.presentation.screen.RecycleBinScreen
 import com.onekey.feature.vault.presentation.screen.TaggedCredentialListScreen
 import com.onekey.feature.vault.presentation.screen.VaultScreen
 
@@ -64,6 +65,7 @@ sealed class Screen(val route: String) {
     }
     data object QrScanner : Screen("qr_scanner")
     data object Backup : Screen("backup")
+    data object RecycleBin : Screen("recycle_bin")
 }
 
 private val BOTTOM_NAV_ROUTES = setOf(
@@ -190,6 +192,7 @@ fun OneKeyNavGraph(
                         onCredentialClick = { id ->
                             navController.navigate(Screen.CredentialDetail.createRoute(id))
                         },
+                        onRecycleBinClick = { navController.navigate(Screen.RecycleBin.route) },
                     )
                 }
 
@@ -243,6 +246,10 @@ fun OneKeyNavGraph(
                         },
                         onBackup = { navController.navigate(Screen.Backup.route) },
                     )
+                }
+
+                composable(Screen.RecycleBin.route) {
+                    RecycleBinScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.Backup.route) {

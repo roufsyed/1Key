@@ -183,6 +183,17 @@ fun TaggedCredentialListScreen(
             return@Scaffold
         }
 
+        if (credList.isEmpty()) {
+            val (title, subtitle) = emptyTagCopy(viewModel.rawTag, viewModel.displayName)
+            EmptyVaultState(
+                title = title,
+                subtitle = subtitle,
+                icon = tagIcon(viewModel.displayName),
+                modifier = Modifier.padding(padding),
+            )
+            return@Scaffold
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -227,24 +238,17 @@ fun TaggedCredentialListScreen(
     }
 
     if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete ${selectedIds.size} item${if (selectedIds.size == 1) "" else "s"}?") },
-            text = { Text("This cannot be undone.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                        viewModel.deleteSelected()
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) { Text("Delete") }
+        BulkDeleteDialog(
+            count = selectedIds.size,
+            onMoveToBin = {
+                showDeleteDialog = false
+                viewModel.deleteSelected()
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            onDeleteNow = {
+                showDeleteDialog = false
+                viewModel.deleteSelectedNow()
             },
+            onCancel = { showDeleteDialog = false },
         )
     }
 }
@@ -365,4 +369,13 @@ private fun AlphabetIndexer(
             }
         }
     }
+}
+
+private fun emptyTagCopy(rawTag: String, displayName: String): Pair<String, String> = when (rawTag) {
+    TAG_ALL -> "Your vault is empty" to
+        "Add your first credential from the home screen — tap the + button to get started."
+    TAG_FAVORITES -> "No favourites yet" to
+        "Tap the heart on any credential to keep it within easy reach here."
+    else -> "No credentials in $displayName" to
+        "When you add a credential to this category, it'll show up here."
 }

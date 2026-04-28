@@ -12,7 +12,8 @@ interface CredentialDao {
     @Query(
         """
         SELECT * FROM credentials
-        WHERE (:query = '' OR title LIKE '%' || :query || '%')
+        WHERE deleted_at IS NULL
+        AND (:query = '' OR title LIKE '%' || :query || '%')
         AND (:tag = '' OR tags LIKE '%' || :tag || '%')
         ORDER BY updated_at DESC
         """
@@ -22,7 +23,8 @@ interface CredentialDao {
     @Query(
         """
         SELECT * FROM credentials
-        WHERE (:query = '' OR title LIKE '%' || :query || '%')
+        WHERE deleted_at IS NULL
+        AND (:query = '' OR title LIKE '%' || :query || '%')
         AND (:tag = '' OR tags LIKE '%' || :tag || '%')
         ORDER BY updated_at DESC
         LIMIT :limit OFFSET :offset
@@ -30,11 +32,16 @@ interface CredentialDao {
     )
     fun searchFlow(query: String, tag: String, limit: Int, offset: Int): Flow<List<CredentialEntity>>
 
-    @Query("SELECT * FROM credentials WHERE id = :id")
+    @Query("SELECT * FROM credentials WHERE id = :id AND deleted_at IS NULL")
     fun observeById(id: String): Flow<CredentialEntity?>
 
-    @Query("SELECT * FROM credentials WHERE id = :id")
+    @Query("SELECT * FROM credentials WHERE id = :id AND deleted_at IS NULL")
     suspend fun getById(id: String): CredentialEntity?
+
+    // Includes soft-deleted rows. Used by the recycle bin and by import dedup so that a
+    // (title, username) match in the bin can be detected and restored.
+    @Query("SELECT * FROM credentials WHERE id = :id")
+    suspend fun getByIdIncludingDeleted(id: String): CredentialEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: CredentialEntity)
@@ -45,17 +52,39 @@ interface CredentialDao {
     @Query("DELETE FROM credentials WHERE id = :id")
     suspend fun deleteById(id: String)
 
-    @Query("SELECT COUNT(*) FROM credentials")
+    @Query("UPDATE credentials SET deleted_at = :deletedAt WHERE id = :id")
+    suspend fun softDeleteById(id: String, deletedAt: Long)
+
+    @Query("UPDATE credentials SET deleted_at = NULL, updated_at = :now WHERE id = :id")
+    suspend fun restoreById(id: String, now: Long)
+
+    @Query("DELETE FROM credentials WHERE deleted_at IS NOT NULL")
+    suspend fun emptyRecycleBin()
+
+    @Query("DELETE FROM credentials WHERE deleted_at IS NOT NULL AND deleted_at < :cutoff")
+    suspend fun purgeOlderThan(cutoff: Long): Int
+
+    @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL")
     fun observeCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM credentials WHERE tags LIKE '%' || :tag || '%'")
+    @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL AND tags LIKE '%' || :tag || '%'")
     fun observeCountForTag(tag: String): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM credentials WHERE is_favorite = 1")
+    @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1")
     fun observeFavoriteCount(): Flow<Int>
 
-    @Query("SELECT * FROM credentials")
+    @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NOT NULL")
+    fun observeRecycleBinCount(): Flow<Int>
+
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL")
     suspend fun getAll(): List<CredentialEntity>
+
+    // Used by import dedup to detect (title, username) matches that live in the recycle bin.
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NOT NULL")
+    suspend fun getAllInRecycleBin(): List<CredentialEntity>
+
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+    fun observeRecycleBin(): Flow<List<CredentialEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(entities: List<CredentialEntity>)
@@ -63,13 +92,13 @@ interface CredentialDao {
     @Query("DELETE FROM credentials")
     suspend fun deleteAll()
 
-    @Query("SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY updated_at DESC")
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY updated_at DESC")
     fun observeFavorites(): Flow<List<CredentialEntity>>
 
-    @Query("SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY updated_at DESC")
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY updated_at DESC")
     fun favoritesPagingSource(): PagingSource<Int, CredentialEntity>
 
-    @Query("SELECT * FROM credentials WHERE totp_secret_encrypted IS NOT NULL ORDER BY title ASC")
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND totp_secret_encrypted IS NOT NULL ORDER BY title ASC")
     fun observeWithTotp(): Flow<List<CredentialEntity>>
 
     @Query("UPDATE credentials SET is_favorite = :isFavorite WHERE id = :id")
@@ -86,11 +115,12 @@ interface CredentialDao {
 
     @Query("""
         SELECT title FROM credentials
-        WHERE (:tag = '' OR tags LIKE '%' || :tag || '%')
+        WHERE deleted_at IS NULL
+        AND (:tag = '' OR tags LIKE '%' || :tag || '%')
         ORDER BY lower(title) ASC
     """)
     fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
 
-    @Query("SELECT title FROM credentials WHERE is_favorite = 1 ORDER BY lower(title) ASC")
+    @Query("SELECT title FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY lower(title) ASC")
     fun observeFavoriteTitlesAlphabetical(): Flow<List<String>>
 }

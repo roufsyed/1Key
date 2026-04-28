@@ -17,6 +17,8 @@ data class Credential(
     val createdAt: Long,
     val updatedAt: Long,
     val type: CredentialType = CredentialType.LOGIN,
+    /** Null = active. Non-null = soft-deleted at this epoch ms (in the recycle bin). */
+    val deletedAt: Long? = null,
 )
 
 @Immutable

@@ -2,11 +2,15 @@ package com.onekey.core.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverters
 import com.onekey.core.data.local.database.Converters
 
-@Entity(tableName = "credentials")
+@Entity(
+    tableName = "credentials",
+    indices = [Index(value = ["deleted_at"], name = "index_credentials_deleted_at")],
+)
 @TypeConverters(Converters::class)
 data class CredentialEntity(
     @PrimaryKey val id: String,
@@ -30,6 +34,8 @@ data class CredentialEntity(
     @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
     // Stored as enum name string (e.g. "LOGIN"). Default keeps existing rows unchanged.
     @ColumnInfo(name = "type") val type: String = "LOGIN",
+    // Null = active. Non-null = soft-deleted at this epoch ms; auto-purged after 30 days.
+    @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

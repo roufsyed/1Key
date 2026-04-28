@@ -80,6 +80,14 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+// Adds nullable deleted_at column for soft-delete (recycle bin). Existing rows stay active (NULL).
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN deleted_at INTEGER")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_credentials_deleted_at ON credentials (deleted_at)")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -96,7 +104,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

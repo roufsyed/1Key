@@ -47,7 +47,7 @@ class CredentialRepositoryImpl @Inject constructor(
             if (!unlocked) flowOf(PagingData.empty())
             else {
                 val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
                     arrayOf(query, query, tag, tag),
                 )
                 Pager(
@@ -74,8 +74,39 @@ class CredentialRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteCredential(id: String): AppResult<Unit> = runCatchingResult {
+        dao.softDeleteById(id, System.currentTimeMillis())
+    }
+
+    override suspend fun hardDeleteCredential(id: String): AppResult<Unit> = runCatchingResult {
         dao.deleteById(id)
     }
+
+    override suspend fun restoreCredential(id: String): AppResult<Unit> = runCatchingResult {
+        dao.restoreById(id, System.currentTimeMillis())
+    }
+
+    override suspend fun purgeFromRecycleBin(id: String): AppResult<Unit> = runCatchingResult {
+        dao.deleteById(id)
+    }
+
+    override suspend fun emptyRecycleBin(): AppResult<Int> = runCatchingResult {
+        val count = dao.observeRecycleBinCount().first()
+        dao.emptyRecycleBin()
+        count
+    }
+
+    override suspend fun purgeRecycleBinOlderThan(cutoff: Long): AppResult<Int> = runCatchingResult {
+        dao.purgeOlderThan(cutoff)
+    }
+
+    override fun observeRecycleBin(): Flow<List<Credential>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeRecycleBin().map { list -> list.toDomainListSafe() }
+        }.flowOn(Dispatchers.Default)
+
+    override fun observeRecycleBinCount(): Flow<Int> =
+        dao.observeRecycleBinCount().distinctUntilChanged()
 
     override suspend fun getAllCredentials(): AppResult<List<Credential>> = runCatchingResult {
         // One-shot suspend call — let decrypt failures surface as AppResult.Error to the
@@ -83,6 +114,10 @@ class CredentialRepositoryImpl @Inject constructor(
         // observers use the per-row safe path because a transient throw there poisons
         // the StateFlow; here a throw is just a normal error to the user.
         dao.getAll().map { it.toDomain() }
+    }
+
+    override suspend fun getAllInRecycleBin(): AppResult<List<Credential>> = runCatchingResult {
+        dao.getAllInRecycleBin().map { it.toDomain() }
     }
 
     override suspend fun importCredentials(credentials: List<Credential>): AppResult<Int> =
@@ -110,7 +145,7 @@ class CredentialRepositoryImpl @Inject constructor(
             if (!unlocked) flowOf(PagingData.empty())
             else {
                 val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
                 )
                 Pager(
                     config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
@@ -121,7 +156,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> {
         val sql = SimpleSQLiteQuery(
-            "SELECT * FROM credentials WHERE (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+            "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
             arrayOf(query, query, tag, tag),
         )
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->
@@ -132,7 +167,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> {
         val sql = SimpleSQLiteQuery(
-            "SELECT * FROM credentials WHERE is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
+            "SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
         )
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
@@ -205,6 +240,7 @@ class CredentialRepositoryImpl @Inject constructor(
         createdAt = entity.createdAt,
         updatedAt = entity.updatedAt,
         type = CredentialType.fromNameOrDefault(entity.type),
+        deletedAt = entity.deletedAt,
     )
 
     private fun CredentialEntity.toDomain(): Credential {
@@ -235,6 +271,7 @@ class CredentialRepositoryImpl @Inject constructor(
             createdAt = createdAt,
             updatedAt = updatedAt,
             type = CredentialType.fromNameOrDefault(type),
+            deletedAt = deletedAt,
         )
     }
 
@@ -278,6 +315,7 @@ class CredentialRepositoryImpl @Inject constructor(
             createdAt = if (createdAt == 0L) now else createdAt,
             updatedAt = now,
             type = type.name,
+            deletedAt = deletedAt,
         )
     }
 }

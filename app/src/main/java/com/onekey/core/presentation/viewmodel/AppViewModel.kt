@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
+import com.onekey.core.domain.usecase.PurgeExpiredRecycleBinUseCase
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +19,7 @@ import javax.inject.Inject
 class AppViewModel @Inject constructor(
     authRepository: AuthRepository,
     appPrefs: AppPreferencesRepository,
+    private val purgeExpiredRecycleBin: PurgeExpiredRecycleBinUseCase,
 ) : ViewModel() {
 
     val isUnlocked: StateFlow<Boolean> = authRepository.isUnlocked()
@@ -36,6 +38,13 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             isUnlocked.collect { unlocked ->
                 if (!unlocked) _unlockPhase.value = UnlockTransitionPhase.Idle
+            }
+        }
+        // On every unlock, purge recycle-bin items past their 30-day retention window.
+        // We don't surface failures — the bin keeps the items around until next unlock.
+        viewModelScope.launch {
+            isUnlocked.collect { unlocked ->
+                if (unlocked) purgeExpiredRecycleBin()
             }
         }
     }

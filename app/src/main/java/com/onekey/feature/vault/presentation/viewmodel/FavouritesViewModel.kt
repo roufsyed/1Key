@@ -8,6 +8,7 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
+import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -21,6 +22,7 @@ import javax.inject.Inject
 class FavouritesViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val deleteCredential: DeleteCredentialUseCase,
+    private val hardDeleteCredential: HardDeleteCredentialUseCase,
     private val appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
@@ -73,12 +75,28 @@ class FavouritesViewModel @Inject constructor(
         _selectedIds.value = emptySet()
     }
 
+    /** Soft-delete: moves selected to recycle bin. */
     fun deleteSelected() {
         viewModelScope.launch {
             val ids = _selectedIds.value.toList()
             _selectedIds.value = emptySet()
             val failures = ids
                 .map { id -> async { deleteCredential(id) } }
+                .awaitAll()
+                .count { it is AppResult.Error }
+            if (failures > 0) {
+                _event.emit(CredentialListEvent.DeleteError(failures))
+            }
+        }
+    }
+
+    /** Hard-delete: skips the recycle bin and removes selected immediately. */
+    fun deleteSelectedNow() {
+        viewModelScope.launch {
+            val ids = _selectedIds.value.toList()
+            _selectedIds.value = emptySet()
+            val failures = ids
+                .map { id -> async { hardDeleteCredential(id) } }
                 .awaitAll()
                 .count { it is AppResult.Error }
             if (failures > 0) {
