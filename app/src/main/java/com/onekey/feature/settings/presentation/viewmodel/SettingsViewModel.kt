@@ -6,6 +6,7 @@ import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
@@ -78,6 +79,9 @@ class SettingsViewModel @Inject constructor(
     val isHideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val recycleBinRetention: StateFlow<RecycleBinRetention> = appPrefs.getRecycleBinRetention()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, RecycleBinRetention.DAYS_30)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -143,6 +147,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setHideTopBarOnScroll(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setHideTopBarOnScroll(enabled) }
+    }
+
+    fun setRecycleBinRetention(retention: RecycleBinRetention) {
+        viewModelScope.launch { appPrefs.setRecycleBinRetention(retention) }
     }
 
     fun addTag(name: String) {

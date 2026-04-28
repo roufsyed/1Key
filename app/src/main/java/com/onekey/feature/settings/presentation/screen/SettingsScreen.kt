@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.domain.model.Tag
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
@@ -380,6 +381,87 @@ fun SettingsScreen(
                     leadingContent = { Icon(Icons.Default.Backup, contentDescription = null) },
                     trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                     modifier = Modifier.clickable(onClick = onBackup),
+                )
+            }
+
+            // ── Recycle bin ───────────────────────────────────────────────────
+            val recycleBinRetention by settingsVm.recycleBinRetention.collectAsStateWithLifecycle()
+            var showRetentionPicker by remember { mutableStateOf(false) }
+
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Recycle bin")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("Auto-clear after") },
+                    supportingContent = {
+                        Text(
+                            if (recycleBinRetention == RecycleBinRetention.NEVER)
+                                "Items stay in the bin until you remove them"
+                            else
+                                "Deleted items are removed for good after ${recycleBinRetention.label.lowercase()}",
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                    trailingContent = { Text(recycleBinRetention.label) },
+                    modifier = Modifier.clickable { showRetentionPicker = true },
+                )
+            }
+
+            if (showRetentionPicker) {
+                AlertDialog(
+                    onDismissRequest = { showRetentionPicker = false },
+                    icon = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                    title = { Text("Auto-clear recycle bin") },
+                    text = {
+                        Column {
+                            Text(
+                                "How long should deleted credentials wait in the bin before being removed?",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            RecycleBinRetention.entries.forEach { option ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            settingsVm.setRecycleBinRetention(option)
+                                            showRetentionPicker = false
+                                        }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    RadioButton(
+                                        selected = recycleBinRetention == option,
+                                        onClick = {
+                                            settingsVm.setRecycleBinRetention(option)
+                                            showRetentionPicker = false
+                                        },
+                                    )
+                                    Column {
+                                        Text(option.label, style = MaterialTheme.typography.bodyMedium)
+                                        if (option == RecycleBinRetention.DAYS_30) {
+                                            Text(
+                                                "Default — recommended",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        } else if (option == RecycleBinRetention.NEVER) {
+                                            Text(
+                                                "You'll need to empty the bin manually",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showRetentionPicker = false }) { Text("Done") }
+                    },
                 )
             }
 

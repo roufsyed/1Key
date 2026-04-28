@@ -5,9 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.EmptyRecycleBinUseCase
-import com.onekey.core.domain.usecase.PurgeExpiredRecycleBinUseCase
 import com.onekey.core.domain.usecase.PurgeFromRecycleBinUseCase
 import com.onekey.core.domain.usecase.RestoreCredentialUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -25,7 +26,8 @@ import javax.inject.Inject
 @Immutable
 data class RecycleBinItem(
     val credential: Credential,
-    val daysUntilPurge: Int,
+    /** Days until auto-purge. `null` when the user disabled auto-clear. */
+    val daysUntilPurge: Int?,
 )
 
 @Immutable
@@ -39,14 +41,21 @@ sealed class RecycleBinEvent {
 @HiltViewModel
 class RecycleBinViewModel @Inject constructor(
     repository: CredentialRepository,
+    appPrefs: AppPreferencesRepository,
     private val restoreCredential: RestoreCredentialUseCase,
     private val purgeFromBin: PurgeFromRecycleBinUseCase,
     private val emptyBin: EmptyRecycleBinUseCase,
 ) : ViewModel() {
 
-    val items: StateFlow<List<RecycleBinItem>> = repository.observeRecycleBin()
-        .map { creds -> creds.map { it.toBinItem() } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val retention: StateFlow<RecycleBinRetention> = appPrefs.getRecycleBinRetention()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, RecycleBinRetention.DAYS_30)
+
+    val items: StateFlow<List<RecycleBinItem>> = combine(
+        repository.observeRecycleBin(),
+        retention,
+    ) { creds, ret ->
+        creds.map { it.toBinItem(ret.millis) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _isWorking = MutableStateFlow(false)
     val isWorking: StateFlow<Boolean> = _isWorking.asStateFlow()
@@ -87,10 +96,11 @@ class RecycleBinViewModel @Inject constructor(
         }
     }
 
-    private fun Credential.toBinItem(): RecycleBinItem {
+    private fun Credential.toBinItem(retentionMs: Long?): RecycleBinItem {
+        if (retentionMs == null) return RecycleBinItem(credential = this, daysUntilPurge = null)
         val deleted = deletedAt ?: System.currentTimeMillis()
         val ageMs = System.currentTimeMillis() - deleted
-        val remainingMs = (PurgeExpiredRecycleBinUseCase.RETENTION_MS - ageMs).coerceAtLeast(0L)
+        val remainingMs = (retentionMs - ageMs).coerceAtLeast(0L)
         val daysLeft = ((remainingMs + DAY_MS - 1) / DAY_MS).toInt()
         return RecycleBinItem(credential = this, daysUntilPurge = daysLeft)
     }

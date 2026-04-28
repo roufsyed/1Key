@@ -15,6 +15,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.feature.vault.presentation.viewmodel.RecycleBinEvent
 import com.onekey.feature.vault.presentation.viewmodel.RecycleBinItem
 import com.onekey.feature.vault.presentation.viewmodel.RecycleBinViewModel
@@ -28,6 +29,7 @@ fun RecycleBinScreen(
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
     val isWorking by viewModel.isWorking.collectAsStateWithLifecycle()
+    val retention by viewModel.retention.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var pendingPurge by remember { mutableStateOf<RecycleBinItem?>(null) }
@@ -69,10 +71,10 @@ fun RecycleBinScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         if (items.isEmpty()) {
-            EmptyBinState(modifier = Modifier.padding(padding))
+            EmptyBinState(modifier = Modifier.padding(padding), retention = retention)
         } else {
             Column(modifier = Modifier.padding(padding).fillMaxSize()) {
-                BinHeader(count = items.size)
+                BinHeader(count = items.size, retention = retention)
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -141,7 +143,7 @@ fun RecycleBinScreen(
 }
 
 @Composable
-private fun BinHeader(count: Int) {
+private fun BinHeader(count: Int, retention: RecycleBinRetention) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -159,12 +161,19 @@ private fun BinHeader(count: Int) {
             )
             Spacer(Modifier.width(12.dp))
             Text(
-                "Items here are kept for 30 days, then deleted automatically. You can restore any of them before that.",
+                retentionHeaderText(retention),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
+}
+
+private fun retentionHeaderText(retention: RecycleBinRetention): String = when (retention) {
+    RecycleBinRetention.NEVER ->
+        "Items here stay until you delete or empty them. Auto-clear is off — change it in Settings."
+    else ->
+        "Items here are kept for ${retention.label.lowercase()}, then deleted automatically. You can restore any of them before that."
 }
 
 @Composable
@@ -199,7 +208,8 @@ private fun RecycleBinRow(
             Text(
                 purgeLabel(item.daysUntilPurge),
                 style = MaterialTheme.typography.labelSmall,
-                color = if (item.daysUntilPurge <= 3) MaterialTheme.colorScheme.error
+                color = if (item.daysUntilPurge != null && item.daysUntilPurge <= 3)
+                    MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(12.dp))
@@ -225,7 +235,13 @@ private fun RecycleBinRow(
 }
 
 @Composable
-private fun EmptyBinState(modifier: Modifier = Modifier) {
+private fun EmptyBinState(modifier: Modifier = Modifier, retention: RecycleBinRetention) {
+    val subtitle = when (retention) {
+        RecycleBinRetention.NEVER ->
+            "Deleted credentials will wait here until you remove them — auto-clear is off."
+        else ->
+            "Deleted credentials wait here for ${retention.label.lowercase()} before being removed for good."
+    }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -245,7 +261,7 @@ private fun EmptyBinState(modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Deleted credentials wait here for 30 days before being removed for good.",
+                subtitle,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -254,7 +270,8 @@ private fun EmptyBinState(modifier: Modifier = Modifier) {
     }
 }
 
-private fun purgeLabel(days: Int): String = when {
+private fun purgeLabel(days: Int?): String = when {
+    days == null -> "Won't auto-clear"
     days <= 0 -> "Will be deleted any moment"
     days == 1 -> "Deletes in 1 day"
     else -> "Deletes in $days days"

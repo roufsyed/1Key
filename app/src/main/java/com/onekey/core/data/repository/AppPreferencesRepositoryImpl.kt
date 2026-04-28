@@ -12,6 +12,7 @@ import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +38,7 @@ private val KEY_MP_RECHECK_ENABLED = booleanPreferencesKey("mp_recheck_enabled")
 private val KEY_MP_RECHECK_INTERVAL = stringPreferencesKey("mp_recheck_interval")
 private val KEY_LAST_MP_TIMESTAMP = longPreferencesKey("last_mp_timestamp")
 private val KEY_HIDE_TOP_BAR_ON_SCROLL = booleanPreferencesKey("hide_top_bar_on_scroll")
+private val KEY_RECYCLE_BIN_RETENTION = stringPreferencesKey("recycle_bin_retention")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -160,5 +162,15 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setHideTopBarOnScroll(enabled: Boolean) {
         dataStore.edit { it[KEY_HIDE_TOP_BAR_ON_SCROLL] = enabled }
+    }
+
+    override fun getRecycleBinRetention(): Flow<RecycleBinRetention> =
+        prefs.map { p ->
+            val name = p[KEY_RECYCLE_BIN_RETENTION] ?: RecycleBinRetention.DAYS_30.name
+            RecycleBinRetention.entries.find { it.name == name } ?: RecycleBinRetention.DAYS_30
+        }.distinctUntilChanged()
+
+    override suspend fun setRecycleBinRetention(retention: RecycleBinRetention) {
+        dataStore.edit { it[KEY_RECYCLE_BIN_RETENTION] = retention.name }
     }
 }

@@ -4,6 +4,7 @@ import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.core.domain.model.RecycleBinRetention
 import kotlinx.coroutines.flow.Flow
 
 interface AppPreferencesRepository {
@@ -29,4 +30,6 @@ interface AppPreferencesRepository {
     suspend fun setCredentialSortOrder(order: CredentialSortOrder)
     fun isHideTopBarOnScroll(): Flow<Boolean>
     suspend fun setHideTopBarOnScroll(enabled: Boolean)
+    fun getRecycleBinRetention(): Flow<RecycleBinRetention>
+    suspend fun setRecycleBinRetention(retention: RecycleBinRetention)
 }
