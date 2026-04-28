@@ -44,6 +44,9 @@ class TaggedCredentialListViewModel @Inject constructor(
         else          -> rawTag
     }
 
+    val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val sortOrder: StateFlow<CredentialSortOrder> = appPrefs.getCredentialSortOrder()
         .stateIn(viewModelScope, SharingStarted.Eagerly, CredentialSortOrder.NEWEST_FIRST)
 

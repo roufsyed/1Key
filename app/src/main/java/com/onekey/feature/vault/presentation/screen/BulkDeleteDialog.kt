@@ -8,34 +8,46 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 
 /**
- * Reframed delete confirmation. Offers Move to bin (default), Delete now (irreversible),
- * and Cancel. Used for both single deletes (from the detail screen) and multi-select
- * deletes from list screens.
+ * Reframed delete confirmation. When the recycle bin is enabled it offers
+ * Move to bin / Delete now / Cancel. When the bin is disabled the destructive
+ * choice collapses to a single Delete button so the user isn't offered a
+ * "move to bin" option that doesn't apply.
  */
 @Composable
 fun BulkDeleteDialog(
     count: Int,
+    binEnabled: Boolean,
     onMoveToBin: () -> Unit,
     onDeleteNow: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val title = if (count == 1) "Delete this credential?" else "Delete $count credentials?"
-    val subtitle = if (count == 1) {
-        "It moves to the recycle bin. You can restore it within 30 days."
+    val subtitle = if (binEnabled) {
+        if (count == 1) "It moves to the recycle bin. You can restore it within 30 days."
+        else "They move to the recycle bin. You can restore them within 30 days."
     } else {
-        "They move to the recycle bin. You can restore them within 30 days."
+        if (count == 1) "This is permanent — there's no recycle bin to restore from."
+        else "This is permanent for all $count items — there's no recycle bin to restore from."
     }
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
         text = { Text(subtitle) },
         confirmButton = {
-            TextButton(onClick = onMoveToBin) { Text("Move to bin") }
+            if (binEnabled) {
+                TextButton(onClick = onMoveToBin) { Text("Move to bin") }
+            } else {
+                TextButton(onClick = onDeleteNow) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            }
         },
         dismissButton = {
             Row {
-                TextButton(onClick = onDeleteNow) {
-                    Text("Delete now", color = MaterialTheme.colorScheme.error)
+                if (binEnabled) {
+                    TextButton(onClick = onDeleteNow) {
+                        Text("Delete now", color = MaterialTheme.colorScheme.error)
+                    }
                 }
                 TextButton(onClick = onCancel) { Text("Cancel") }
             }

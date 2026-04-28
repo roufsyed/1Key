@@ -32,4 +32,6 @@ interface AppPreferencesRepository {
     suspend fun setHideTopBarOnScroll(enabled: Boolean)
     fun getRecycleBinRetention(): Flow<RecycleBinRetention>
     suspend fun setRecycleBinRetention(retention: RecycleBinRetention)
+    fun isRecycleBinEnabled(): Flow<Boolean>
+    suspend fun setRecycleBinEnabled(enabled: Boolean)
 }

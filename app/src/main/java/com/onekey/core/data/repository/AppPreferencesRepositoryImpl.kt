@@ -39,6 +39,7 @@ private val KEY_MP_RECHECK_INTERVAL = stringPreferencesKey("mp_recheck_interval"
 private val KEY_LAST_MP_TIMESTAMP = longPreferencesKey("last_mp_timestamp")
 private val KEY_HIDE_TOP_BAR_ON_SCROLL = booleanPreferencesKey("hide_top_bar_on_scroll")
 private val KEY_RECYCLE_BIN_RETENTION = stringPreferencesKey("recycle_bin_retention")
+private val KEY_RECYCLE_BIN_ENABLED = booleanPreferencesKey("recycle_bin_enabled")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -172,5 +173,12 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setRecycleBinRetention(retention: RecycleBinRetention) {
         dataStore.edit { it[KEY_RECYCLE_BIN_RETENTION] = retention.name }
+    }
+
+    override fun isRecycleBinEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_RECYCLE_BIN_ENABLED] ?: true }.distinctUntilChanged()
+
+    override suspend fun setRecycleBinEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_RECYCLE_BIN_ENABLED] = enabled }
     }
 }

@@ -26,6 +26,9 @@ class FavouritesViewModel @Inject constructor(
     private val appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
+    val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val sortOrder: StateFlow<CredentialSortOrder> = appPrefs.getCredentialSortOrder()
         .stateIn(viewModelScope, SharingStarted.Eagerly, CredentialSortOrder.NEWEST_FIRST)
 

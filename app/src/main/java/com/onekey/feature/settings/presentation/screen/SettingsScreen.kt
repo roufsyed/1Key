@@ -386,24 +386,100 @@ fun SettingsScreen(
 
             // ── Recycle bin ───────────────────────────────────────────────────
             val recycleBinRetention by settingsVm.recycleBinRetention.collectAsStateWithLifecycle()
+            val isRecycleBinEnabled by settingsVm.isRecycleBinEnabled.collectAsStateWithLifecycle()
             var showRetentionPicker by remember { mutableStateOf(false) }
+            var showDisableBinDialog by remember { mutableStateOf(false) }
 
             Spacer(Modifier.height(8.dp))
             SectionHeader("Recycle bin")
             Card(modifier = Modifier.fillMaxWidth()) {
-                ListItem(
-                    headlineContent = { Text("Auto-clear after") },
-                    supportingContent = {
-                        Text(
-                            if (recycleBinRetention == RecycleBinRetention.NEVER)
-                                "Items stay in the bin until you remove them"
-                            else
-                                "Deleted items are removed for good after ${recycleBinRetention.label.lowercase()}",
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Use recycle bin") },
+                        supportingContent = {
+                            Text(
+                                if (isRecycleBinEnabled)
+                                    "Deleted credentials wait in the bin so you can restore them if you change your mind."
+                                else
+                                    "Off — every delete is permanent the moment you confirm it. There's no undo.",
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isRecycleBinEnabled,
+                                onCheckedChange = { newValue ->
+                                    if (!newValue) {
+                                        // Confirm before turning off — the consequence is irreversible deletes.
+                                        showDisableBinDialog = true
+                                    } else {
+                                        settingsVm.setRecycleBinEnabled(true)
+                                    }
+                                },
+                            )
+                        },
+                    )
+
+                    if (isRecycleBinEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Auto-clear after") },
+                            supportingContent = {
+                                Text(
+                                    if (recycleBinRetention == RecycleBinRetention.NEVER)
+                                        "Items stay in the bin until you remove them"
+                                    else
+                                        "Deleted items are removed for good after ${recycleBinRetention.label.lowercase()}",
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                            trailingContent = { Text(recycleBinRetention.label) },
+                            modifier = Modifier.clickable { showRetentionPicker = true },
+                        )
+                    }
+                }
+            }
+
+            if (showDisableBinDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDisableBinDialog = false },
+                    icon = {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
                         )
                     },
-                    leadingContent = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                    trailingContent = { Text(recycleBinRetention.label) },
-                    modifier = Modifier.clickable { showRetentionPicker = true },
+                    title = { Text("Turn off recycle bin?") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "From now on, deleting a credential removes it immediately. " +
+                                    "There'll be no way to undo it — not even from this device.",
+                            )
+                            Text(
+                                "Anything already in the bin stays there. You can restore or empty those " +
+                                    "items normally, and turning the bin back on later restores the safety net for future deletes.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                settingsVm.setRecycleBinEnabled(false)
+                                showDisableBinDialog = false
+                            },
+                        ) {
+                            Text("Turn it off", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDisableBinDialog = false }) {
+                            Text("Keep it on")
+                        }
+                    },
                 )
             }
 

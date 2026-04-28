@@ -82,6 +82,9 @@ class SettingsViewModel @Inject constructor(
     val recycleBinRetention: StateFlow<RecycleBinRetention> = appPrefs.getRecycleBinRetention()
         .stateIn(viewModelScope, SharingStarted.Eagerly, RecycleBinRetention.DAYS_30)
 
+    val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -151,6 +154,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setRecycleBinRetention(retention: RecycleBinRetention) {
         viewModelScope.launch { appPrefs.setRecycleBinRetention(retention) }
+    }
+
+    fun setRecycleBinEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setRecycleBinEnabled(enabled) }
     }
 
     fun addTag(name: String) {

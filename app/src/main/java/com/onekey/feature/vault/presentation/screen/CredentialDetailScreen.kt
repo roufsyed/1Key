@@ -151,9 +151,11 @@ fun CredentialDetailScreen(
                     onBack = onBack,
                 )
             } else {
+                val binEnabled by viewModel.isRecycleBinEnabled.collectAsStateWithLifecycle()
                 CredentialViewContent(
                     credential = state.credential,
                     history = history,
+                    binEnabled = binEnabled,
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
                     onDeleteNow = viewModel::deleteNow,
@@ -179,6 +181,7 @@ fun CredentialDetailScreen(
 private fun CredentialViewContent(
     credential: Credential,
     history: List<CredentialHistoryEntry>,
+    binEnabled: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDeleteNow: () -> Unit,
@@ -310,6 +313,7 @@ private fun CredentialViewContent(
     if (showDeleteDialog) {
         BulkDeleteDialog(
             count = 1,
+            binEnabled = binEnabled,
             onMoveToBin = { showDeleteDialog = false; onDelete() },
             onDeleteNow = { showDeleteDialog = false; onDeleteNow() },
             onCancel = { showDeleteDialog = false },

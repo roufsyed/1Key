@@ -9,6 +9,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.Tag
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.repository.TagRepository
@@ -40,7 +41,11 @@ class CredentialDetailViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
     private val tagRepository: TagRepository,
+    appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
+
+    val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     private val credentialId: String? = savedStateHandle.get<String>("credentialId")
         ?.takeIf { it != "new" }

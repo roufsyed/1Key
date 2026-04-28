@@ -46,6 +46,7 @@ fun FavouritesScreen(
     val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
     val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
     val sortOrder by viewModel.sortOrder.collectAsStateWithLifecycle()
+    val binEnabled by viewModel.isRecycleBinEnabled.collectAsStateWithLifecycle()
     val letterIndex by viewModel.letterIndex.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
 
@@ -238,6 +239,7 @@ fun FavouritesScreen(
     if (showDeleteDialog) {
         BulkDeleteDialog(
             count = selectedIds.size,
+            binEnabled = binEnabled,
             onMoveToBin = {
                 showDeleteDialog = false
                 viewModel.deleteSelected()
