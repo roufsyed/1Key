@@ -30,6 +30,7 @@ import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 
 private const val TOTAL_STEPS = 3
+private const val READY_STEP = 3
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -55,12 +56,18 @@ fun OnboardingScreen(
     }
 
     LaunchedEffect(state) {
-        if (state is AuthUiState.SetupComplete) onSetupComplete()
+        if (state is AuthUiState.SetupComplete) {
+            // Dismiss the restore dialog (if open) so the "vault ready" page is visible underneath.
+            showRestoreDialog = false
+            pendingRestoreUri = null
+        }
     }
+
+    val showReadyPage = state is AuthUiState.SetupComplete
 
     Column(modifier = Modifier.fillMaxSize().imePadding()) {
         AnimatedContent(
-            targetState = step,
+            targetState = if (showReadyPage) READY_STEP else step,
             transitionSpec = {
                 val forward = targetState > initialState
                 val enter = slideInHorizontally { if (forward) it else -it } + fadeIn()
@@ -79,17 +86,20 @@ fun OnboardingScreen(
                     onSubmit = { password -> viewModel.setup(password.toCharArray()) },
                     onRestoreFromBackup = { restoreLauncher.launch(arrayOf("*/*")) },
                 )
+                READY_STEP -> VaultReadyPage(onContinue = onSetupComplete)
                 else -> Unit
             }
         }
 
-        StepIndicator(
-            current = step,
-            total = TOTAL_STEPS,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-        )
+        if (!showReadyPage) {
+            StepIndicator(
+                current = step,
+                total = TOTAL_STEPS,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+            )
+        }
     }
 
     if (showRestoreDialog) {
@@ -387,7 +397,10 @@ private fun CreateVaultPage(
                 Text("Create Vault", style = MaterialTheme.typography.titleMedium)
             }
         }
+
         Spacer(Modifier.height(12.dp))
+        VaultSetupStatusLine(isLoading = state is AuthUiState.Loading)
+
         TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
             Text("Back")
         }
@@ -400,6 +413,96 @@ private fun CreateVaultPage(
             Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text("Restore from encrypted 1Key backup")
+        }
+
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+// ── Page 4: Vault ready ───────────────────────────────────────────────────────
+
+@Composable
+private fun VaultReadyPage(onContinue: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.height(56.dp))
+
+        Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.size(110.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(64.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+        Text(
+            "Your vault is ready",
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Your master password is the only key. Keep it safe — there is no recovery.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+
+        Spacer(Modifier.height(36.dp))
+
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Text(
+                    "What's next",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(16.dp))
+                FeatureRow(
+                    icon = Icons.Default.Add,
+                    title = "Add your first login",
+                    subtitle = "Tap the + button on the home screen",
+                )
+                Spacer(Modifier.height(14.dp))
+                FeatureRow(
+                    icon = Icons.Default.Fingerprint,
+                    title = "Enable biometric unlock",
+                    subtitle = "Skip the master password on daily unlocks",
+                )
+                Spacer(Modifier.height(14.dp))
+                FeatureRow(
+                    icon = Icons.Default.ImportExport,
+                    title = "Import your existing passwords",
+                    subtitle = "Import your 1Key encrypted backup or migrate from other credential manager apps from Settings",
+                )
+            }
+        }
+
+        Spacer(Modifier.height(28.dp))
+
+        Button(
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+        ) {
+            Text("Open Vault", style = MaterialTheme.typography.titleMedium)
         }
 
         Spacer(Modifier.height(24.dp))
@@ -478,6 +581,43 @@ private fun RestoreFromBackupDialog(
             }
         },
     )
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun VaultSetupStatusLine(isLoading: Boolean) {
+    val staticHint = "This takes a few seconds — we're stretching your password so it's hard to crack."
+    val loadingMessages = listOf(
+        "Securing your vault…",
+        "Encrypting with your master password…",
+        "Almost done…",
+    )
+
+    var messageIndex by remember { mutableStateOf(0) }
+    LaunchedEffect(isLoading) {
+        if (isLoading) {
+            messageIndex = 0
+            while (true) {
+                kotlinx.coroutines.delay(1200)
+                if (messageIndex < loadingMessages.lastIndex) messageIndex++
+            }
+        }
+    }
+
+    val text = if (isLoading) loadingMessages[messageIndex] else staticHint
+    AnimatedContent(
+        targetState = text,
+        transitionSpec = { fadeIn() togetherWith fadeOut() },
+        label = "vault_setup_status",
+    ) { current ->
+        Text(
+            current,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (isLoading) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        )
+    }
 }
 
 // ── Shared components ─────────────────────────────────────────────────────────
