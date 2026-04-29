@@ -1,5 +1,6 @@
 package com.onekey.feature.settings.presentation.screen
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,8 +16,9 @@ import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsAppearanceScreen(
+fun SettingsGeneralScreen(
     onBack: () -> Unit,
+    onManageCategories: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
@@ -27,7 +29,7 @@ fun SettingsAppearanceScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Appearance") },
+                title = { Text("General") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                 },
@@ -42,6 +44,7 @@ fun SettingsAppearanceScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            SectionHeader("Appearance")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     ListItem(
@@ -118,6 +121,18 @@ fun SettingsAppearanceScreen(
                         },
                     )
                 }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Categories")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("Manage categories") },
+                    supportingContent = { Text("Add or remove credential categories") },
+                    leadingContent = { Icon(Icons.Default.LocalOffer, contentDescription = null) },
+                    trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                    modifier = Modifier.clickable(onClick = onManageCategories),
+                )
             }
         }
     }

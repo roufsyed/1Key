@@ -20,7 +20,7 @@ import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManageTagsScreen(
+fun ManageCategoriesScreen(
     onBack: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
@@ -42,7 +42,7 @@ fun ManageTagsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Manage Tags") },
+                title = { Text("Manage Categories") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
                 },

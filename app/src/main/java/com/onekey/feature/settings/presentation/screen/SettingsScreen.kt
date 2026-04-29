@@ -31,7 +31,7 @@ fun SettingsScreen(
     onChangePassword: () -> Unit,
     onVaultReset: () -> Unit,
     onBackup: () -> Unit,
-    onAppearance: () -> Unit,
+    onGeneral: () -> Unit,
     onSecurity: () -> Unit,
     onBackupAndBin: () -> Unit,
     onAbout: () -> Unit,
@@ -126,10 +126,10 @@ fun SettingsScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
                     SettingsMenuRow(
-                        icon = Icons.Default.Palette,
-                        title = "Appearance",
-                        subtitle = "Theme, layout, footer",
-                        onClick = onAppearance,
+                        icon = Icons.Default.Tune,
+                        title = "General",
+                        subtitle = "Theme, layout, categories",
+                        onClick = onGeneral,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(

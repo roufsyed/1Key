@@ -38,11 +38,11 @@ import com.onekey.feature.auth.presentation.screen.OnboardingScreen
 import com.onekey.feature.auth.presentation.screen.SetupPinScreen
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.onekey.feature.importexport.presentation.screen.BackupScreen
-import com.onekey.feature.settings.presentation.screen.ManageTagsScreen
+import com.onekey.feature.settings.presentation.screen.ManageCategoriesScreen
 import com.onekey.feature.settings.presentation.screen.SettingsAboutScreen
-import com.onekey.feature.settings.presentation.screen.SettingsAppearanceScreen
 import com.onekey.feature.settings.presentation.screen.SettingsBackupAndBinScreen
 import com.onekey.feature.settings.presentation.screen.SettingsFaqScreen
+import com.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
@@ -72,12 +72,12 @@ sealed class Screen(val route: String) {
     data object QrScanner : Screen("qr_scanner")
     data object Backup : Screen("backup")
     data object RecycleBin : Screen("recycle_bin")
-    data object SettingsAppearance : Screen("settings/appearance")
+    data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
     data object SettingsBackupAndBin : Screen("settings/backup_and_bin")
     data object SettingsAbout : Screen("settings/about")
     data object SettingsFaq : Screen("settings/faq")
-    data object ManageTags : Screen("manage_tags")
+    data object ManageCategories : Screen("manage_categories")
 }
 
 private val BOTTOM_NAV_ROUTES = setOf(
@@ -205,7 +205,6 @@ fun OneKeyNavGraph(
                             navController.navigate(Screen.CredentialDetail.createRoute(id))
                         },
                         onRecycleBinClick = { navController.navigate(Screen.RecycleBin.route) },
-                        onManageTagsClick = { navController.navigate(Screen.ManageTags.route) },
                     )
                 }
 
@@ -258,7 +257,7 @@ fun OneKeyNavGraph(
                             }
                         },
                         onBackup = { navController.navigate(Screen.Backup.route) },
-                        onAppearance = { navController.navigate(Screen.SettingsAppearance.route) },
+                        onGeneral = { navController.navigate(Screen.SettingsGeneral.route) },
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
                         onBackupAndBin = { navController.navigate(Screen.SettingsBackupAndBin.route) },
                         onAbout = { navController.navigate(Screen.SettingsAbout.route) },
@@ -266,8 +265,11 @@ fun OneKeyNavGraph(
                     )
                 }
 
-                composable(Screen.SettingsAppearance.route) {
-                    SettingsAppearanceScreen(onBack = { navController.popBackStack() })
+                composable(Screen.SettingsGeneral.route) {
+                    SettingsGeneralScreen(
+                        onBack = { navController.popBackStack() },
+                        onManageCategories = { navController.navigate(Screen.ManageCategories.route) },
+                    )
                 }
 
                 composable(Screen.SettingsSecurity.route) {
@@ -293,8 +295,8 @@ fun OneKeyNavGraph(
                     SettingsFaqScreen(onBack = { navController.popBackStack() })
                 }
 
-                composable(Screen.ManageTags.route) {
-                    ManageTagsScreen(onBack = { navController.popBackStack() })
+                composable(Screen.ManageCategories.route) {
+                    ManageCategoriesScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.RecycleBin.route) {
