@@ -42,6 +42,7 @@ import com.onekey.feature.settings.presentation.screen.ManageTagsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsAboutScreen
 import com.onekey.feature.settings.presentation.screen.SettingsAppearanceScreen
 import com.onekey.feature.settings.presentation.screen.SettingsBackupAndBinScreen
+import com.onekey.feature.settings.presentation.screen.SettingsFaqScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
@@ -75,6 +76,7 @@ sealed class Screen(val route: String) {
     data object SettingsSecurity : Screen("settings/security")
     data object SettingsBackupAndBin : Screen("settings/backup_and_bin")
     data object SettingsAbout : Screen("settings/about")
+    data object SettingsFaq : Screen("settings/faq")
     data object ManageTags : Screen("manage_tags")
 }
 
@@ -260,6 +262,7 @@ fun OneKeyNavGraph(
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
                         onBackupAndBin = { navController.navigate(Screen.SettingsBackupAndBin.route) },
                         onAbout = { navController.navigate(Screen.SettingsAbout.route) },
+                        onFaq = { navController.navigate(Screen.SettingsFaq.route) },
                     )
                 }
 
@@ -284,6 +287,10 @@ fun OneKeyNavGraph(
 
                 composable(Screen.SettingsAbout.route) {
                     SettingsAboutScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(Screen.SettingsFaq.route) {
+                    SettingsFaqScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.ManageTags.route) {

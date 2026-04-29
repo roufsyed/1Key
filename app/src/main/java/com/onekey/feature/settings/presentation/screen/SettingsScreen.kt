@@ -35,6 +35,7 @@ fun SettingsScreen(
     onSecurity: () -> Unit,
     onBackupAndBin: () -> Unit,
     onAbout: () -> Unit,
+    onFaq: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
@@ -143,6 +144,13 @@ fun SettingsScreen(
                         title = "Backup & Recycle Bin",
                         subtitle = "Export, import, retention",
                         onClick = onBackupAndBin,
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsMenuRow(
+                        icon = Icons.Default.HelpOutline,
+                        title = "FAQ",
+                        subtitle = "How encryption, privacy, and security work in 1Key",
+                        onClick = onFaq,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(
