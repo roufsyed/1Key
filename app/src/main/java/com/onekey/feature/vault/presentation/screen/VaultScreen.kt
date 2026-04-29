@@ -41,6 +41,7 @@ fun VaultScreen(
     onTagClick: (String) -> Unit,
     onCredentialClick: (String) -> Unit,
     onRecycleBinClick: () -> Unit,
+    onManageTagsClick: () -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
 ) {
     val tagCounts by viewModel.tagCounts.collectAsStateWithLifecycle()
@@ -233,6 +234,17 @@ fun VaultScreen(
                         name = "Recycle Bin",
                         count = recycleBinCount,
                         onClick = onRecycleBinClick,
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
+
+                // ── Manage tags ───────────────────────────────────────────────────
+                item(key = "manage_tags") {
+                    TagRow(
+                        icon = Icons.Default.Tune,
+                        name = "Manage Tags",
+                        count = tagCounts.size,
+                        onClick = onManageTagsClick,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }

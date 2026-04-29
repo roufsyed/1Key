@@ -14,6 +14,7 @@ import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteTagUseCase
 import com.onekey.core.domain.usecase.ResetVaultUseCase
 import com.onekey.core.domain.usecase.SeedDataUseCase
+import com.onekey.core.security.AuthAttemptsStore
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +43,7 @@ class SettingsViewModel @Inject constructor(
     private val resetVaultUseCase: ResetVaultUseCase,
     private val seedDataUseCase: SeedDataUseCase,
     private val lockReasonStore: LockReasonStore,
+    private val authAttemptsStore: AuthAttemptsStore,
 ) : ViewModel() {
 
     private val _isSeedingData = MutableStateFlow(false)
@@ -101,27 +103,28 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { appPrefs.setBiometricEnabled(enabled) }
     }
 
-    private var biometricConfirmAttempts = 0
-
     fun enableBiometricWithVerification(password: CharArray) {
         viewModelScope.launch {
             try {
                 when (authRepository.unlockWithPassword(password)) {
                     is AppResult.Success -> {
-                        biometricConfirmAttempts = 0
+                        authAttemptsStore.resetBiometricEnable()
                         appPrefs.setBiometricEnabled(true)
                         _event.emit(SettingsEvent.BiometricEnabled)
                     }
                     is AppResult.Error -> {
-                        biometricConfirmAttempts++
-                        if (biometricConfirmAttempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                        // Singleton-scoped so navigating Security ↔ top-level Settings can't
+                        // reset the count and bypass the lockout.
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
                             lockReasonStore.set(LockReason.TooManyFailedAttempts("biometric setup"))
                             authRepository.lock()
                             _event.emit(SettingsEvent.VaultLocked)
                         } else {
                             _event.emit(
                                 SettingsEvent.BiometricConfirmFailed(
-                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - biometricConfirmAttempts,
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - attempts,
                                 )
                             )
                         }

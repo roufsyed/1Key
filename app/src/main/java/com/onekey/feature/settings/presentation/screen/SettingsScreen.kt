@@ -4,8 +4,8 @@ import com.onekey.BuildConfig
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -13,21 +13,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.onekey.core.domain.model.BackgroundLockTimeout
-import com.onekey.core.domain.model.InactivityLockTimeout
-import com.onekey.core.domain.model.MasterPasswordInterval
-import com.onekey.core.domain.model.RecycleBinRetention
-import com.onekey.core.domain.model.Tag
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
@@ -40,29 +31,16 @@ fun SettingsScreen(
     onChangePassword: () -> Unit,
     onVaultReset: () -> Unit,
     onBackup: () -> Unit,
+    onAppearance: () -> Unit,
+    onSecurity: () -> Unit,
+    onBackupAndBin: () -> Unit,
+    onAbout: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
-    val tags by settingsVm.tags.collectAsStateWithLifecycle()
-    val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
-    val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
-    val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
-    val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
-    val isShowFavourites by settingsVm.isShowFavourites.collectAsStateWithLifecycle()
     val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
-    val backgroundLockTimeout by settingsVm.backgroundLockTimeout.collectAsStateWithLifecycle()
-    val inactivityLockTimeout by settingsVm.inactivityLockTimeout.collectAsStateWithLifecycle()
-    val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
-    val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var showBiometricConfirmDialog by remember { mutableStateOf(false) }
-    var biometricPasswordInput by remember { mutableStateOf("") }
-    var biometricPasswordVisible by remember { mutableStateOf(false) }
-    var biometricPasswordError by remember { mutableStateOf(false) }
-    var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
-
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
     var deleteVaultPassword by remember { mutableStateOf("") }
     var deleteVaultPasswordVisible by remember { mutableStateOf(false) }
@@ -72,10 +50,7 @@ fun SettingsScreen(
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
             when (event) {
-                SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
                 SettingsEvent.VaultContentsDeleted -> {
-                    // Reset dialog state so a flash of the dialog doesn't appear if we
-                    // somehow re-enter Settings before the navigation away completes.
                     showDeleteVaultDialog = false
                     deleteVaultPassword = ""
                     deleteVaultPasswordVisible = false
@@ -83,20 +58,12 @@ fun SettingsScreen(
                     deleteVaultAttemptsRemaining = 3
                     onVaultReset()
                 }
-                is SettingsEvent.SeedComplete -> snackbarHostState.showSnackbar("${event.count} sample credentials added")
-                is SettingsEvent.TwoFaSeedComplete -> snackbarHostState.showSnackbar("${event.count} sample 2FA codes added — open the 2FA tab")
-                is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
-                SettingsEvent.BiometricEnabled -> {
-                    showBiometricConfirmDialog = false
-                    biometricPasswordInput = ""
-                    biometricPasswordVisible = false
-                    biometricPasswordError = false
-                    biometricAttemptsRemaining = 3
-                }
-                is SettingsEvent.BiometricConfirmFailed -> {
-                    biometricPasswordError = true
-                    biometricAttemptsRemaining = event.attemptsRemaining
-                }
+                is SettingsEvent.SeedComplete ->
+                    snackbarHostState.showSnackbar("${event.count} sample credentials added")
+                is SettingsEvent.TwoFaSeedComplete ->
+                    snackbarHostState.showSnackbar(
+                        "${event.count} sample 2FA codes added — open the 2FA tab"
+                    )
                 is SettingsEvent.DeleteVaultConfirmFailed -> {
                     deleteVaultAttemptsRemaining = event.attemptsRemaining
                     deleteVaultPasswordError = if (event.attemptsRemaining == 1)
@@ -105,40 +72,19 @@ fun SettingsScreen(
                         "Wrong master password — ${event.attemptsRemaining} attempts remaining."
                 }
                 SettingsEvent.VaultLocked -> {
-                    showBiometricConfirmDialog = false
-                    biometricPasswordInput = ""
-                    biometricPasswordVisible = false
-                    biometricPasswordError = false
-                    biometricAttemptsRemaining = 3
                     showDeleteVaultDialog = false
                     deleteVaultPassword = ""
                     deleteVaultPasswordVisible = false
                     deleteVaultPasswordError = null
                     deleteVaultAttemptsRemaining = 3
-                    // The "Vault Locked" explanation now lives on LockScreen via LockReasonStore
+                    // The "Vault Locked" explanation lives on LockScreen via LockReasonStore
                     // — Settings has already left composition by the time the user lands there.
                 }
+                is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                else -> Unit // PinReset, BiometricEnabled, BiometricConfirmFailed handled in Security subscreen
             }
         }
     }
-
-    val canUseBiometric = remember {
-        androidx.biometric.BiometricManager.from(context).canAuthenticate(
-            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
-        ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
-    }
-
-    var newTagName by remember { mutableStateOf("") }
-    var showAddTag by remember { mutableStateOf(false) }
-    var showResetPinDialog by remember { mutableStateOf(false) }
-    var showScreenshotDialog by remember { mutableStateOf(false) }
-    var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
-    // Pending state is scoped inside each dialog's `if (show…)` block (not here) so that
-    // every reopen seeds the radio from the current saved value, not the previous
-    // session's lingering preview selection.
-    var showBackgroundLockDialog by remember { mutableStateOf(false) }
-    var showInactivityLockDialog by remember { mutableStateOf(false) }
-    var tagToDelete by remember { mutableStateOf<Tag?>(null) }
 
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
@@ -176,478 +122,35 @@ fun SettingsScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // ── Appearance ────────────────────────────────────────────────────
-            SectionHeader("Appearance")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    ListItem(
-                        headlineContent = { Text("Dark theme") },
-                        supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
-                        leadingContent = {
-                            Icon(
-                                if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                contentDescription = null,
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isDarkTheme,
-                                onCheckedChange = { settingsVm.toggleTheme() },
-                            )
-                        },
+                    SettingsMenuRow(
+                        icon = Icons.Default.Palette,
+                        title = "Appearance",
+                        subtitle = "Theme, layout, footer",
+                        onClick = onAppearance,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Show Favourites tab") },
-                        supportingContent = {
-                            Text(
-                                if (isShowFavourites) "Favourites visible in bottom navigation"
-                                else "Favourites hidden from bottom navigation"
-                            )
-                        },
-                        leadingContent = {
-                            Icon(Icons.Default.Favorite, contentDescription = null)
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isShowFavourites,
-                                onCheckedChange = { settingsVm.setShowFavourites(it) },
-                            )
-                        },
+                    SettingsMenuRow(
+                        icon = Icons.Default.Lock,
+                        title = "Security",
+                        subtitle = "Unlock methods, auto-lock, master password",
+                        onClick = onSecurity,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Hide top bar on scroll") },
-                        supportingContent = {
-                            Text(
-                                if (isHideTopBarOnScroll) "Top bar collapses as you scroll lists"
-                                else "Top bar stays pinned while scrolling"
-                            )
-                        },
-                        leadingContent = {
-                            Icon(Icons.Default.UnfoldLess, contentDescription = null)
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isHideTopBarOnScroll,
-                                onCheckedChange = { settingsVm.setHideTopBarOnScroll(it) },
-                            )
-                        },
+                    SettingsMenuRow(
+                        icon = Icons.Default.Backup,
+                        title = "Backup & Recycle Bin",
+                        subtitle = "Export, import, retention",
+                        onClick = onBackupAndBin,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    val isVaultFooterVisible by settingsVm.isVaultFooterVisible.collectAsStateWithLifecycle()
-                    ListItem(
-                        headlineContent = { Text("Show privacy footer") },
-                        supportingContent = {
-                            Text(
-                                if (isVaultFooterVisible)
-                                    "\"Your vault is encrypted and stored only on this device.\" appears below the vault list"
-                                else
-                                    "Footer hidden from the vault list",
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Shield, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isVaultFooterVisible,
-                                onCheckedChange = { settingsVm.setVaultFooterVisible(it) },
-                            )
-                        },
+                    SettingsMenuRow(
+                        icon = Icons.Default.Info,
+                        title = "About",
+                        subtitle = "Privacy policy, version",
+                        onClick = onAbout,
                     )
-                }
-            }
-
-            // ── Security ──────────────────────────────────────────────────────
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Security")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    ListItem(
-                        headlineContent = { Text("Setup / Change PIN") },
-                        supportingContent = { Text("Faster unlock with a 6-digit PIN") },
-                        leadingContent = { Icon(Icons.Default.Lock, null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable(onClick = onSetupPin),
-                    )
-                    if (canUseBiometric) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Biometric Unlock") },
-                            supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
-                            leadingContent = {
-                                Icon(Icons.Default.Fingerprint, contentDescription = null)
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = isBiometricEnabled,
-                                    onCheckedChange = { enabled ->
-                                        if (enabled) {
-                                            biometricPasswordError = false
-                                            showBiometricConfirmDialog = true
-                                        } else {
-                                            settingsVm.setBiometricEnabled(false)
-                                        }
-                                    },
-                                )
-                            },
-                        )
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Allow Screenshots") },
-                        supportingContent = {
-                            Text(
-                                if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
-                                else "Blocks screenshots, screen recordings, and Recent Apps preview"
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isScreenshotsEnabled,
-                                onCheckedChange = { newValue ->
-                                    pendingScreenshotsEnabled = newValue
-                                    showScreenshotDialog = true
-                                },
-                            )
-                        },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Lock when app in background") },
-                        supportingContent = { Text(backgroundLockTimeout.displayName) },
-                        leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showBackgroundLockDialog = true },
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Lock after inactivity") },
-                        supportingContent = { Text(inactivityLockTimeout.displayName) },
-                        leadingContent = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showInactivityLockDialog = true },
-                    )
-                    if (isPinSetup) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Reset PIN") },
-                            supportingContent = { Text("Remove saved PIN, revert to master password") },
-                            leadingContent = { Icon(Icons.Default.LockReset, null) },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable { showResetPinDialog = true },
-                        )
-                    }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Change Master Password") },
-                        supportingContent = { Text("Update your vault master password") },
-                        leadingContent = { Icon(Icons.Default.Key, null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable(onClick = onChangePassword),
-                    )
-                }
-            }
-
-            // ── Password Verification ─────────────────────────────────────────
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Password Verification")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    ListItem(
-                        headlineContent = { Text("Periodic master password check") },
-                        supportingContent = {
-                            Text(
-                                if (isMasterPasswordRecheckEnabled)
-                                    "Master password required every ${masterPasswordRecheckInterval.label}"
-                                else
-                                    "Biometric and PIN can be used indefinitely"
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isMasterPasswordRecheckEnabled,
-                                onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
-                            )
-                        },
-                    )
-                    if (isMasterPasswordRecheckEnabled) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                "Recheck interval",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            MasterPasswordInterval.entries.forEach { option ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { settingsVm.setMasterPasswordRecheckInterval(option) }
-                                        .padding(vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    RadioButton(
-                                        selected = masterPasswordRecheckInterval == option,
-                                        onClick = { settingsVm.setMasterPasswordRecheckInterval(option) },
-                                    )
-                                    Column {
-                                        Text(
-                                            option.label,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        if (option == MasterPasswordInterval.HOURS_48) {
-                                            Text(
-                                                "Default — recommended",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // ── Backup & Import ───────────────────────────────────────────────
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Backup & Import")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                ListItem(
-                    headlineContent = { Text("Backup & Import") },
-                    supportingContent = { Text("Export your vault or import credentials from another app") },
-                    leadingContent = { Icon(Icons.Default.Backup, contentDescription = null) },
-                    trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                    modifier = Modifier.clickable(onClick = onBackup),
-                )
-            }
-
-            // ── Recycle bin ───────────────────────────────────────────────────
-            val recycleBinRetention by settingsVm.recycleBinRetention.collectAsStateWithLifecycle()
-            val isRecycleBinEnabled by settingsVm.isRecycleBinEnabled.collectAsStateWithLifecycle()
-            var showRetentionPicker by remember { mutableStateOf(false) }
-            var showDisableBinDialog by remember { mutableStateOf(false) }
-
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Recycle bin")
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    ListItem(
-                        headlineContent = { Text("Use recycle bin") },
-                        supportingContent = {
-                            Text(
-                                if (isRecycleBinEnabled)
-                                    "Deleted credentials wait in the bin so you can restore them if you change your mind."
-                                else
-                                    "Off — every delete is permanent the moment you confirm it. There's no undo.",
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isRecycleBinEnabled,
-                                onCheckedChange = { newValue ->
-                                    if (!newValue) {
-                                        // Confirm before turning off — the consequence is irreversible deletes.
-                                        showDisableBinDialog = true
-                                    } else {
-                                        settingsVm.setRecycleBinEnabled(true)
-                                    }
-                                },
-                            )
-                        },
-                    )
-
-                    if (isRecycleBinEnabled) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Auto-clear after") },
-                            supportingContent = {
-                                Text(
-                                    if (recycleBinRetention == RecycleBinRetention.NEVER)
-                                        "Items stay in the bin until you remove them"
-                                    else
-                                        "Deleted items are removed for good after ${recycleBinRetention.label.lowercase()}",
-                                )
-                            },
-                            leadingContent = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                            trailingContent = { Text(recycleBinRetention.label) },
-                            modifier = Modifier.clickable { showRetentionPicker = true },
-                        )
-                    }
-                }
-            }
-
-            if (showDisableBinDialog) {
-                AlertDialog(
-                    onDismissRequest = { showDisableBinDialog = false },
-                    icon = {
-                        Icon(
-                            Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    },
-                    title = { Text("Turn off recycle bin?") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                "From now on, deleting a credential removes it immediately. " +
-                                    "There'll be no way to undo it — not even from this device.",
-                            )
-                            Text(
-                                "Anything already in the bin stays there. You can restore or empty those " +
-                                    "items normally, and turning the bin back on later restores the safety net for future deletes.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                settingsVm.setRecycleBinEnabled(false)
-                                showDisableBinDialog = false
-                            },
-                        ) {
-                            Text("Turn it off", color = MaterialTheme.colorScheme.error)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { showDisableBinDialog = false }) {
-                            Text("Keep it on")
-                        }
-                    },
-                )
-            }
-
-            if (showRetentionPicker) {
-                AlertDialog(
-                    onDismissRequest = { showRetentionPicker = false },
-                    icon = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                    title = { Text("Auto-clear recycle bin") },
-                    text = {
-                        Column {
-                            Text(
-                                "How long should deleted credentials wait in the bin before being removed?",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            RecycleBinRetention.entries.forEach { option ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            settingsVm.setRecycleBinRetention(option)
-                                            showRetentionPicker = false
-                                        }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    RadioButton(
-                                        selected = recycleBinRetention == option,
-                                        onClick = {
-                                            settingsVm.setRecycleBinRetention(option)
-                                            showRetentionPicker = false
-                                        },
-                                    )
-                                    Column {
-                                        Text(option.label, style = MaterialTheme.typography.bodyMedium)
-                                        if (option == RecycleBinRetention.DAYS_30) {
-                                            Text(
-                                                "Default — recommended",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        } else if (option == RecycleBinRetention.NEVER) {
-                                            Text(
-                                                "You'll need to empty the bin manually",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = { showRetentionPicker = false }) { Text("Done") }
-                    },
-                )
-            }
-
-            // ── Categories ────────────────────────────────────────────────────
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Categories")
-            tags.forEach { tag ->
-                key(tag.name) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        ListItem(
-                            headlineContent = { Text(tag.name) },
-                            trailingContent = if (!tag.isDefault) {
-                                {
-                                    IconButton(onClick = { tagToDelete = tag }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Delete category",
-                                            tint = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                }
-                            } else null,
-                        )
-                    }
-                }
-            }
-            if (showAddTag) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedTextField(
-                        value = newTagName,
-                        onValueChange = { input ->
-                            newTagName = input.replaceFirstChar {
-                                if (it.isLowerCase()) it.titlecase() else it.toString()
-                            }
-                        },
-                        label = { Text("Category name") },
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                        ),
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                    )
-                    IconButton(onClick = {
-                        if (newTagName.isNotBlank()) {
-                            settingsVm.addTag(newTagName.trim())
-                            newTagName = ""
-                            showAddTag = false
-                        }
-                    }) { Icon(Icons.Default.Check, "Save category") }
-                    IconButton(onClick = { showAddTag = false; newTagName = "" }) {
-                        Icon(Icons.Default.Close, "Cancel")
-                    }
-                }
-            } else {
-                OutlinedButton(
-                    onClick = { showAddTag = true },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Add, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add Category")
                 }
             }
 
@@ -718,253 +221,8 @@ fun SettingsScreen(
                 )
             }
 
-            // ── Privacy ───────────────────────────────────────────────────────
-            Spacer(Modifier.height(8.dp))
-            SectionHeader("Privacy")
-            ExpandableInfoCard(
-                title = "Privacy Policy",
-                icon = Icons.Default.PrivacyTip,
-            ) {
-                PrivacyLine("All credentials are stored locally on this device using AES-256-GCM encryption.")
-                PrivacyLine("1Key does not require an account or internet connection.")
-                PrivacyLine("No analytics, telemetry, or crash reporting of any kind.")
-                PrivacyLine("Your master password never leaves your device — not even a hash.")
-                PrivacyLine("Encrypted .1key backups are protected by your master password. Plain JSON or CSV exports are unencrypted — treat those files as sensitive.")
-            }
-
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Your vault is encrypted and stored only on this device.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-            )
-            Text(
-                "1Key — version 1.0.0",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Spacer(Modifier.height(32.dp))
         }
-    }
-
-    if (showBiometricConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = {
-                showBiometricConfirmDialog = false
-                biometricPasswordInput = ""
-                biometricPasswordVisible = false
-                biometricPasswordError = false
-                biometricAttemptsRemaining = 3
-            },
-            icon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
-            title = { Text("Confirm Master Password") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Biometric unlock gives the same full access to your vault as your master password does.",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        "To make sure only you can enable it, please enter your master password once. " +
-                            "It is verified locally and never stored or transmitted.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    OutlinedTextField(
-                        value = biometricPasswordInput,
-                        onValueChange = { input ->
-                            biometricPasswordInput = input
-                            if (biometricPasswordError) biometricPasswordError = false
-                        },
-                        label = { Text("Master password") },
-                        singleLine = true,
-                        isError = biometricPasswordError,
-                        supportingText = if (biometricPasswordError) {
-                            {
-                                val remaining = biometricAttemptsRemaining
-                                Text(
-                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
-                                    else "Incorrect password — $remaining attempts remaining."
-                                )
-                            }
-                        } else null,
-                        visualTransformation = if (biometricPasswordVisible) VisualTransformation.None
-                                               else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { biometricPasswordVisible = !biometricPasswordVisible }) {
-                                Icon(
-                                    if (biometricPasswordVisible) Icons.Default.VisibilityOff
-                                    else Icons.Default.Visibility,
-                                    contentDescription = if (biometricPasswordVisible) "Hide password" else "Show password",
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        settingsVm.enableBiometricWithVerification(biometricPasswordInput.toCharArray())
-                    },
-                    enabled = biometricPasswordInput.isNotEmpty(),
-                ) { Text("Enable Biometric") }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showBiometricConfirmDialog = false
-                        biometricPasswordInput = ""
-                        biometricPasswordVisible = false
-                        biometricPasswordError = false
-                        biometricAttemptsRemaining = 3
-                    }
-                ) { Text("Cancel") }
-            },
-        )
-    }
-
-    if (showScreenshotDialog) {
-        val enabling = pendingScreenshotsEnabled
-        AlertDialog(
-            onDismissRequest = { showScreenshotDialog = false },
-            icon = { Icon(Icons.Default.Screenshot, contentDescription = null) },
-            title = { Text(if (enabling) "Enable Screenshots?" else "Disable Screenshots?") },
-            text = {
-                Text(
-                    if (enabling)
-                        "Allowing screenshots means this app can appear in the Recent Apps screen " +
-                            "and screen capture tools will be able to capture your passwords.\n\n" +
-                            "Only enable this if you genuinely need to take screenshots inside 1Key."
-                    else
-                        "Disabling screenshots prevents this app from appearing in the Recent Apps " +
-                            "screen and blocks screen capture tools from capturing your passwords.\n\n" +
-                            "This is the recommended setting for a password manager."
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        settingsVm.setScreenshotsEnabled(enabling)
-                        showScreenshotDialog = false
-                    },
-                    colors = if (enabling) ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ) else ButtonDefaults.buttonColors(),
-                ) {
-                    Text(if (enabling) "Enable Anyway" else "Disable Screenshots")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showScreenshotDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    if (showBackgroundLockDialog) {
-        var pendingBackgroundLockTimeout by remember {
-            mutableStateOf(backgroundLockTimeout)
-        }
-        AlertDialog(
-            onDismissRequest = { showBackgroundLockDialog = false },
-            icon = { Icon(Icons.Default.Timer, contentDescription = null) },
-            title = { Text("Lock when app in background") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "How quickly the vault locks after you leave the app. Shorter is more secure — the vault key is wiped from memory when this fires.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    BackgroundLockTimeout.entries.forEach { option ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { pendingBackgroundLockTimeout = option }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            RadioButton(
-                                selected = pendingBackgroundLockTimeout == option,
-                                onClick = { pendingBackgroundLockTimeout = option },
-                            )
-                            Column {
-                                Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
-                                if (option == BackgroundLockTimeout.IMMEDIATE) {
-                                    Text(
-                                        "Lock the moment you leave the app",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    settingsVm.setBackgroundLockTimeout(pendingBackgroundLockTimeout)
-                    showBackgroundLockDialog = false
-                }) { Text("Apply") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBackgroundLockDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    if (showInactivityLockDialog) {
-        var pendingInactivityLockTimeout by remember {
-            mutableStateOf(inactivityLockTimeout)
-        }
-        AlertDialog(
-            onDismissRequest = { showInactivityLockDialog = false },
-            icon = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
-            title = { Text("Lock after inactivity") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        "How long the vault stays unlocked while the app is open but you're not using it. \"Never\" disables the idle timer (the background timer still applies).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    InactivityLockTimeout.entries.forEach { option ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { pendingInactivityLockTimeout = option }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            RadioButton(
-                                selected = pendingInactivityLockTimeout == option,
-                                onClick = { pendingInactivityLockTimeout = option },
-                            )
-                            Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    settingsVm.setInactivityLockTimeout(pendingInactivityLockTimeout)
-                    showInactivityLockDialog = false
-                }) { Text("Apply") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showInactivityLockDialog = false }) { Text("Cancel") }
-            },
-        )
     }
 
     if (showDeleteVaultDialog) {
@@ -1004,7 +262,6 @@ fun SettingsScreen(
                         value = deleteVaultPassword,
                         onValueChange = {
                             deleteVaultPassword = it
-                            // Clear stale error so the user isn't yelled at while typing.
                             if (deleteVaultPasswordError != null) deleteVaultPasswordError = null
                         },
                         label = { Text("Master password") },
@@ -1067,115 +324,20 @@ fun SettingsScreen(
             },
         )
     }
-
-    if (showResetPinDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetPinDialog = false },
-            icon = { Icon(Icons.Default.LockReset, contentDescription = null) },
-            title = { Text("Reset PIN?") },
-            text = { Text("Your PIN will be removed. You will need to use your master password to unlock the vault.") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showResetPinDialog = false
-                        settingsVm.resetPin()
-                    }
-                ) { Text("Reset PIN") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetPinDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
-
-    tagToDelete?.let { tag ->
-        AlertDialog(
-            onDismissRequest = { tagToDelete = null },
-            icon = {
-                Icon(
-                    Icons.Default.Label,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            },
-            title = { Text("Remove “${tag.name}”?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("The “${tag.name}” category will be permanently removed.")
-                    Text(
-                        "Any passwords currently tagged with it will have the category quietly " +
-                            "stripped away — your passwords themselves stay completely safe " +
-                            "and nothing else will change.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        settingsVm.deleteTag(tag.name)
-                        tagToDelete = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error,
-                    ),
-                ) { Text("Remove Category") }
-            },
-            dismissButton = {
-                TextButton(onClick = { tagToDelete = null }) { Text("Keep It") }
-            },
-        )
-    }
 }
 
 @Composable
-private fun ExpandableInfoCard(
+private fun SettingsMenuRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
-    icon: ImageVector,
-    content: @Composable ColumnScope.() -> Unit,
+    subtitle: String,
+    onClick: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column {
-            ListItem(
-                headlineContent = { Text(title) },
-                leadingContent = { Icon(icon, null) },
-                trailingContent = {
-                    Icon(
-                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        null,
-                    )
-                },
-                modifier = Modifier.clickable { expanded = !expanded },
-            )
-            if (expanded) {
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    content = content,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrivacyLine(text: String) {
-    Row(verticalAlignment = Alignment.Top) {
-        Text("•", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
-        Spacer(Modifier.width(10.dp))
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.primary,
+    ListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        leadingContent = { Icon(icon, contentDescription = null) },
+        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+        modifier = Modifier.clickable(onClick = onClick),
     )
-    Spacer(Modifier.height(4.dp))
 }

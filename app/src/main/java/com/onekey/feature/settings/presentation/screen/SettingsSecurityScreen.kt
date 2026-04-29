@@ -1,0 +1,515 @@
+package com.onekey.feature.settings.presentation.screen
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.domain.model.BackgroundLockTimeout
+import com.onekey.core.domain.model.InactivityLockTimeout
+import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
+import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsSecurityScreen(
+    onBack: () -> Unit,
+    onSetupPin: () -> Unit,
+    onChangePassword: () -> Unit,
+    settingsVm: SettingsViewModel = hiltViewModel(),
+) {
+    val context = LocalContext.current
+    val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
+    val isPinSetup by settingsVm.isPinSetup.collectAsStateWithLifecycle()
+    val isScreenshotsEnabled by settingsVm.isScreenshotsEnabled.collectAsStateWithLifecycle()
+    val backgroundLockTimeout by settingsVm.backgroundLockTimeout.collectAsStateWithLifecycle()
+    val inactivityLockTimeout by settingsVm.inactivityLockTimeout.collectAsStateWithLifecycle()
+    val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
+    val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
+
+    val canUseBiometric = remember {
+        androidx.biometric.BiometricManager.from(context).canAuthenticate(
+            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
+        ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    var showBiometricConfirmDialog by remember { mutableStateOf(false) }
+    var biometricPasswordInput by remember { mutableStateOf("") }
+    var biometricPasswordVisible by remember { mutableStateOf(false) }
+    var biometricPasswordError by remember { mutableStateOf(false) }
+    var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
+
+    var showResetPinDialog by remember { mutableStateOf(false) }
+    var showScreenshotDialog by remember { mutableStateOf(false) }
+    var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
+    var showBackgroundLockDialog by remember { mutableStateOf(false) }
+    var showInactivityLockDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        settingsVm.event.collect { event ->
+            when (event) {
+                SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
+                is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
+                SettingsEvent.BiometricEnabled -> {
+                    showBiometricConfirmDialog = false
+                    biometricPasswordInput = ""
+                    biometricPasswordVisible = false
+                    biometricPasswordError = false
+                    biometricAttemptsRemaining = 3
+                }
+                is SettingsEvent.BiometricConfirmFailed -> {
+                    biometricPasswordError = true
+                    biometricAttemptsRemaining = event.attemptsRemaining
+                }
+                SettingsEvent.VaultLocked -> {
+                    showBiometricConfirmDialog = false
+                    biometricPasswordInput = ""
+                    biometricPasswordVisible = false
+                    biometricPasswordError = false
+                    biometricAttemptsRemaining = 3
+                    // The "Vault Locked" explanation lives on LockScreen via LockReasonStore
+                    // — Settings has already left composition by the time the user lands there.
+                }
+                else -> Unit // VaultContentsDeleted, Seed events, DeleteVaultConfirmFailed handled elsewhere
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Security") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                },
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .imePadding()
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            SectionHeader("Unlock methods")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Setup / Change PIN") },
+                        supportingContent = { Text("Faster unlock with a 6-digit PIN") },
+                        leadingContent = { Icon(Icons.Default.Lock, null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = onSetupPin),
+                    )
+                    if (canUseBiometric) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Biometric Unlock") },
+                            supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
+                            leadingContent = {
+                                Icon(Icons.Default.Fingerprint, contentDescription = null)
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isBiometricEnabled,
+                                    onCheckedChange = { enabled ->
+                                        if (enabled) {
+                                            biometricPasswordError = false
+                                            showBiometricConfirmDialog = true
+                                        } else {
+                                            settingsVm.setBiometricEnabled(false)
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    if (isPinSetup) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        ListItem(
+                            headlineContent = { Text("Reset PIN") },
+                            supportingContent = { Text("Remove saved PIN, revert to master password") },
+                            leadingContent = { Icon(Icons.Default.LockReset, null) },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable { showResetPinDialog = true },
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Change Master Password") },
+                        supportingContent = { Text("Update your vault master password") },
+                        leadingContent = { Icon(Icons.Default.Key, null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = onChangePassword),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Auto-lock")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Lock when app in background") },
+                        supportingContent = { Text(backgroundLockTimeout.displayName) },
+                        leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable { showBackgroundLockDialog = true },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Lock after inactivity") },
+                        supportingContent = { Text(inactivityLockTimeout.displayName) },
+                        leadingContent = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable { showInactivityLockDialog = true },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Periodic master password check")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Periodic master password check") },
+                        supportingContent = {
+                            Text(
+                                if (isMasterPasswordRecheckEnabled)
+                                    "Master password required every ${masterPasswordRecheckInterval.label}"
+                                else
+                                    "Biometric and PIN can be used indefinitely"
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isMasterPasswordRecheckEnabled,
+                                onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
+                            )
+                        },
+                    )
+                    if (isMasterPasswordRecheckEnabled) {
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                "Recheck interval",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            MasterPasswordInterval.entries.forEach { option ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { settingsVm.setMasterPasswordRecheckInterval(option) }
+                                        .padding(vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    RadioButton(
+                                        selected = masterPasswordRecheckInterval == option,
+                                        onClick = { settingsVm.setMasterPasswordRecheckInterval(option) },
+                                    )
+                                    Column {
+                                        Text(
+                                            option.label,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        if (option == MasterPasswordInterval.HOURS_48) {
+                                            Text(
+                                                "Default — recommended",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Screen capture")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("Allow Screenshots") },
+                    supportingContent = {
+                        Text(
+                            if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
+                            else "Blocks screenshots, screen recordings, and Recent Apps preview"
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
+                    trailingContent = {
+                        Switch(
+                            checked = isScreenshotsEnabled,
+                            onCheckedChange = { newValue ->
+                                pendingScreenshotsEnabled = newValue
+                                showScreenshotDialog = true
+                            },
+                        )
+                    },
+                )
+            }
+        }
+    }
+
+    if (showBiometricConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showBiometricConfirmDialog = false
+                biometricPasswordInput = ""
+                biometricPasswordVisible = false
+                biometricPasswordError = false
+                biometricAttemptsRemaining = 3
+            },
+            icon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
+            title = { Text("Confirm Master Password") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Biometric unlock gives the same full access to your vault as your master password does.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "To make sure only you can enable it, please enter your master password once. " +
+                            "It is verified locally and never stored or transmitted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = biometricPasswordInput,
+                        onValueChange = { input ->
+                            biometricPasswordInput = input
+                            if (biometricPasswordError) biometricPasswordError = false
+                        },
+                        label = { Text("Master password") },
+                        singleLine = true,
+                        isError = biometricPasswordError,
+                        supportingText = if (biometricPasswordError) {
+                            {
+                                val remaining = biometricAttemptsRemaining
+                                Text(
+                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
+                                    else "Incorrect password — $remaining attempts remaining."
+                                )
+                            }
+                        } else null,
+                        visualTransformation = if (biometricPasswordVisible) VisualTransformation.None
+                                               else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { biometricPasswordVisible = !biometricPasswordVisible }) {
+                                Icon(
+                                    if (biometricPasswordVisible) Icons.Default.VisibilityOff
+                                    else Icons.Default.Visibility,
+                                    contentDescription = if (biometricPasswordVisible) "Hide password" else "Show password",
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        settingsVm.enableBiometricWithVerification(biometricPasswordInput.toCharArray())
+                    },
+                    enabled = biometricPasswordInput.isNotEmpty(),
+                ) { Text("Enable Biometric") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showBiometricConfirmDialog = false
+                        biometricPasswordInput = ""
+                        biometricPasswordVisible = false
+                        biometricPasswordError = false
+                        biometricAttemptsRemaining = 3
+                    }
+                ) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showScreenshotDialog) {
+        val enabling = pendingScreenshotsEnabled
+        AlertDialog(
+            onDismissRequest = { showScreenshotDialog = false },
+            icon = { Icon(Icons.Default.Screenshot, contentDescription = null) },
+            title = { Text(if (enabling) "Enable Screenshots?" else "Disable Screenshots?") },
+            text = {
+                Text(
+                    if (enabling)
+                        "Allowing screenshots means this app can appear in the Recent Apps screen " +
+                            "and screen capture tools will be able to capture your passwords.\n\n" +
+                            "Only enable this if you genuinely need to take screenshots inside 1Key."
+                    else
+                        "Disabling screenshots prevents this app from appearing in the Recent Apps " +
+                            "screen and blocks screen capture tools from capturing your passwords.\n\n" +
+                            "This is the recommended setting for a password manager."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        settingsVm.setScreenshotsEnabled(enabling)
+                        showScreenshotDialog = false
+                    },
+                    colors = if (enabling) ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                    ) else ButtonDefaults.buttonColors(),
+                ) {
+                    Text(if (enabling) "Enable Anyway" else "Disable Screenshots")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showScreenshotDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showBackgroundLockDialog) {
+        var pendingBackgroundLockTimeout by remember { mutableStateOf(backgroundLockTimeout) }
+        AlertDialog(
+            onDismissRequest = { showBackgroundLockDialog = false },
+            icon = { Icon(Icons.Default.Timer, contentDescription = null) },
+            title = { Text("Lock when app in background") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "How quickly the vault locks after you leave the app. Shorter is more secure — the vault key is wiped from memory when this fires.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    BackgroundLockTimeout.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pendingBackgroundLockTimeout = option }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(
+                                selected = pendingBackgroundLockTimeout == option,
+                                onClick = { pendingBackgroundLockTimeout = option },
+                            )
+                            Column {
+                                Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
+                                if (option == BackgroundLockTimeout.IMMEDIATE) {
+                                    Text(
+                                        "Lock the moment you leave the app",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    settingsVm.setBackgroundLockTimeout(pendingBackgroundLockTimeout)
+                    showBackgroundLockDialog = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBackgroundLockDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showInactivityLockDialog) {
+        var pendingInactivityLockTimeout by remember { mutableStateOf(inactivityLockTimeout) }
+        AlertDialog(
+            onDismissRequest = { showInactivityLockDialog = false },
+            icon = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
+            title = { Text("Lock after inactivity") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "How long the vault stays unlocked while the app is open but you're not using it. \"Never\" disables the idle timer (the background timer still applies).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    InactivityLockTimeout.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { pendingInactivityLockTimeout = option }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(
+                                selected = pendingInactivityLockTimeout == option,
+                                onClick = { pendingInactivityLockTimeout = option },
+                            )
+                            Text(option.displayName, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    settingsVm.setInactivityLockTimeout(pendingInactivityLockTimeout)
+                    showInactivityLockDialog = false
+                }) { Text("Apply") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInactivityLockDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showResetPinDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetPinDialog = false },
+            icon = { Icon(Icons.Default.LockReset, contentDescription = null) },
+            title = { Text("Reset PIN?") },
+            text = { Text("Your PIN will be removed. You will need to use your master password to unlock the vault.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetPinDialog = false
+                        settingsVm.resetPin()
+                    }
+                ) { Text("Reset PIN") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetPinDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
