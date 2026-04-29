@@ -14,6 +14,7 @@ import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.domain.repository.AppPreferencesRepository
+import com.onekey.core.domain.repository.BiometricUnlockGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,6 +41,7 @@ private val KEY_LAST_MP_TIMESTAMP = longPreferencesKey("last_mp_timestamp")
 private val KEY_HIDE_TOP_BAR_ON_SCROLL = booleanPreferencesKey("hide_top_bar_on_scroll")
 private val KEY_RECYCLE_BIN_RETENTION = stringPreferencesKey("recycle_bin_retention")
 private val KEY_RECYCLE_BIN_ENABLED = booleanPreferencesKey("recycle_bin_enabled")
+private val KEY_LOCK_REASON_CONTEXT = stringPreferencesKey("lock_reason_context")
 private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
 
 @Singleton
@@ -189,4 +191,21 @@ class AppPreferencesRepositoryImpl @Inject constructor(
     override suspend fun setVaultFooterVisible(visible: Boolean) {
         dataStore.edit { it[KEY_VAULT_FOOTER_VISIBLE] = visible }
     }
+
+    override fun getLockReasonContext(): Flow<String?> =
+        prefs.map { it[KEY_LOCK_REASON_CONTEXT] }.distinctUntilChanged()
+
+    override suspend fun setLockReasonContext(context: String?) {
+        dataStore.edit { p ->
+            if (context == null) p.remove(KEY_LOCK_REASON_CONTEXT) else p[KEY_LOCK_REASON_CONTEXT] = context
+        }
+    }
+
+    override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> =
+        prefs.map { p ->
+            BiometricUnlockGate(
+                biometricEnabled = p[KEY_BIOMETRIC_ENABLED] ?: false,
+                lockReasonSet = p[KEY_LOCK_REASON_CONTEXT] != null,
+            )
+        }.distinctUntilChanged()
 }

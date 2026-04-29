@@ -36,4 +36,18 @@ interface AppPreferencesRepository {
     suspend fun setRecycleBinRetention(retention: RecycleBinRetention)
     fun isRecycleBinEnabled(): Flow<Boolean>
     suspend fun setRecycleBinEnabled(enabled: Boolean)
+    /** Persistent lock-reason context — survives process restart so biometric stays paused. */
+    fun getLockReasonContext(): Flow<String?>
+    suspend fun setLockReasonContext(context: String?)
+    /**
+     * Reads `biometric_enabled` and `lock_reason_context` from the same Preferences
+     * snapshot so the two values can never be observed in an inconsistent intermediate
+     * state. Use this for auto-biometric gating; the per-key flows are fine elsewhere.
+     */
+    fun getBiometricUnlockGate(): Flow<BiometricUnlockGate>
 }
+
+data class BiometricUnlockGate(
+    val biometricEnabled: Boolean,
+    val lockReasonSet: Boolean,
+)

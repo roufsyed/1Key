@@ -8,9 +8,12 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
+import com.onekey.core.domain.repository.BiometricUnlockGate
 import com.onekey.core.domain.usecase.SetupFromBackupUseCase
 import com.onekey.core.domain.usecase.SetupMasterPasswordUseCase
 import com.onekey.core.domain.usecase.UnlockVaultUseCase
+import com.onekey.core.security.LockReason
+import com.onekey.core.security.LockReasonStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -40,7 +43,19 @@ class AuthViewModel @Inject constructor(
     private val setupMasterPassword: SetupMasterPasswordUseCase,
     private val unlockVault: UnlockVaultUseCase,
     private val setupFromBackup: SetupFromBackupUseCase,
+    private val lockReasonStore: LockReasonStore,
 ) : ViewModel() {
+
+    val lockReason: StateFlow<LockReason?> = lockReasonStore.reason
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Single atomic source for the auto-biometric decision so the two underlying prefs
+     * (`biometric_enabled`, `lock_reason_context`) can never be observed in a transient
+     * mismatched state during cold-start DataStore hydration.
+     */
+    val biometricUnlockGate: StateFlow<BiometricUnlockGate> = appPrefs.getBiometricUnlockGate()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, BiometricUnlockGate(false, false))
 
     private val _state = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
@@ -96,6 +111,9 @@ class AuthViewModel @Inject constructor(
             val result = withContext(Dispatchers.Default) { unlockVault.withPassword(password) }
             if (result is AppResult.Success) {
                 appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+                // A successful master-password unlock proves possession; release the
+                // biometric block that was set by the failed-attempts auto-lock.
+                lockReasonStore.clear()
             }
             _state.value = when (result) {
                 is AppResult.Success -> AuthUiState.Unlocked

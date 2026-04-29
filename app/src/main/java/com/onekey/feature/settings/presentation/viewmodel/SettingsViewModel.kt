@@ -14,6 +14,8 @@ import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteTagUseCase
 import com.onekey.core.domain.usecase.ResetVaultUseCase
 import com.onekey.core.domain.usecase.SeedDataUseCase
+import com.onekey.core.security.LockReason
+import com.onekey.core.security.LockReasonStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -27,6 +29,7 @@ sealed class SettingsEvent {
     data class Error(val message: String) : SettingsEvent()
     data object BiometricEnabled : SettingsEvent()
     data class BiometricConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
+    data class DeleteVaultConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
     data object VaultLocked : SettingsEvent()
 }
 
@@ -38,6 +41,7 @@ class SettingsViewModel @Inject constructor(
     private val deleteTagUseCase: DeleteTagUseCase,
     private val resetVaultUseCase: ResetVaultUseCase,
     private val seedDataUseCase: SeedDataUseCase,
+    private val lockReasonStore: LockReasonStore,
 ) : ViewModel() {
 
     private val _isSeedingData = MutableStateFlow(false)
@@ -111,6 +115,7 @@ class SettingsViewModel @Inject constructor(
                     is AppResult.Error -> {
                         biometricConfirmAttempts++
                         if (biometricConfirmAttempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("biometric setup"))
                             authRepository.lock()
                             _event.emit(SettingsEvent.VaultLocked)
                         } else {
@@ -195,11 +200,47 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun deleteVaultContents() {
+    private var deleteVaultAttempts = 0
+    private val _isVerifyingDeleteVault = MutableStateFlow(false)
+    val isVerifyingDeleteVault: StateFlow<Boolean> = _isVerifyingDeleteVault.asStateFlow()
+
+    /**
+     * Wipes the vault only after the user re-enters their master password. Three wrong
+     * attempts lock the vault — same policy as the biometric-enable flow.
+     */
+    fun deleteVaultContentsWithVerification(password: CharArray) {
         viewModelScope.launch {
-            when (val result = resetVaultUseCase()) {
-                is AppResult.Success -> _event.emit(SettingsEvent.VaultContentsDeleted)
-                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to delete vault"))
+            try {
+                _isVerifyingDeleteVault.value = true
+                when (authRepository.unlockWithPassword(password)) {
+                    is AppResult.Success -> {
+                        deleteVaultAttempts = 0
+                        when (val result = resetVaultUseCase()) {
+                            is AppResult.Success -> _event.emit(SettingsEvent.VaultContentsDeleted)
+                            is AppResult.Error -> _event.emit(
+                                SettingsEvent.Error(result.message ?: "Failed to delete vault")
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        deleteVaultAttempts++
+                        if (deleteVaultAttempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            deleteVaultAttempts = 0
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("vault deletion"))
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.DeleteVaultConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - deleteVaultAttempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                password.fill(' ')
+                _isVerifyingDeleteVault.value = false
             }
         }
     }

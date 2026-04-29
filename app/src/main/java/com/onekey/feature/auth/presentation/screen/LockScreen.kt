@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -51,6 +52,7 @@ import com.onekey.core.presentation.animation.PremiumMorphEasing
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
 import com.onekey.core.presentation.viewmodel.AppViewModel
+import com.onekey.core.security.LockReason
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
@@ -72,8 +74,21 @@ fun LockScreen(
     val isPinSetup by viewModel.isPinSetup.collectAsStateWithLifecycle()
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
+    val lockReason by viewModel.lockReason.collectAsStateWithLifecycle()
+    // Atomic snapshot of (biometric enabled, lock reason set) — read together from the same
+    // DataStore Preferences object so the auto-trigger never fires in the brief cold-start
+    // window where one of the two flat flows has updated and the other hasn't.
+    val biometricUnlockGate by viewModel.biometricUnlockGate.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lockScreenExitProgress = remember { Animatable(0f) }
+
+    // While a lock reason is active the user must enter their master password — biometric
+    // and PIN are both held back until they prove possession that way. The store-backed
+    // `lockReason` only clears after a successful unlockWithPassword.
+    val biometricBlockedByLockReason = lockReason != null
+    // Local dialog dismissal so OK closes the dialog without releasing the biometric block.
+    var lockReasonDismissed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(lockReason) { if (lockReason == null) lockReasonDismissed = false }
 
     // Local fallback flag — flipped by the "Forgot PIN? Use master password" button or
     // when the VM signals exhausted PIN attempts. While true, the password section
@@ -122,12 +137,17 @@ fun LockScreen(
     }
 
     // Auto-trigger biometric prompt once when the screen loads with biometric enabled.
-    // Keyed on both preference-backed flags so it re-evaluates after DataStore emits real values
-    // (both start as false while loading). autoTriggeredBiometric prevents repeated triggers
-    // if the user cancels and then the composable recomposes with the same key values.
+    // Uses biometricUnlockGate (single Preferences read) to avoid a cold-start race where
+    // `biometricEnabled` would flip true in one Compose snapshot while `lockReasonSet`
+    // hadn't yet — which previously let the prompt sneak in during a too-many-attempts lock.
     var autoTriggeredBiometric by remember { mutableStateOf(false) }
-    LaunchedEffect(isBiometricEnabled, requiresMasterPasswordRecheck) {
-        if (!autoTriggeredBiometric && isBiometricEnabled && canUseBiometric && !requiresMasterPasswordRecheck) {
+    LaunchedEffect(biometricUnlockGate, requiresMasterPasswordRecheck) {
+        if (!autoTriggeredBiometric &&
+            biometricUnlockGate.biometricEnabled &&
+            !biometricUnlockGate.lockReasonSet &&
+            canUseBiometric &&
+            !requiresMasterPasswordRecheck
+        ) {
             autoTriggeredBiometric = true
             showBiometricPrompt(
                 context = context,
@@ -138,10 +158,14 @@ fun LockScreen(
     }
 
     val titleText = "Welcome\nback."
-    val subtitleText = if (requiresMasterPasswordRecheck || !isPinSetup) {
-        "Type your master password to open the vault."
-    } else {
-        "Enter your PIN to open the vault."
+    val mustUsePassword = requiresMasterPasswordRecheck || biometricBlockedByLockReason
+    val subtitleText = when {
+        biometricBlockedByLockReason ->
+            "Enter your master password to re-enable biometric unlock."
+        mustUsePassword || !isPinSetup ->
+            "Type your master password to open the vault."
+        else ->
+            "Enter your PIN to open the vault."
     }
     val errorMessage = (state as? AuthUiState.Error)?.message
 
@@ -205,8 +229,8 @@ fun LockScreen(
 
             Spacer(Modifier.height(heroToFormSpacing))
 
-            if (requiresMasterPasswordRecheck) {
-                MasterPasswordRecheckBanner()
+            if (mustUsePassword) {
+                if (requiresMasterPasswordRecheck) MasterPasswordRecheckBanner()
                 Spacer(Modifier.height(14.dp))
                 PasswordUnlockSection(
                     state = state,
@@ -226,7 +250,7 @@ fun LockScreen(
                     state = state,
                     onPasswordSubmit = { viewModel.unlockWithPassword(it) },
                 )
-                if (isPinSetup && forcePasswordFallback && !requiresMasterPasswordRecheck) {
+                if (isPinSetup && forcePasswordFallback && !mustUsePassword) {
                     Spacer(Modifier.height(4.dp))
                     TextButton(
                         modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -255,7 +279,7 @@ fun LockScreen(
                 }
             }
 
-            if (isBiometricEnabled && canUseBiometric && !requiresMasterPasswordRecheck) {
+            if (isBiometricEnabled && canUseBiometric && !mustUsePassword) {
                 TextButton(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     onClick = {
@@ -268,7 +292,7 @@ fun LockScreen(
                     enabled = state !is AuthUiState.Loading,
                 ) {
                     Spacer(Modifier.width(8.dp))
-                    Text("Use fingerprint", style = MaterialTheme.typography.titleSmall)
+                    Text("Use biometric", style = MaterialTheme.typography.titleSmall)
                     Icon(
                         Icons.Default.Fingerprint,
                         contentDescription = null,
@@ -279,6 +303,36 @@ fun LockScreen(
             }
             Spacer(Modifier.height(10.dp))
         }
+    }
+
+    if (lockReason != null && !lockReasonDismissed) {
+        val reason = lockReason as LockReason.TooManyFailedAttempts
+        AlertDialog(
+            onDismissRequest = { /* non-dismissible — user must acknowledge */ },
+            icon = {
+                Icon(
+                    Icons.Default.Lock,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = { Text("Vault Locked") },
+            text = {
+                Text(
+                    "Three wrong master-password attempts during ${reason.context}. " +
+                        "That could mean someone other than you was trying to get in, " +
+                        "so we've paused biometric unlock to keep your data safe. " +
+                        "Enter your master password to confirm it's really you — " +
+                        "biometric will work as usual on your next unlock.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                // Dismissing the dialog here is local-only: the lockReason store stays set
+                // until a successful unlockWithPassword clears it, so biometric stays paused.
+                Button(onClick = { lockReasonDismissed = true }) { Text("OK") }
+            },
+        )
     }
 }
 
@@ -645,7 +699,6 @@ private fun showBiometricPrompt(
     )
     BiometricPrompt.PromptInfo.Builder()
         .setTitle("Biometric Unlock")
-        .setSubtitle("Use biometric to unlock vault")
         .setNegativeButtonText("Use master password")
         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         .build()

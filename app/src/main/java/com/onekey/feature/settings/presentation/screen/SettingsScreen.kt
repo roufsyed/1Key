@@ -62,13 +62,27 @@ fun SettingsScreen(
     var biometricPasswordVisible by remember { mutableStateOf(false) }
     var biometricPasswordError by remember { mutableStateOf(false) }
     var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
-    var showBiometricLockedDialog by remember { mutableStateOf(false) }
+
+    var showDeleteVaultDialog by remember { mutableStateOf(false) }
+    var deleteVaultPassword by remember { mutableStateOf("") }
+    var deleteVaultPasswordVisible by remember { mutableStateOf(false) }
+    var deleteVaultPasswordError by remember { mutableStateOf<String?>(null) }
+    var deleteVaultAttemptsRemaining by remember { mutableIntStateOf(3) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
             when (event) {
                 SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
-                SettingsEvent.VaultContentsDeleted -> onVaultReset()
+                SettingsEvent.VaultContentsDeleted -> {
+                    // Reset dialog state so a flash of the dialog doesn't appear if we
+                    // somehow re-enter Settings before the navigation away completes.
+                    showDeleteVaultDialog = false
+                    deleteVaultPassword = ""
+                    deleteVaultPasswordVisible = false
+                    deleteVaultPasswordError = null
+                    deleteVaultAttemptsRemaining = 3
+                    onVaultReset()
+                }
                 is SettingsEvent.SeedComplete -> snackbarHostState.showSnackbar("${event.count} sample credentials added")
                 is SettingsEvent.TwoFaSeedComplete -> snackbarHostState.showSnackbar("${event.count} sample 2FA codes added — open the 2FA tab")
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
@@ -83,13 +97,26 @@ fun SettingsScreen(
                     biometricPasswordError = true
                     biometricAttemptsRemaining = event.attemptsRemaining
                 }
+                is SettingsEvent.DeleteVaultConfirmFailed -> {
+                    deleteVaultAttemptsRemaining = event.attemptsRemaining
+                    deleteVaultPasswordError = if (event.attemptsRemaining == 1)
+                        "Wrong master password — 1 attempt remaining before the vault locks."
+                    else
+                        "Wrong master password — ${event.attemptsRemaining} attempts remaining."
+                }
                 SettingsEvent.VaultLocked -> {
                     showBiometricConfirmDialog = false
                     biometricPasswordInput = ""
                     biometricPasswordVisible = false
                     biometricPasswordError = false
                     biometricAttemptsRemaining = 3
-                    showBiometricLockedDialog = true
+                    showDeleteVaultDialog = false
+                    deleteVaultPassword = ""
+                    deleteVaultPasswordVisible = false
+                    deleteVaultPasswordError = null
+                    deleteVaultAttemptsRemaining = 3
+                    // The "Vault Locked" explanation now lives on LockScreen via LockReasonStore
+                    // — Settings has already left composition by the time the user lands there.
                 }
             }
         }
@@ -106,8 +133,6 @@ fun SettingsScreen(
     var showResetPinDialog by remember { mutableStateOf(false) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
-    var showDeleteVaultDialog by remember { mutableStateOf(false) }
-    var deleteVaultConfirmed by remember { mutableStateOf(false) }
     // Pending state is scoped inside each dialog's `if (show…)` block (not here) so that
     // every reopen seeds the radio from the current saved value, not the previous
     // session's lingering preview selection.
@@ -803,31 +828,6 @@ fun SettingsScreen(
         )
     }
 
-    if (showBiometricLockedDialog) {
-        AlertDialog(
-            onDismissRequest = { /* non-dismissible — user must acknowledge */ },
-            icon = {
-                Icon(
-                    Icons.Default.Lock,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                )
-            },
-            title = { Text("Vault Locked") },
-            text = {
-                Text(
-                    "You've entered the wrong password 3 times while trying to enable biometric unlock. " +
-                        "To keep your data safe, your vault has been locked. " +
-                        "Please re-authenticate to continue.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                Button(onClick = { showBiometricLockedDialog = false }) { Text("OK") }
-            },
-        )
-    }
-
     if (showScreenshotDialog) {
         val enabling = pendingScreenshotsEnabled
         AlertDialog(
@@ -968,10 +968,16 @@ fun SettingsScreen(
     }
 
     if (showDeleteVaultDialog) {
+        val isVerifyingDeleteVault by settingsVm.isVerifyingDeleteVault.collectAsStateWithLifecycle()
+        val canConfirm = deleteVaultPassword.isNotEmpty() && !isVerifyingDeleteVault
+
         AlertDialog(
             onDismissRequest = {
+                if (isVerifyingDeleteVault) return@AlertDialog
                 showDeleteVaultDialog = false
-                deleteVaultConfirmed = false
+                deleteVaultPassword = ""
+                deleteVaultPasswordVisible = false
+                deleteVaultPasswordError = null
             },
             icon = {
                 Icon(
@@ -989,20 +995,39 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     HorizontalDivider()
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Checkbox(
-                            checked = deleteVaultConfirmed,
-                            onCheckedChange = { deleteVaultConfirmed = it },
-                            colors = CheckboxDefaults.colors(
-                                checkedColor = MaterialTheme.colorScheme.error,
-                            ),
-                        )
+                    Text(
+                        "Enter your master password to confirm.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = deleteVaultPassword,
+                        onValueChange = {
+                            deleteVaultPassword = it
+                            // Clear stale error so the user isn't yelled at while typing.
+                            if (deleteVaultPasswordError != null) deleteVaultPasswordError = null
+                        },
+                        label = { Text("Master password") },
+                        singleLine = true,
+                        enabled = !isVerifyingDeleteVault,
+                        isError = deleteVaultPasswordError != null,
+                        visualTransformation = if (deleteVaultPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { deleteVaultPasswordVisible = !deleteVaultPasswordVisible }) {
+                                Icon(
+                                    if (deleteVaultPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    deleteVaultPasswordError?.let { msg ->
                         Text(
-                            "I understand all my credentials will be permanently deleted",
+                            msg,
                             style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
                         )
                     }
                 }
@@ -1010,22 +1035,33 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        showDeleteVaultDialog = false
-                        deleteVaultConfirmed = false
-                        settingsVm.deleteVaultContents()
+                        settingsVm.deleteVaultContentsWithVerification(deleteVaultPassword.toCharArray())
                     },
-                    enabled = deleteVaultConfirmed,
+                    enabled = canConfirm,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError,
                     ),
-                ) { Text("Delete Vault") }
+                ) {
+                    if (isVerifyingDeleteVault) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onError,
+                        )
+                    } else {
+                        Text("Delete Vault")
+                    }
+                }
             },
             dismissButton = {
                 TextButton(
+                    enabled = !isVerifyingDeleteVault,
                     onClick = {
                         showDeleteVaultDialog = false
-                        deleteVaultConfirmed = false
+                        deleteVaultPassword = ""
+                        deleteVaultPasswordVisible = false
+                        deleteVaultPasswordError = null
                     }
                 ) { Text("Keep My Credentials") }
             },
