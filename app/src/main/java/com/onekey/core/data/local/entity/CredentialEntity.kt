@@ -31,9 +31,12 @@ data class CredentialEntity(
     @ColumnInfo(name = "iv_password") val ivPassword: ByteArray,
     @ColumnInfo(name = "iv_notes") val ivNotes: ByteArray,
     @ColumnInfo(name = "iv_totp") val ivTotp: ByteArray?,
-    @ColumnInfo(name = "is_favorite") val isFavorite: Boolean = false,
-    // Stored as enum name string (e.g. "LOGIN"). Default keeps existing rows unchanged.
-    @ColumnInfo(name = "type") val type: String = "LOGIN",
+    // defaultValue mirrors the DEFAULT clause in MIGRATION_1_2 so Room's _TableInfo
+    // round-trip check stays consistent — historical mismatch crashed the app before.
+    @ColumnInfo(name = "is_favorite", defaultValue = "0") val isFavorite: Boolean = false,
+    // Stored as enum name string (e.g. "LOGIN"). Default keeps existing rows unchanged
+    // and matches the DEFAULT 'LOGIN' clause in MIGRATION_5_6.
+    @ColumnInfo(name = "type", defaultValue = "LOGIN") val type: String = "LOGIN",
     // Null = active. Non-null = soft-deleted at this epoch ms; auto-purged after 30 days.
     @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
 ) {
