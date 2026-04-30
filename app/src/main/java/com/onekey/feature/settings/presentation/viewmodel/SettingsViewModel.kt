@@ -23,7 +23,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 sealed class SettingsEvent {
-    data object PinReset : SettingsEvent()
+    data object PinRemoved : SettingsEvent()
+    data class PinRemoveConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
     data object VaultContentsDeleted : SettingsEvent()
     data class SeedComplete(val count: Int) : SettingsEvent()
     data class TwoFaSeedComplete(val count: Int) : SettingsEvent()
@@ -201,11 +202,43 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun resetPin() {
+    /**
+     * Verifies the user's master password before removing the saved PIN. Mirrors the
+     * shape of [enableBiometricWithVerification]: shared singleton attempts counter so
+     * navigating Security ↔ top-level Settings can't reset the lockout, three wrong
+     * attempts persist a lock reason and lock the vault.
+     */
+    fun removePinWithVerification(password: CharArray) {
         viewModelScope.launch {
-            when (val result = authRepository.resetPin()) {
-                is AppResult.Success -> _event.emit(SettingsEvent.PinReset)
-                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to reset PIN"))
+            try {
+                when (authRepository.unlockWithPassword(password)) {
+                    is AppResult.Success -> {
+                        authAttemptsStore.resetBiometricEnable()
+                        when (val result = authRepository.resetPin()) {
+                            is AppResult.Success -> _event.emit(SettingsEvent.PinRemoved)
+                            is AppResult.Error -> _event.emit(
+                                SettingsEvent.Error(result.message ?: "Failed to remove PIN")
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("PIN removal"))
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.PinRemoveConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - attempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                password.fill(' ')
             }
         }
     }

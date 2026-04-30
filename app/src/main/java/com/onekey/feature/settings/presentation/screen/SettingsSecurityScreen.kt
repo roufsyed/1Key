@@ -52,7 +52,11 @@ fun SettingsSecurityScreen(
     var biometricPasswordError by remember { mutableStateOf(false) }
     var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
 
-    var showResetPinDialog by remember { mutableStateOf(false) }
+    var showRemovePinDialog by remember { mutableStateOf(false) }
+    var removePinPasswordInput by remember { mutableStateOf("") }
+    var removePinPasswordVisible by remember { mutableStateOf(false) }
+    var removePinPasswordError by remember { mutableStateOf(false) }
+    var removePinAttemptsRemaining by remember { mutableIntStateOf(3) }
     var showScreenshotDialog by remember { mutableStateOf(false) }
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
     var showBackgroundLockDialog by remember { mutableStateOf(false) }
@@ -62,7 +66,18 @@ fun SettingsSecurityScreen(
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
             when (event) {
-                SettingsEvent.PinReset -> snackbarHostState.showSnackbar("PIN has been reset")
+                SettingsEvent.PinRemoved -> {
+                    showRemovePinDialog = false
+                    removePinPasswordInput = ""
+                    removePinPasswordVisible = false
+                    removePinPasswordError = false
+                    removePinAttemptsRemaining = 3
+                    snackbarHostState.showSnackbar("PIN removed — master password is now required to unlock")
+                }
+                is SettingsEvent.PinRemoveConfirmFailed -> {
+                    removePinPasswordError = true
+                    removePinAttemptsRemaining = event.attemptsRemaining
+                }
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 SettingsEvent.BiometricEnabled -> {
                     showBiometricConfirmDialog = false
@@ -81,6 +96,11 @@ fun SettingsSecurityScreen(
                     biometricPasswordVisible = false
                     biometricPasswordError = false
                     biometricAttemptsRemaining = 3
+                    showRemovePinDialog = false
+                    removePinPasswordInput = ""
+                    removePinPasswordVisible = false
+                    removePinPasswordError = false
+                    removePinAttemptsRemaining = 3
                     // The "Vault Locked" explanation lives on LockScreen via LockReasonStore
                     // — Settings has already left composition by the time the user lands there.
                 }
@@ -145,11 +165,16 @@ fun SettingsSecurityScreen(
                     if (isPinSetup) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         ListItem(
-                            headlineContent = { Text("Reset PIN") },
-                            supportingContent = { Text("Remove saved PIN, revert to master password") },
+                            headlineContent = { Text("Remove PIN") },
+                            supportingContent = { Text("Stop using a PIN — only your master password will unlock 1Key") },
                             leadingContent = { Icon(Icons.Default.LockReset, null) },
                             trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable { showResetPinDialog = true },
+                            modifier = Modifier.clickable {
+                                removePinPasswordInput = ""
+                                removePinPasswordVisible = false
+                                removePinPasswordError = false
+                                showRemovePinDialog = true
+                            },
                         )
                     }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -518,22 +543,82 @@ fun SettingsSecurityScreen(
         )
     }
 
-    if (showResetPinDialog) {
+    if (showRemovePinDialog) {
         AlertDialog(
-            onDismissRequest = { showResetPinDialog = false },
+            onDismissRequest = {
+                showRemovePinDialog = false
+                removePinPasswordInput = ""
+                removePinPasswordVisible = false
+                removePinPasswordError = false
+                removePinAttemptsRemaining = 3
+            },
             icon = { Icon(Icons.Default.LockReset, contentDescription = null) },
-            title = { Text("Reset PIN?") },
-            text = { Text("Your PIN will be removed. You will need to use your master password to unlock the vault.") },
+            title = { Text("Remove PIN?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Once you remove your PIN, you'll need to type your master password " +
+                            "every time you unlock 1Key. You can set up a new PIN later in Settings.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "To make sure only you can change this, please enter your master password. " +
+                            "It's verified locally and never stored or transmitted.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = removePinPasswordInput,
+                        onValueChange = { input ->
+                            removePinPasswordInput = input
+                            if (removePinPasswordError) removePinPasswordError = false
+                        },
+                        label = { Text("Master password") },
+                        singleLine = true,
+                        isError = removePinPasswordError,
+                        supportingText = if (removePinPasswordError) {
+                            {
+                                val remaining = removePinAttemptsRemaining
+                                Text(
+                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
+                                    else "Incorrect password — $remaining attempts remaining."
+                                )
+                            }
+                        } else null,
+                        visualTransformation = if (removePinPasswordVisible) VisualTransformation.None
+                                               else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { removePinPasswordVisible = !removePinPasswordVisible }) {
+                                Icon(
+                                    if (removePinPasswordVisible) Icons.Default.VisibilityOff
+                                    else Icons.Default.Visibility,
+                                    contentDescription = if (removePinPasswordVisible) "Hide password" else "Show password",
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
-                        showResetPinDialog = false
-                        settingsVm.resetPin()
-                    }
-                ) { Text("Reset PIN") }
+                        settingsVm.removePinWithVerification(removePinPasswordInput.toCharArray())
+                    },
+                    enabled = removePinPasswordInput.isNotEmpty(),
+                ) { Text("Remove PIN") }
             },
             dismissButton = {
-                TextButton(onClick = { showResetPinDialog = false }) { Text("Cancel") }
+                TextButton(
+                    onClick = {
+                        showRemovePinDialog = false
+                        removePinPasswordInput = ""
+                        removePinPasswordVisible = false
+                        removePinPasswordError = false
+                        removePinAttemptsRemaining = 3
+                    }
+                ) { Text("Cancel") }
             },
         )
     }
