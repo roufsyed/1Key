@@ -1,10 +1,9 @@
 package com.onekey.core.domain.usecase
 
-import android.content.Context
 import com.onekey.core.domain.model.PasswordConfig
 import com.onekey.core.domain.model.PasswordStrength
 import com.onekey.core.domain.model.PasswordType
-import dagger.hilt.android.qualifiers.ApplicationContext
+import com.onekey.core.domain.wordlist.WordlistProvider
 import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -17,21 +16,16 @@ private const val LOWERCASE_FULL = "abcdefghijklmnopqrstuvwxyz"
 private const val DIGITS = "23456789"
 private const val DIGITS_FULL = "0123456789"
 private const val SYMBOLS = "!@#\$%^&*-_=+?"
-private const val WORDLIST_PATH = "wordlists/words_en.txt"
 
 data class GeneratedPassword(val password: String, val strength: PasswordStrength)
 
 @Singleton
 class GeneratePasswordUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val wordlistProvider: WordlistProvider,
 ) {
     private val rng = SecureRandom()
 
-    // lazy(SYNCHRONIZED) ensures the wordlist is loaded at most once even under concurrent calls.
-    private val wordlist: List<String> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
-        context.assets.open(WORDLIST_PATH).bufferedReader().readLines()
-            .map { it.trim() }.filter { it.isNotBlank() }
-    }
+    private val wordlist: List<String> get() = wordlistProvider.memorableWordlist()
 
     operator fun invoke(config: PasswordConfig): GeneratedPassword {
         val password = when (config.type) {
