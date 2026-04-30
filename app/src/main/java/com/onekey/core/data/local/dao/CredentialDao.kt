@@ -9,32 +9,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CredentialDao {
 
-    // Tag column is a Gson-serialized JSON array (e.g. ["foo","bar"]). Anchoring the
-    // LIKE pattern to the surrounding JSON quotes (`"foo"`) prevents tag "foo" from
-    // matching credentials tagged "foobar", "homework"-vs-"work", etc.
-    @Query(
-        """
-        SELECT * FROM credentials
-        WHERE deleted_at IS NULL
-        AND (:query = '' OR title LIKE '%' || :query || '%')
-        AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
-        ORDER BY updated_at DESC
-        """
-    )
-    fun pagingSource(query: String, tag: String): PagingSource<Int, CredentialEntity>
-
-    @Query(
-        """
-        SELECT * FROM credentials
-        WHERE deleted_at IS NULL
-        AND (:query = '' OR title LIKE '%' || :query || '%')
-        AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
-        ORDER BY updated_at DESC
-        LIMIT :limit OFFSET :offset
-        """
-    )
-    fun searchFlow(query: String, tag: String, limit: Int, offset: Int): Flow<List<CredentialEntity>>
-
     @Query("SELECT * FROM credentials WHERE id = :id AND deleted_at IS NULL")
     fun observeById(id: String): Flow<CredentialEntity?>
 
