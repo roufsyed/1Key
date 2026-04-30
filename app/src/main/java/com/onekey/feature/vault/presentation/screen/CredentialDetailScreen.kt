@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -892,6 +893,7 @@ private fun CredentialEditContent(
     }
 }
 
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TotpQrScannerSheet(
@@ -973,6 +975,7 @@ private fun TotpQrScannerSheet(
     }
 }
 
+@ExperimentalGetImage
 @Composable
 private fun TotpCameraPreview(
     modifier: Modifier = Modifier,

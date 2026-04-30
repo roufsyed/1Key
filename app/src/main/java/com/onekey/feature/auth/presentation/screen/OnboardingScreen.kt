@@ -310,10 +310,12 @@ private fun CreateVaultPage(
     var showConfirm by remember { mutableStateOf(false) }
     var showPolicyDialog by remember { mutableStateOf(false) }
 
-    val passwordMismatch by remember {
-        derivedStateOf { confirmPassword.isNotEmpty() && password != confirmPassword }
-    }
-    val passwordTooShort by remember { derivedStateOf { password.isNotEmpty() && password.length < 8 } }
+    // `remember { derivedStateOf { ... } }` here would capture the FIRST recomposition's
+    // password/confirmPassword (both ""), and the captured plain-String parameters never
+    // re-track. derivedStateOf only tracks State<T> reads inside its block — function
+    // parameters are values, not state. Plain vals recompute correctly on each pass.
+    val passwordMismatch = confirmPassword.isNotEmpty() && password != confirmPassword
+    val passwordTooShort = password.isNotEmpty() && password.length < 8
     val canSubmit = password.length >= 8 && !passwordMismatch && privacyAccepted && state !is AuthUiState.Loading
 
     Column(
@@ -325,22 +327,23 @@ private fun CreateVaultPage(
     ) {
         Spacer(Modifier.height(56.dp))
 
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            modifier = Modifier.size(120.dp),
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Default.VpnKey,
-                    contentDescription = null,
-                    modifier = Modifier.size(60.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
+//        Surface(
+//            shape = CircleShape,
+//            color = MaterialTheme.colorScheme.primaryContainer,
+//            modifier = Modifier.size(120.dp),
+//        ) {
+//            Box(contentAlignment = Alignment.Center) {
+//                Icon(
+//                    Icons.Default.VpnKey,
+//                    contentDescription = null,
+//                    modifier = Modifier.size(60.dp),
+//                    tint = MaterialTheme.colorScheme.primary,
+//                )
+//            }
+//        }
+//
+//        Spacer(Modifier.height(16.dp))
 
-        Spacer(Modifier.height(32.dp))
         Text(
             "Create your master password",
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
