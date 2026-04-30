@@ -51,6 +51,7 @@ import com.onekey.core.presentation.animation.AppIconBlue
 import com.onekey.core.presentation.animation.PremiumMorphEasing
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
+import com.onekey.core.presentation.util.rememberCanUseBiometric
 import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.core.security.LockReason
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
@@ -130,11 +131,7 @@ fun LockScreen(
         }
     }
 
-    val canUseBiometric = remember {
-        BiometricManager.from(context).canAuthenticate(
-            BiometricManager.Authenticators.BIOMETRIC_STRONG
-        ) == BiometricManager.BIOMETRIC_SUCCESS
-    }
+    val canUseBiometric = rememberCanUseBiometric()
 
     // Auto-trigger biometric prompt once when the screen loads with biometric enabled.
     // Uses biometricUnlockGate (single Preferences read) to avoid a cold-start race where

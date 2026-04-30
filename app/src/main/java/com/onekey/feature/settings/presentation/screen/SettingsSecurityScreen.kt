@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.presentation.util.rememberCanUseBiometric
 import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
@@ -42,11 +43,7 @@ fun SettingsSecurityScreen(
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isRestoreLastScreenOnUnlock by settingsVm.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
 
-    val canUseBiometric = remember {
-        androidx.biometric.BiometricManager.from(context).canAuthenticate(
-            androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
-        ) == androidx.biometric.BiometricManager.BIOMETRIC_SUCCESS
-    }
+    val canUseBiometric = rememberCanUseBiometric()
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showBiometricConfirmDialog by remember { mutableStateOf(false) }
