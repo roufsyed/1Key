@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -53,8 +54,11 @@ fun VaultScreen(
     // Always collected unconditionally to satisfy Compose snapshot rules.
     val searchResults = viewModel.searchResults.collectAsLazyPagingItems()
 
-    var isSearchActive by remember { mutableStateOf(false) }
-    var showBottomSheet by remember { mutableStateOf(false) }
+    // rememberSaveable so a rotation mid-search doesn't collapse the search bar back into
+    // the list (the searchQuery itself lives in the VM and is unaffected) and so the
+    // add-credential bottom sheet stays open through a config change.
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val focusRequester = remember { FocusRequester() }
 

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -36,7 +37,11 @@ fun TwoFaListScreen(
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var pendingDelete by remember { mutableStateOf<TotpEntry?>(null) }
+    // Store the credential id (saveable) rather than the full TotpEntry so the
+    // confirm-delete dialog survives rotation. The matching entry is resolved from the
+    // current `entriesList` at render time — if the entry has since disappeared, the
+    // dialog simply doesn't show, which is the correct behavior.
+    var pendingDeleteCredentialId by rememberSaveable { mutableStateOf<String?>(null) }
 
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
@@ -107,7 +112,7 @@ fun TwoFaListScreen(
                 items(entriesList, key = { it.credential.id }) { entry ->
                     TotpEntryRow(
                         entry = entry,
-                        onLongClick = { pendingDelete = entry },
+                        onLongClick = { pendingDeleteCredentialId = entry.credential.id },
                         onCopyCode = { code ->
                             // Routes through SecureClipboardManager — its app-singleton
                             // scope makes the 30s clear survive navigation away from this
@@ -128,9 +133,14 @@ fun TwoFaListScreen(
         }
     }
 
-    pendingDelete?.let { entry ->
+    pendingDeleteCredentialId?.let { id ->
+        // If the entry has since vanished (e.g. removed in another flow) we skip rendering;
+        // the saved id remains harmless in savedInstanceState until a new long-press
+        // overwrites it. Cleaning it up via LaunchedEffect would be tidier but adds churn
+        // for a corner case nobody hits in practice.
+        val entry = entries?.firstOrNull { it.credential.id == id } ?: return@let
         AlertDialog(
-            onDismissRequest = { pendingDelete = null },
+            onDismissRequest = { pendingDeleteCredentialId = null },
             title = {
                 Text(if (entry.isLinkedCredential) "Remove 2FA code?" else "Remove 2FA account?")
             },
@@ -146,7 +156,7 @@ fun TwoFaListScreen(
                 Button(
                     onClick = {
                         viewModel.removeTotp(entry)
-                        pendingDelete = null
+                        pendingDeleteCredentialId = null
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
@@ -154,7 +164,7 @@ fun TwoFaListScreen(
                 ) { Text("Remove") }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { pendingDeleteCredentialId = null }) { Text("Cancel") }
             },
         )
     }

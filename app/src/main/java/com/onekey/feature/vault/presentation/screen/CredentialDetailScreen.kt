@@ -207,9 +207,12 @@ private fun CredentialViewContent(
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-    var showPassword by remember { mutableStateOf(false) }
-    var historyExpanded by remember { mutableStateOf(false) }
+    // rememberSaveable so config changes (rotation, multi-window resize, fold) don't
+    // collapse the delete-confirm dialog, drop the password back to masked, or fold the
+    // history panel back up while the user is mid-interaction.
+    var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
+    var showPassword by rememberSaveable { mutableStateOf(false) }
+    var historyExpanded by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
