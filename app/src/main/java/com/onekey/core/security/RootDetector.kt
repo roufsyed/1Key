@@ -83,8 +83,12 @@ class RootDetector @Inject constructor(private val context: Context) {
         return dangerousProps.any { (key, value) ->
             try {
                 val process = Runtime.getRuntime().exec(arrayOf("getprop", key))
-                val result = process.inputStream.bufferedReader().readLine()?.trim()
-                result == value
+                try {
+                    process.inputStream.bufferedReader().use { it.readLine()?.trim() == value }
+                } finally {
+                    // Without destroy() each call leaks a subprocess + file descriptor.
+                    process.destroy()
+                }
             } catch (_: Exception) {
                 false
             }

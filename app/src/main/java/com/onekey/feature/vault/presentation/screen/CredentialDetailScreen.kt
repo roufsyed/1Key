@@ -392,6 +392,14 @@ private fun RecycleBinBanner(onRestore: () -> Unit) {
 
 @Composable
 private fun MetadataSection(credential: Credential) {
+    // Cache the formatted strings so SimpleDateFormat-style work doesn't re-run on every
+    // recomposition (e.g. on every reveal-toggle and history-expand).
+    val createdText = remember(credential.createdAt) {
+        if (credential.createdAt > 0L) "Created: ${credential.createdAt.toFormattedDateTime()}" else null
+    }
+    val updatedText = remember(credential.updatedAt) {
+        if (credential.updatedAt > 0L) "Modified: ${credential.updatedAt.toFormattedDateTime()}" else null
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -399,19 +407,11 @@ private fun MetadataSection(credential: Credential) {
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("Details", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-        if (credential.createdAt > 0L) {
-            Text(
-                "Created: ${credential.createdAt.toFormattedDateTime()}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        createdText?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (credential.updatedAt > 0L) {
-            Text(
-                "Modified: ${credential.updatedAt.toFormattedDateTime()}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        updatedText?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

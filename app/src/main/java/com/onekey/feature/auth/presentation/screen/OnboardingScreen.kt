@@ -684,9 +684,11 @@ private fun VaultSetupStatusLine(isLoading: Boolean) {
     var messageIndex by remember(isLoading) { mutableStateOf(0) }
     LaunchedEffect(isLoading) {
         if (isLoading) {
-            while (true) {
+            // Walk to the last message, then exit. Without the bound this looped forever
+            // delaying 1.2s and waking the coroutine for nothing until isLoading flipped.
+            while (messageIndex < loadingMessages.lastIndex) {
                 kotlinx.coroutines.delay(1200)
-                if (messageIndex < loadingMessages.lastIndex) messageIndex++
+                messageIndex++
             }
         }
     }
