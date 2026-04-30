@@ -91,6 +91,18 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
+// No-op SQL migration. Required because adding @ColumnInfo(defaultValue = ...) to existing
+// entities (CredentialEntity.type/isFavorite, TagEntity.isDefault) changes Room's entity
+// identity hash. Without a version bump, existing installs crash at openHelper.checkIdentity
+// because room_master_table still holds the prior hash. The actual SQLite columns already
+// have DEFAULT clauses from MIGRATION_1_2 / MIGRATION_2_3 / MIGRATION_5_6, so no schema
+// rewrite is needed — just a version bump for Room to re-store the new hash.
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // intentionally empty
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -107,7 +119,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
