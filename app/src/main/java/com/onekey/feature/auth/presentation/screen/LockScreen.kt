@@ -140,7 +140,9 @@ fun LockScreen(
     // Uses biometricUnlockGate (single Preferences read) to avoid a cold-start race where
     // `biometricEnabled` would flip true in one Compose snapshot while `lockReasonSet`
     // hadn't yet — which previously let the prompt sneak in during a too-many-attempts lock.
-    var autoTriggeredBiometric by remember { mutableStateOf(false) }
+    // rememberSaveable so a rotation/config-change mid-LockScreen does not reset the
+    // flag and re-fire the auto biometric prompt while the user may already be typing.
+    var autoTriggeredBiometric by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(biometricUnlockGate, requiresMasterPasswordRecheck) {
         if (!autoTriggeredBiometric &&
             biometricUnlockGate.biometricEnabled &&
