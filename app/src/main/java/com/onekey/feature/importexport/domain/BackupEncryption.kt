@@ -26,8 +26,19 @@ internal object BackupEncryption {
 
     fun isEncrypted(path: String): Boolean = try {
         val header = ByteArray(MAGIC.size)
-        File(path).inputStream().use { stream -> stream.read(header) }
-        header.contentEquals(MAGIC)
+        val filledFully = File(path).inputStream().use { stream ->
+            // InputStream.read(byte[]) is allowed to return fewer bytes than requested even
+            // when more are available — looping until full avoids spuriously misclassifying
+            // a real encrypted backup as plaintext on slow / DocumentFile-wrapped streams.
+            var read = 0
+            while (read < header.size) {
+                val n = stream.read(header, read, header.size - read)
+                if (n < 0) break
+                read += n
+            }
+            read == header.size
+        }
+        filledFully && header.contentEquals(MAGIC)
     } catch (_: Exception) { false }
 
     fun encrypt(
