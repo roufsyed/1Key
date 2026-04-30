@@ -53,6 +53,10 @@ class TaggedCredentialListViewModel @Inject constructor(
     val hideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    // WhileSubscribed(5s) so the decrypted list doesn't stay hot in StateFlow.value after
+    // the user navigates away. The 5s grace absorbs config-change subscription gaps
+    // without restarting upstream collection. Preference flows stay Eagerly above so the
+    // screen has values on first render.
     val credentials: StateFlow<List<Credential>?> = sortOrder
         .flatMapLatest { order ->
             when (rawTag) {
@@ -63,12 +67,12 @@ class TaggedCredentialListViewModel @Inject constructor(
                 }
             }
         }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val letterIndex: StateFlow<Map<Char, Int>> = combine(credentials, sortOrder) { creds, order ->
         if (order != CredentialSortOrder.ALPHABETICAL || creds == null) emptyMap()
         else buildLetterIndex(creds.map { it.title })
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     fun setSortOrder(order: CredentialSortOrder) {
         viewModelScope.launch { appPrefs.setCredentialSortOrder(order) }
@@ -90,7 +94,7 @@ class TaggedCredentialListViewModel @Inject constructor(
                 val byId = list.associateBy { it.id }
                 ids.all { id -> byId[id]?.isFavorite == true }
             }
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     private val _event = MutableSharedFlow<CredentialListEvent>(extraBufferCapacity = 1)
     val event: SharedFlow<CredentialListEvent> = _event.asSharedFlow()
