@@ -140,6 +140,17 @@ fun LockScreen(
     // rememberSaveable so a rotation/config-change mid-LockScreen does not reset the
     // flag and re-fire the auto biometric prompt while the user may already be typing.
     var autoTriggeredBiometric by rememberSaveable { mutableStateOf(false) }
+    // Held so we can dismiss the BiometricPrompt programmatically — specifically when the
+    // too-many-failures lockout fires mid-prompt. Without this, the prompt stays on screen
+    // accepting attempts the app would refuse anyway. Not saveable: a rotation rebuilds
+    // the prompt naturally via the auto-trigger LaunchedEffect.
+    var activeBiometricPrompt by remember { mutableStateOf<BiometricPrompt?>(null) }
+    LaunchedEffect(lockReason) {
+        if (lockReason != null) {
+            activeBiometricPrompt?.cancelAuthentication()
+            activeBiometricPrompt = null
+        }
+    }
     LaunchedEffect(biometricUnlockGate, requiresMasterPasswordRecheck) {
         if (!autoTriggeredBiometric &&
             biometricUnlockGate.biometricEnabled &&
@@ -148,7 +159,7 @@ fun LockScreen(
             !requiresMasterPasswordRecheck
         ) {
             autoTriggeredBiometric = true
-            showBiometricPrompt(
+            activeBiometricPrompt = showBiometricPrompt(
                 context = context,
                 onSuccess = { viewModel.unlockWithBiometric() },
                 onError = { msg -> viewModel.setBiometricError(msg) },
@@ -283,7 +294,7 @@ fun LockScreen(
                 TextButton(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                     onClick = {
-                        showBiometricPrompt(
+                        activeBiometricPrompt = showBiometricPrompt(
                             context = context,
                             onSuccess = { viewModel.unlockWithBiometric() },
                             onError = { msg -> viewModel.setBiometricError(msg) },
@@ -691,8 +702,8 @@ private fun showBiometricPrompt(
     onSuccess: () -> Unit,
     onError: (String) -> Unit,
     onAuthFailed: () -> Unit = {},
-) {
-    val activity = context as? FragmentActivity ?: return
+): BiometricPrompt? {
+    val activity = context as? FragmentActivity ?: return null
     val executor = ContextCompat.getMainExecutor(context)
     val prompt = BiometricPrompt(
         activity,
@@ -701,8 +712,12 @@ private fun showBiometricPrompt(
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) =
                 onSuccess()
             override fun onAuthenticationError(code: Int, msg: CharSequence) {
+                // ERROR_CANCELED fires when the host calls cancelAuthentication() — that's
+                // our own programmatic dismissal (e.g. after the too-many-failures lockout
+                // sets a lock reason). Treat it like the user-initiated cancels: silent.
                 if (code != BiometricPrompt.ERROR_USER_CANCELED &&
-                    code != BiometricPrompt.ERROR_NEGATIVE_BUTTON
+                    code != BiometricPrompt.ERROR_NEGATIVE_BUTTON &&
+                    code != BiometricPrompt.ERROR_CANCELED
                 ) {
                     onError(msg.toString())
                 }
@@ -719,4 +734,5 @@ private fun showBiometricPrompt(
         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         .build()
         .also { prompt.authenticate(it) }
+    return prompt
 }
