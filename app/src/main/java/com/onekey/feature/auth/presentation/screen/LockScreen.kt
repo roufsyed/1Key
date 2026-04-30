@@ -152,7 +152,12 @@ fun LockScreen(
         }
     }
     LaunchedEffect(biometricUnlockGate, requiresMasterPasswordRecheck) {
+        // `state is Idle` keeps this effect single-shot at screen-entry time. Without it,
+        // a successful master-password unlock clears lockReason, biometricUnlockGate
+        // re-emits, and the effect re-fires DURING the unlock animation — opening the
+        // biometric prompt on top of the user already heading to the vault.
         if (!autoTriggeredBiometric &&
+            state is AuthUiState.Idle &&
             biometricUnlockGate.biometricEnabled &&
             !biometricUnlockGate.lockReasonSet &&
             canUseBiometric &&
