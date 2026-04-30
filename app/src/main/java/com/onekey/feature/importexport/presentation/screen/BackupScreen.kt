@@ -76,6 +76,9 @@ fun BackupScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+    // Hoisted to screen scope so the post-import success snackbar isn't launched on a
+    // scope that's already being torn down by `importDialogOpen = false`.
+    val screenScope = rememberCoroutineScope()
     // Once an ImportPreview state is observed, the dialog stays open across Loading,
     // ImportSuccess, and Error transitions until the user explicitly dismisses it.
     var importDialogOpen by remember { mutableStateOf(false) }
@@ -316,7 +319,6 @@ fun BackupScreen(
     // ── Import preview dialog ─────────────────────────────────────────────────
 
     if (importDialogOpen) {
-        val coroutineScope = rememberCoroutineScope()
         ImportPreviewDialog(
             state = state,
             onConfirm = { opts -> viewModel.confirmImport(opts) },
@@ -334,7 +336,7 @@ fun BackupScreen(
                 importDialogOpen = false
                 viewModel.acknowledgeResult()
                 if (result.imported > 0) {
-                    coroutineScope.launch {
+                    screenScope.launch {
                         snackbarHostState.showSnackbar(
                             message = if (result.imported == 1)
                                 "✓ 1 credential added to your vault"
