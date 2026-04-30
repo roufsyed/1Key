@@ -18,6 +18,7 @@ import com.onekey.core.domain.usecase.GetCredentialUseCase
 import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
 import com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
+import com.onekey.core.security.SecureClipboardManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -43,6 +44,7 @@ class CredentialDetailViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
     private val tagRepository: TagRepository,
+    private val secureClipboard: SecureClipboardManager,
     appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
@@ -183,6 +185,17 @@ class CredentialDetailViewModel @Inject constructor(
 
     fun cancelRestoreConflict() {
         _pendingRestoreConflict.value = null
+    }
+
+    /** Routes through SecureClipboardManager for sensitive auto-clear + sensitivity flag. */
+    fun copyUsername() {
+        val cred = (_uiState.value as? CredentialDetailUiState.Success)?.credential ?: return
+        if (cred.username.isNotEmpty()) secureClipboard.copySecure("Username", cred.username)
+    }
+
+    fun copyPassword() {
+        val cred = (_uiState.value as? CredentialDetailUiState.Success)?.credential ?: return
+        if (cred.password.isNotEmpty()) secureClipboard.copySecure("Password", cred.password)
     }
 
     data class RestoreConflict(val binItem: Credential, val existing: Credential)

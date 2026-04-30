@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,9 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -161,6 +160,8 @@ fun CredentialDetailScreen(
                     onDelete = viewModel::delete,
                     onDeleteNow = viewModel::deleteNow,
                     onRestore = viewModel::restore,
+                    onCopyUsername = viewModel::copyUsername,
+                    onCopyPassword = viewModel::copyPassword,
                     onBack = onBack,
                     onToggleFavorite = viewModel::toggleFavorite,
                 )
@@ -200,13 +201,14 @@ private fun CredentialViewContent(
     onDelete: () -> Unit,
     onDeleteNow: () -> Unit,
     onRestore: () -> Unit,
+    onCopyUsername: () -> Unit,
+    onCopyPassword: () -> Unit,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     var historyExpanded by remember { mutableStateOf(false) }
-    val clipboardManager = LocalClipboardManager.current
 
     Scaffold(
         topBar = {
@@ -267,7 +269,7 @@ private fun CredentialViewContent(
                         label = "Username",
                         value = credential.username,
                         trailing = {
-                            IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.username)) }) {
+                            IconButton(onClick = onCopyUsername) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy username")
                             }
                         }
@@ -278,12 +280,13 @@ private fun CredentialViewContent(
                     DetailField(
                         label = "Password",
                         value = if (showPassword) credential.password else "••••••••",
+                        sensitive = showPassword,
                         trailing = {
                             Row {
                                 IconButton(onClick = { showPassword = !showPassword }) {
                                     Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
                                 }
-                                IconButton(onClick = { clipboardManager.setText(AnnotatedString(credential.password)) }) {
+                                IconButton(onClick = onCopyPassword) {
                                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy password")
                                 }
                             }
@@ -502,6 +505,7 @@ private fun DetailField(
     label: String,
     value: String,
     trailing: @Composable (() -> Unit)? = null,
+    sensitive: Boolean = false,
 ) {
     // Flat row to match home / list pattern. Container handles the divider after.
     Row(
@@ -512,8 +516,17 @@ private fun DetailField(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            SelectionContainer {
-                Text(value, style = MaterialTheme.typography.bodyMedium)
+            // Sensitive values bypass SelectionContainer so an OS-menu long-press copy
+            // can't sidestep SecureClipboardManager — the in-app copy button is the
+            // only way to put the value on the clipboard, and it auto-clears.
+            if (sensitive) {
+                DisableSelection {
+                    Text(value, style = MaterialTheme.typography.bodyMedium)
+                }
+            } else {
+                SelectionContainer {
+                    Text(value, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
         trailing?.invoke()

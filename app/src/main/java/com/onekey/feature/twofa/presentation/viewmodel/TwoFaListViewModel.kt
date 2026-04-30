@@ -7,6 +7,7 @@ import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
+import com.onekey.core.security.SecureClipboardManager
 import com.onekey.feature.twofa.domain.TotpGenerator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,7 @@ class TwoFaListViewModel @Inject constructor(
     private val totpGenerator: TotpGenerator,
     private val deleteCredential: DeleteCredentialUseCase,
     private val saveCredential: SaveCredentialUseCase,
+    private val secureClipboard: SecureClipboardManager,
     appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
@@ -60,6 +62,11 @@ class TwoFaListViewModel @Inject constructor(
         }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Routes through SecureClipboardManager so the 30s clear survives navigation. */
+    fun copyCode(code: String) {
+        secureClipboard.copySecure("2FA Code", code)
+    }
 
     fun removeTotp(entry: TotpEntry) {
         viewModelScope.launch {

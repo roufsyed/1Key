@@ -1,9 +1,5 @@
 package com.onekey.feature.twofa.presentation.screen
 
-import android.content.ClipData
-import android.content.ClipDescription
-import android.os.Build
-import android.os.PersistableBundle
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -19,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -27,7 +22,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.feature.twofa.presentation.viewmodel.TotpEntry
 import com.onekey.feature.twofa.presentation.viewmodel.TwoFaListViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,7 +36,6 @@ fun TwoFaListScreen(
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     var pendingDelete by remember { mutableStateOf<TotpEntry?>(null) }
 
     val topAppBarState = rememberTopAppBarState()
@@ -116,41 +109,16 @@ fun TwoFaListScreen(
                         entry = entry,
                         onLongClick = { pendingDelete = entry },
                         onCopyCode = { code ->
-                            val cm = context.getSystemService(
-                                android.content.ClipboardManager::class.java
-                            )
-                            val clip = ClipData.newPlainText("2FA Code", code).apply {
-                                // Mark as sensitive on API 33+: suppresses paste preview toast
-                                // and signals the OS not to persist the clip.
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    description.extras = PersistableBundle().apply {
-                                        putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-                                    }
-                                }
-                            }
-                            cm?.setPrimaryClip(clip)
-
+                            // Routes through SecureClipboardManager — its app-singleton
+                            // scope makes the 30s clear survive navigation away from this
+                            // screen, which is exactly when the user needs it (they
+                            // copy the code, then switch apps to paste it).
+                            viewModel.copyCode(code)
                             scope.launch {
                                 snackbarHostState.showSnackbar(
                                     message = "Code copied — clipboard will be cleared automatically in 30s",
                                     duration = SnackbarDuration.Short,
                                 )
-                            }
-
-                            // Auto-clear clipboard after one TOTP window to minimise exposure.
-                            scope.launch {
-                                delay(30_000L)
-                                val cm2 = context.getSystemService(
-                                    android.content.ClipboardManager::class.java
-                                )
-                                val current = cm2?.primaryClip?.getItemAt(0)?.text?.toString()
-                                if (current == code) {
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                                        cm2.clearPrimaryClip()
-                                    } else {
-                                        cm2?.setPrimaryClip(ClipData.newPlainText("", ""))
-                                    }
-                                }
                             }
                         },
                     )
