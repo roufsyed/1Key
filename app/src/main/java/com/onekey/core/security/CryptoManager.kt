@@ -65,17 +65,23 @@ class CryptoManager @Inject constructor() {
     }
 
     // ── AES/GCM encrypt with derived vault key ────────────────────────────────
+    //
+    // Optional `aad` ties additional bytes (typically a header) to the GCM auth tag so
+    // that tampering with them invalidates decryption. Callers that don't need it pass
+    // null and the behavior matches a plain AES-GCM call.
 
-    fun encrypt(plaintext: ByteArray, key: SecretKey): EncryptedData {
+    fun encrypt(plaintext: ByteArray, key: SecretKey, aad: ByteArray? = null): EncryptedData {
         val cipher = Cipher.getInstance(AES_GCM)
         cipher.init(Cipher.ENCRYPT_MODE, key)
+        if (aad != null) cipher.updateAAD(aad)
         return EncryptedData(cipher.doFinal(plaintext), cipher.iv)
     }
 
-    fun decrypt(data: EncryptedData, key: SecretKey): ByteArray {
+    fun decrypt(data: EncryptedData, key: SecretKey, aad: ByteArray? = null): ByteArray {
         val cipher = Cipher.getInstance(AES_GCM)
         val spec = GCMParameterSpec(GCM_TAG_LENGTH, data.iv)
         cipher.init(Cipher.DECRYPT_MODE, key, spec)
+        if (aad != null) cipher.updateAAD(aad)
         return cipher.doFinal(data.ciphertext)
     }
 

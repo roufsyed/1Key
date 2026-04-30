@@ -9,16 +9,22 @@ import java.io.File
 /**
  * Binary format for encrypted backups:
  *   MAGIC   8 B   "1KEYBKP\n"
- *   VERSION 1 B   0x01
+ *   VERSION 1 B   0x01 (legacy, no AAD) or 0x02 (header bytes authenticated as AAD)
  *   FORMAT  1 B   0x00=JSON  0x01=CSV
  *   SALT   32 B   PBKDF2 salt (random per export)
  *   IV     12 B   AES-GCM nonce
  *   BODY    N B   AES-256-GCM ciphertext + 16-byte auth tag
+ *
+ * V2 binds (MAGIC || VERSION || FORMAT) into the GCM auth tag via AAD, so flipping the
+ * format byte on a tampered backup invalidates decryption. New exports always use V2;
+ * V1 backups exported before this change still decrypt for backward compatibility.
  */
 internal object BackupEncryption {
 
     private val MAGIC = byteArrayOf(0x31, 0x4B, 0x45, 0x59, 0x42, 0x4B, 0x50, 0x0A)
-    private const val VERSION: Byte = 0x01
+    private const val VERSION_LEGACY: Byte = 0x01
+    private const val VERSION_AAD: Byte = 0x02
+    private const val CURRENT_VERSION: Byte = VERSION_AAD
     private const val FORMAT_JSON: Byte = 0x00
     private const val FORMAT_CSV: Byte = 0x01
     private const val SALT_LEN = 32
@@ -49,13 +55,15 @@ internal object BackupEncryption {
     ): ByteArray {
         val salt = crypto.generateSalt(SALT_LEN)
         val key = crypto.deriveKeyFromPassword(password, salt)
-        val enc = crypto.encrypt(plaintext, key)
+        val formatByte = if (format == ExportFormat.JSON) FORMAT_JSON else FORMAT_CSV
+        val aad = buildHeaderAad(CURRENT_VERSION, formatByte)
+        val enc = crypto.encrypt(plaintext, key, aad)
         check(enc.iv.size == IV_LEN) { "Unexpected IV length: ${enc.iv.size}" }
 
         return ByteArrayOutputStream(MAGIC.size + 2 + SALT_LEN + IV_LEN + enc.ciphertext.size).apply {
             write(MAGIC)
-            write(VERSION.toInt())
-            write(if (format == ExportFormat.JSON) FORMAT_JSON.toInt() else FORMAT_CSV.toInt())
+            write(CURRENT_VERSION.toInt())
+            write(formatByte.toInt())
             write(salt)
             write(enc.iv)
             write(enc.ciphertext)
@@ -71,7 +79,9 @@ internal object BackupEncryption {
         require(magic.contentEquals(MAGIC)) { "Not a 1Key encrypted backup" }
 
         val version = fileBytes[off++]
-        require(version == VERSION) { "Unsupported backup version: $version" }
+        require(version == VERSION_LEGACY || version == VERSION_AAD) {
+            "Unsupported backup version: $version"
+        }
 
         val fmtByte = fileBytes[off++]
         val format = if (fmtByte == FORMAT_JSON) ExportFormat.JSON else ExportFormat.CSV
@@ -81,7 +91,18 @@ internal object BackupEncryption {
         val ciphertext = fileBytes.sliceArray(off until fileBytes.size)
 
         val key = crypto.deriveKeyFromPassword(password, salt)
-        val plaintext = crypto.decrypt(EncryptedData(ciphertext, iv), key)
+        // V2 ties the (magic, version, format) header to the GCM auth tag; V1 doesn't,
+        // so legacy backups decrypt without AAD verification.
+        val aad = if (version == VERSION_AAD) buildHeaderAad(version, fmtByte) else null
+        val plaintext = crypto.decrypt(EncryptedData(ciphertext, iv), key, aad)
         return Decrypted(plaintext, format)
+    }
+
+    private fun buildHeaderAad(version: Byte, format: Byte): ByteArray {
+        val aad = ByteArray(MAGIC.size + 2)
+        System.arraycopy(MAGIC, 0, aad, 0, MAGIC.size)
+        aad[MAGIC.size] = version
+        aad[MAGIC.size + 1] = format
+        return aad
     }
 }
