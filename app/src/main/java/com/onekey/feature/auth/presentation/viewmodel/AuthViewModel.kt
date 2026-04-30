@@ -190,12 +190,17 @@ class AuthViewModel @Inject constructor(
 
     /**
      * Called by LockScreen on each `onAuthenticationFailed` from the BiometricPrompt
-     * (wrong finger / wrong face). Mirrors the PIN exhaustion shape: count down, on zero
-     * persist a lock reason, force the master-password fallback, and reset the counter
-     * so the user has full attempts again after they prove identity.
+     * (wrong finger / wrong face). Mirrors the PIN exhaustion shape: count down, surface
+     * an "X remaining" message that the user sees when they dismiss the prompt, on zero
+     * persist a lock reason, force the master-password fallback, and reset the counter.
      */
     fun recordBiometricFailure() {
         viewModelScope.launch {
+            // Once we've already escalated to a lock reason, additional failures from a
+            // still-visible BiometricPrompt are noise — the user is in master-password-only
+            // mode and the count is meaningless. Don't decrement past the threshold.
+            if (lockReasonStore.reason.value != null) return@launch
+
             biometricAttemptsRemaining--
             if (biometricAttemptsRemaining <= 0) {
                 biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
@@ -203,6 +208,13 @@ class AuthViewModel @Inject constructor(
                 authRepository.lock()
                 _state.value = AuthUiState.Error(
                     "Too many wrong biometric attempts — please use your master password."
+                )
+            } else {
+                _state.value = AuthUiState.Error(
+                    if (biometricAttemptsRemaining == 1)
+                        "Wrong biometric — 1 attempt remaining."
+                    else
+                        "Wrong biometric — $biometricAttemptsRemaining attempts remaining."
                 )
             }
         }
