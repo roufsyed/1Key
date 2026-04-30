@@ -559,6 +559,16 @@ private fun CredentialEditContent(
     var totpSecret by rememberSaveable(credential.id) { mutableStateOf(credential.totpSecret ?: "") }
     var selectedTags by remember(credential.id) { mutableStateOf(credential.tags) }
     var customFields by remember(credential.id) { mutableStateOf(credential.customFields) }
+    // Stable per-field ids so add/remove keeps each row's slot identity bound to *its*
+    // logical field. With positional `key(index)`, removing a row shifted the rows below
+    // up into the prior slot and they inherited that slot's local state (e.g. the reveal
+    // toggle in CustomFieldRow).
+    var customFieldIds by remember(credential.id) {
+        mutableStateOf(List(credential.customFields.size) { it.toLong() })
+    }
+    var nextCustomFieldId by remember(credential.id) {
+        mutableStateOf(credential.customFields.size.toLong())
+    }
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var showTagPicker by rememberSaveable { mutableStateOf(false) }
     var showPasswordGenerator by rememberSaveable { mutableStateOf(false) }
@@ -785,17 +795,24 @@ private fun CredentialEditContent(
 
             Text("Custom Fields (${customFields.size}/${CustomField.MAX_FIELDS})", style = MaterialTheme.typography.titleSmall)
             customFields.forEachIndexed { index, field ->
-                key(index) {
+                key(customFieldIds[index]) {
                     CustomFieldRow(
                         field = field,
                         onFieldChanged = { updated -> customFields = customFields.toMutableList().also { it[index] = updated } },
-                        onRemove = { customFields = customFields.toMutableList().also { it.removeAt(index) } },
+                        onRemove = {
+                            customFields = customFields.toMutableList().also { it.removeAt(index) }
+                            customFieldIds = customFieldIds.toMutableList().also { it.removeAt(index) }
+                        },
                     )
                 }
             }
             if (canAddField) {
                 OutlinedButton(
-                    onClick = { customFields = customFields + CustomField("", "", false) },
+                    onClick = {
+                        customFields = customFields + CustomField("", "", false)
+                        customFieldIds = customFieldIds + nextCustomFieldId
+                        nextCustomFieldId += 1
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add Custom Field") }
             }
