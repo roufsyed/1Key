@@ -100,6 +100,9 @@ fun LockScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is AuthEvent.PinAttemptsExhausted -> { forcePasswordFallback = true }
+                // The remaining events fire from Settings → Change PIN flows on a different
+                // AuthViewModel-NavBackStackEntry. They aren't observed here.
+                else -> Unit
             }
         }
     }

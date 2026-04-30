@@ -12,6 +12,7 @@ import com.onekey.core.domain.repository.BiometricUnlockGate
 import com.onekey.core.domain.usecase.SetupFromBackupUseCase
 import com.onekey.core.domain.usecase.SetupMasterPasswordUseCase
 import com.onekey.core.domain.usecase.UnlockVaultUseCase
+import com.onekey.core.security.AuthAttemptsStore
 import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
@@ -35,6 +36,21 @@ sealed class AuthUiState {
 sealed class AuthEvent {
     /** Three wrong PINs in a row — LockScreen forces the master-password fallback. */
     data object PinAttemptsExhausted : AuthEvent()
+    /** Settings → Change PIN: current PIN matched. Advance to "enter new PIN". */
+    data object CurrentPinVerified : AuthEvent()
+    /** Settings → Change PIN: wrong current PIN, [remaining] attempts left this session. */
+    data class CurrentPinFailed(val remaining: Int) : AuthEvent()
+    /** Settings → Change PIN: 3 wrong current PINs. Soft cap — vault stays unlocked, but
+     * the PIN field disables and the user is pointed at the Forgot-PIN escape hatch. */
+    data object CurrentPinExhausted : AuthEvent()
+    /** Settings → Change PIN → Forgot PIN: master password matched. Skip current-PIN
+     * verification and go straight to "enter new PIN". */
+    data object MasterPasswordVerifiedForPinChange : AuthEvent()
+    /** Settings → Change PIN → Forgot PIN: wrong master password. */
+    data class PinChangeMasterPasswordFailed(val remaining: Int) : AuthEvent()
+    /** Settings → Change PIN → Forgot PIN: 3 wrong master passwords (across all sensitive
+     * verify flows in this session). Vault is locked, user is bounced to LockScreen. */
+    data object PinChangeVaultLocked : AuthEvent()
 }
 
 @HiltViewModel
@@ -46,6 +62,7 @@ class AuthViewModel @Inject constructor(
     private val setupFromBackup: SetupFromBackupUseCase,
     private val lockReasonStore: LockReasonStore,
     private val autoLockManager: AutoLockManager,
+    private val authAttemptsStore: AuthAttemptsStore,
 ) : ViewModel() {
 
     fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
@@ -70,6 +87,10 @@ class AuthViewModel @Inject constructor(
 
     private var pinAttemptsRemaining = MAX_PIN_ATTEMPTS
     private var biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
+    // Local counter for the in-vault Settings→Change PIN current-PIN verification.
+    // Distinct from pinAttemptsRemaining (which gates LockScreen unlocks) because the
+    // user is already authenticated when this is in play — different threat shape.
+    private var currentPinAttemptsRemaining = MAX_CURRENT_PIN_ATTEMPTS
 
     val isSetupComplete: StateFlow<Boolean> = authRepository.isSetupComplete()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -220,6 +241,77 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Settings → Change PIN, step 0: confirms the user knows the current PIN before
+     * we let them change it. Pure verification — no vault key touched. Local-counter
+     * lockout (3 attempts) that disables the PIN field for this session but keeps the
+     * vault unlocked, since the user is already authenticated to the vault.
+     */
+    fun verifyCurrentPin(pin: CharArray) {
+        viewModelScope.launch {
+            _state.value = AuthUiState.Loading
+            val result = withContext(Dispatchers.Default) { authRepository.verifyPin(pin) }
+            _state.value = AuthUiState.Idle
+            when (result) {
+                is AppResult.Success -> {
+                    currentPinAttemptsRemaining = MAX_CURRENT_PIN_ATTEMPTS
+                    _events.emit(AuthEvent.CurrentPinVerified)
+                }
+                is AppResult.Error -> {
+                    currentPinAttemptsRemaining--
+                    if (currentPinAttemptsRemaining <= 0) {
+                        currentPinAttemptsRemaining = MAX_CURRENT_PIN_ATTEMPTS
+                        _events.emit(AuthEvent.CurrentPinExhausted)
+                    } else {
+                        _events.emit(AuthEvent.CurrentPinFailed(currentPinAttemptsRemaining))
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Settings → Change PIN → Forgot PIN: verify the master password to bypass the
+     * current-PIN check. Mirrors removePinWithVerification's lockout shape — uses the
+     * shared AuthAttemptsStore so navigating Security ↔ top-level Settings can't reset
+     * the count, three wrong attempts persist a lock reason and lock the vault.
+     */
+    fun verifyMasterPasswordForPinChange(password: CharArray) {
+        viewModelScope.launch {
+            _state.value = AuthUiState.Loading
+            try {
+                val result = withContext(Dispatchers.Default) {
+                    authRepository.unlockWithPassword(password)
+                }
+                // unlockWithPassword sets the vault key on success — but we're already
+                // inside an unlocked vault, so it's a no-op replacement. We don't want
+                // _state to cascade to Unlocked here, so flip back to Idle explicitly.
+                _state.value = AuthUiState.Idle
+                when (result) {
+                    is AppResult.Success -> {
+                        authAttemptsStore.resetBiometricEnable()
+                        _events.emit(AuthEvent.MasterPasswordVerifiedForPinChange)
+                    }
+                    is AppResult.Error -> {
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("PIN change"))
+                            authRepository.lock()
+                            _events.emit(AuthEvent.PinChangeVaultLocked)
+                        } else {
+                            _events.emit(
+                                AuthEvent.PinChangeMasterPasswordFailed(MAX_BIOMETRIC_ATTEMPTS - attempts)
+                            )
+                        }
+                    }
+                }
+            } finally {
+                password.fill(' ')
+            }
+        }
+    }
+
     fun setupPin(pin: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
@@ -242,6 +334,7 @@ class AuthViewModel @Inject constructor(
     private companion object {
         const val MAX_PIN_ATTEMPTS = 3
         const val MAX_BIOMETRIC_ATTEMPTS = 3
+        const val MAX_CURRENT_PIN_ATTEMPTS = 3
     }
 
     /**
