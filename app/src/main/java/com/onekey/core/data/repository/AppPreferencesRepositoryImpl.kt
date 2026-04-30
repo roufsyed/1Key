@@ -42,6 +42,7 @@ private val KEY_HIDE_TOP_BAR_ON_SCROLL = booleanPreferencesKey("hide_top_bar_on_
 private val KEY_RECYCLE_BIN_RETENTION = stringPreferencesKey("recycle_bin_retention")
 private val KEY_RECYCLE_BIN_ENABLED = booleanPreferencesKey("recycle_bin_enabled")
 private val KEY_LOCK_REASON_CONTEXT = stringPreferencesKey("lock_reason_context")
+private val KEY_RESTORE_LAST_SCREEN_ON_UNLOCK = booleanPreferencesKey("restore_last_screen_on_unlock")
 private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
 
 @Singleton
@@ -183,6 +184,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setRecycleBinEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_RECYCLE_BIN_ENABLED] = enabled }
+    }
+
+    override fun isRestoreLastScreenOnUnlock(): Flow<Boolean> =
+        prefs.map { it[KEY_RESTORE_LAST_SCREEN_ON_UNLOCK] ?: false }.distinctUntilChanged()
+
+    override suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean) {
+        dataStore.edit { it[KEY_RESTORE_LAST_SCREEN_ON_UNLOCK] = enabled }
     }
 
     override fun isVaultFooterVisible(): Flow<Boolean> =

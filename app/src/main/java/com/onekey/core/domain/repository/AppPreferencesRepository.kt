@@ -36,6 +36,8 @@ interface AppPreferencesRepository {
     suspend fun setRecycleBinRetention(retention: RecycleBinRetention)
     fun isRecycleBinEnabled(): Flow<Boolean>
     suspend fun setRecycleBinEnabled(enabled: Boolean)
+    fun isRestoreLastScreenOnUnlock(): Flow<Boolean>
+    suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean)
     /** Persistent lock-reason context — survives process restart so biometric stays paused. */
     fun getLockReasonContext(): Flow<String?>
     suspend fun setLockReasonContext(context: String?)

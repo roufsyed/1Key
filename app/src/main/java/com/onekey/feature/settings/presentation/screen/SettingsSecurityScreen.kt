@@ -40,6 +40,7 @@ fun SettingsSecurityScreen(
     val inactivityLockTimeout by settingsVm.inactivityLockTimeout.collectAsStateWithLifecycle()
     val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
+    val isRestoreLastScreenOnUnlock by settingsVm.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
 
     val canUseBiometric = remember {
         androidx.biometric.BiometricManager.from(context).canAuthenticate(
@@ -59,6 +60,7 @@ fun SettingsSecurityScreen(
     var pendingScreenshotsEnabled by remember { mutableStateOf(true) }
     var showBackgroundLockDialog by remember { mutableStateOf(false) }
     var showInactivityLockDialog by remember { mutableStateOf(false) }
+    var showRestoreLastScreenDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
@@ -182,6 +184,32 @@ fun SettingsSecurityScreen(
                         leadingContent = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
                         trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                         modifier = Modifier.clickable { showInactivityLockDialog = true },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Pick up where you left off") },
+                        supportingContent = {
+                            Text(
+                                if (isRestoreLastScreenOnUnlock)
+                                    "After auto-lock, unlocking takes you back to the screen you were on."
+                                else
+                                    "After auto-lock, unlocking always takes you to the home screen."
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Restore, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isRestoreLastScreenOnUnlock,
+                                onCheckedChange = { newValue ->
+                                    if (newValue) {
+                                        // Confirm before turning on — surface the trade-off.
+                                        showRestoreLastScreenDialog = true
+                                    } else {
+                                        settingsVm.setRestoreLastScreenOnUnlock(false)
+                                    }
+                                },
+                            )
+                        },
                     )
                 }
             }
@@ -509,6 +537,41 @@ fun SettingsSecurityScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showResetPinDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showRestoreLastScreenDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreLastScreenDialog = false },
+            icon = { Icon(Icons.Default.Restore, contentDescription = null) },
+            title = { Text("Pick up where you left off?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "When auto-lock fires while you're using the app and you unlock again, " +
+                            "we'll take you back to the same screen you were on — even if that " +
+                            "was a credential's details. Helps you stay in flow.",
+                    )
+                    Text(
+                        "The trade-off: anyone who legitimately unlocks the phone after you " +
+                            "(with your master password or biometric) lands on whatever you were " +
+                            "last viewing. You can change this anytime in Settings.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settingsVm.setRestoreLastScreenOnUnlock(true)
+                        showRestoreLastScreenDialog = false
+                    },
+                ) { Text("Turn it on") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRestoreLastScreenDialog = false }) { Text("Cancel") }
             },
         )
     }

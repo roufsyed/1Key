@@ -95,6 +95,9 @@ class SettingsViewModel @Inject constructor(
     val isVaultFooterVisible: StateFlow<Boolean> = appPrefs.isVaultFooterVisible()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val isRestoreLastScreenOnUnlock: StateFlow<Boolean> = appPrefs.isRestoreLastScreenOnUnlock()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     fun toggleTheme() {
         viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
     }
@@ -174,6 +177,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setVaultFooterVisible(visible: Boolean) {
         viewModelScope.launch { appPrefs.setVaultFooterVisible(visible) }
+    }
+
+    fun setRestoreLastScreenOnUnlock(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setRestoreLastScreenOnUnlock(enabled) }
     }
 
     fun addTag(name: String) {

@@ -97,6 +97,7 @@ fun OneKeyNavGraph(
     val appViewModel: AppViewModel = hiltViewModel()
     val isUnlocked by appViewModel.isUnlocked.collectAsStateWithLifecycle()
     val isShowFavourites by appViewModel.isShowFavourites.collectAsStateWithLifecycle()
+    val restoreLastScreenOnUnlock by appViewModel.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
@@ -104,6 +105,9 @@ fun OneKeyNavGraph(
 
     // Navigate to Lock whenever the vault locks mid-session.
     // Skip if already on Lock or Onboarding to avoid redundant navigation.
+    // When "restore last screen" is enabled we just push Lock on top of the existing
+    // back stack — popping it on unlock returns the user to whatever they were on.
+    // When disabled we pop back to start (Vault) so unlock always lands on Vault.
     LaunchedEffect(isUnlocked) {
         if (!isUnlocked &&
             currentRoute != null &&
@@ -111,7 +115,12 @@ fun OneKeyNavGraph(
             currentRoute != Screen.Onboarding.route
         ) {
             navController.navigate(Screen.Lock.route) {
-                popUpTo(navController.graph.id) { inclusive = false }
+                // Reuse the existing Lock entry if it's already on top so a brief
+                // isUnlocked oscillation can't stack multiple Lock entries.
+                launchSingleTop = true
+                if (!restoreLastScreenOnUnlock) {
+                    popUpTo(navController.graph.id) { inclusive = false }
+                }
             }
         }
     }
@@ -180,8 +189,21 @@ fun OneKeyNavGraph(
                         viewModel = vm,
                         appViewModel = appViewModel,
                         onUnlocked = {
-                            navController.navigate(Screen.Vault.route) {
-                                popUpTo(Screen.Lock.route) { inclusive = true }
+                            if (restoreLastScreenOnUnlock) {
+                                // Pop Lock off the top — the screen the user was on before
+                                // auto-lock is right underneath, so this returns them there.
+                                val popped = navController.popBackStack(Screen.Lock.route, inclusive = true)
+                                // Cold-start fallback: if Lock was the only entry on the stack
+                                // (no prior screen to return to), navigate to Vault.
+                                if (!popped || navController.currentBackStackEntry == null) {
+                                    navController.navigate(Screen.Vault.route) {
+                                        popUpTo(navController.graph.id) { inclusive = true }
+                                    }
+                                }
+                            } else {
+                                navController.navigate(Screen.Vault.route) {
+                                    popUpTo(Screen.Lock.route) { inclusive = true }
+                                }
                             }
                         }
                     )

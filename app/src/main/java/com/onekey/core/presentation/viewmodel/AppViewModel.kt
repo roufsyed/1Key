@@ -28,6 +28,9 @@ class AppViewModel @Inject constructor(
     val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val isRestoreLastScreenOnUnlock: StateFlow<Boolean> = appPrefs.isRestoreLastScreenOnUnlock()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _unlockPhase =
         MutableStateFlow<UnlockTransitionPhase>(UnlockTransitionPhase.Idle)
     val unlockPhase: StateFlow<UnlockTransitionPhase> = _unlockPhase.asStateFlow()
