@@ -18,10 +18,12 @@ interface TagDao {
     @Query("SELECT * FROM tags ORDER BY name ASC")
     fun observeAll(): Flow<List<TagEntity>>
 
+    // The credentials.tags column is a Gson-serialized JSON array. Anchor on the quoted
+    // token (`"name"`) so a tag whose name is a substring of another doesn't bleed counts.
     @Query("""
         SELECT t.name, t.color, t.icon, t.is_default,
                (SELECT COUNT(*) FROM credentials
-                WHERE deleted_at IS NULL AND tags LIKE '%' || t.name || '%') AS count
+                WHERE deleted_at IS NULL AND tags LIKE '%"' || t.name || '"%') AS count
         FROM tags t
         ORDER BY t.name ASC
     """)

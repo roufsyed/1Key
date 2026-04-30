@@ -46,8 +46,10 @@ class CredentialRepositoryImpl @Inject constructor(
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(PagingData.empty())
             else {
+                // tags column is a JSON array; matching on the quoted token (`"foo"`)
+                // avoids tag "foo" spuriously matching credentials tagged "foobar".
                 val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%\"' || ? || '\"%') ORDER BY ${sortOrder.toOrderBy()}",
                     arrayOf(query, query, tag, tag),
                 )
                 Pager(
@@ -164,7 +166,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> {
         val sql = SimpleSQLiteQuery(
-            "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%' || ? || '%') ORDER BY ${sortOrder.toOrderBy()}",
+            "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%\"' || ? || '\"%') ORDER BY ${sortOrder.toOrderBy()}",
             arrayOf(query, query, tag, tag),
         )
         return keyHolder.isUnlocked.flatMapLatest { unlocked ->

@@ -9,12 +9,15 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CredentialDao {
 
+    // Tag column is a Gson-serialized JSON array (e.g. ["foo","bar"]). Anchoring the
+    // LIKE pattern to the surrounding JSON quotes (`"foo"`) prevents tag "foo" from
+    // matching credentials tagged "foobar", "homework"-vs-"work", etc.
     @Query(
         """
         SELECT * FROM credentials
         WHERE deleted_at IS NULL
         AND (:query = '' OR title LIKE '%' || :query || '%')
-        AND (:tag = '' OR tags LIKE '%' || :tag || '%')
+        AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
         ORDER BY updated_at DESC
         """
     )
@@ -25,7 +28,7 @@ interface CredentialDao {
         SELECT * FROM credentials
         WHERE deleted_at IS NULL
         AND (:query = '' OR title LIKE '%' || :query || '%')
-        AND (:tag = '' OR tags LIKE '%' || :tag || '%')
+        AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
         ORDER BY updated_at DESC
         LIMIT :limit OFFSET :offset
         """
@@ -72,7 +75,7 @@ interface CredentialDao {
     @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL")
     fun observeCount(): Flow<Int>
 
-    @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL AND tags LIKE '%' || :tag || '%'")
+    @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL AND tags LIKE '%\"' || :tag || '\"%'")
     fun observeCountForTag(tag: String): Flow<Int>
 
     @Query("SELECT COUNT(*) FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1")
@@ -121,7 +124,7 @@ interface CredentialDao {
     @Query("""
         SELECT title FROM credentials
         WHERE deleted_at IS NULL
-        AND (:tag = '' OR tags LIKE '%' || :tag || '%')
+        AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
         ORDER BY lower(title) ASC
     """)
     fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
