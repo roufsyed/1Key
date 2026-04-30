@@ -21,6 +21,7 @@ import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.RootDetector
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -57,11 +58,18 @@ class MainActivity : FragmentActivity() {
         }
 
         setContent {
-            // isSetupComplete drives startDestination, which NavHost reads only once.
-            // Hold the nav graph until DataStore hydrates so cold start can never briefly
-            // mount the wrong root (e.g. Lock when the user hasn't onboarded yet).
-            val isSetupComplete by authRepository.isSetupComplete()
-                .collectAsStateWithLifecycle(initialValue = null)
+            // Read isSetupComplete ONCE for the lifetime of this Activity composition.
+            // NavHost.startDestination is one-shot per graph instance, but if we tracked
+            // setupComplete reactively the `when` arm would change at the moment setup
+            // finishes (false → true), passing a different `startDestination` to
+            // OneKeyNavGraph and remounting the graph — which yanks the user from
+            // VaultReadyPage straight to LockScreen and short-circuits the post-setup
+            // hand-off. The onboarding flow does its own navigation via onSetupComplete;
+            // MainActivity only needs the initial value.
+            var initialSetupComplete by remember { mutableStateOf<Boolean?>(null) }
+            LaunchedEffect(Unit) {
+                initialSetupComplete = authRepository.isSetupComplete().first()
+            }
             val isDarkTheme by appPrefs.isDarkTheme()
                 .collectAsStateWithLifecycle(initialValue = false)
 
@@ -70,13 +78,13 @@ class MainActivity : FragmentActivity() {
                     rootCheck.isRooted -> RootWarningScreen(
                         reason = rootCheck.reason ?: "Device appears to be rooted"
                     )
-                    isSetupComplete == null -> Box(
+                    initialSetupComplete == null -> Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background),
                     )
                     else -> OneKeyNavGraph(
-                        startDestination = if (isSetupComplete == true) Screen.Lock.route
+                        startDestination = if (initialSetupComplete == true) Screen.Lock.route
                         else Screen.Onboarding.route,
                     )
                 }
