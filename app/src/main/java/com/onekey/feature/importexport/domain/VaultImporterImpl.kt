@@ -68,7 +68,7 @@ class VaultImporterImpl @Inject constructor(
     @Suppress("UNCHECKED_CAST")
     private fun parseJsonContent(content: String): ParsedImport {
         require(content.trimStart().startsWith('[')) {
-            "Not a valid credential file — expected a JSON array. Make sure this is a 1Key JSON export."
+            "Not a valid credential file. Make sure this is a 1Key backup or a valid csv."
         }
         val now = System.currentTimeMillis()
         val failed = mutableListOf<FailedEntry>()
