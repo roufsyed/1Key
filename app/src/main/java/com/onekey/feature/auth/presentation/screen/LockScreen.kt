@@ -152,6 +152,7 @@ fun LockScreen(
                 context = context,
                 onSuccess = { viewModel.unlockWithBiometric() },
                 onError = { msg -> viewModel.setBiometricError(msg) },
+                onAuthFailed = { viewModel.recordBiometricFailure() },
             )
         }
     }
@@ -286,6 +287,7 @@ fun LockScreen(
                             context = context,
                             onSuccess = { viewModel.unlockWithBiometric() },
                             onError = { msg -> viewModel.setBiometricError(msg) },
+                            onAuthFailed = { viewModel.recordBiometricFailure() },
                         )
                     },
                     enabled = state !is AuthUiState.Loading,
@@ -317,6 +319,11 @@ fun LockScreen(
                     "trying to get in, so we've paused biometric unlock to keep your data safe. " +
                     "Enter your master password to confirm it's really you — biometric will " +
                     "work as usual on your next unlock."
+            LockReason.TooManyFailedBiometricAttempts ->
+                "Three failed biometric attempts. That could mean someone other than you " +
+                    "was trying to get in, so we've paused biometric unlock to keep your data " +
+                    "safe. Enter your master password to confirm it's really you — biometric " +
+                    "will work as usual on your next unlock."
             null -> ""
         }
         AlertDialog(
@@ -683,6 +690,7 @@ private fun showBiometricPrompt(
     context: android.content.Context,
     onSuccess: () -> Unit,
     onError: (String) -> Unit,
+    onAuthFailed: () -> Unit = {},
 ) {
     val activity = context as? FragmentActivity ?: return
     val executor = ContextCompat.getMainExecutor(context)
@@ -699,7 +707,10 @@ private fun showBiometricPrompt(
                     onError(msg.toString())
                 }
             }
-            override fun onAuthenticationFailed() = Unit
+            // Fires when biometric is recognized as not matching (wrong finger/face). The
+            // BiometricPrompt itself shows its own "try again" feedback; we forward the
+            // event so the VM can count toward the app-level too-many-failures lockout.
+            override fun onAuthenticationFailed() { onAuthFailed() }
         }
     )
     BiometricPrompt.PromptInfo.Builder()

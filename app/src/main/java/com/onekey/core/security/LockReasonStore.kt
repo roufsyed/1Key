@@ -20,6 +20,8 @@ sealed class LockReason {
     data class TooManyFailedAttempts(val context: String) : LockReason()
     /** User entered the wrong PIN too many times on the LockScreen. */
     data object TooManyFailedPinAttempts : LockReason()
+    /** User failed biometric authentication too many times on the LockScreen. */
+    data object TooManyFailedBiometricAttempts : LockReason()
 }
 
 /**
@@ -41,6 +43,7 @@ class LockReasonStore @Inject constructor(
             when (ctx) {
                 null -> null
                 PIN_SENTINEL -> LockReason.TooManyFailedPinAttempts
+                BIOMETRIC_SENTINEL -> LockReason.TooManyFailedBiometricAttempts
                 else -> LockReason.TooManyFailedAttempts(ctx)
             }
         }
@@ -59,6 +62,7 @@ class LockReasonStore @Inject constructor(
         when (reason) {
             is LockReason.TooManyFailedAttempts -> appPrefs.setLockReasonContext(reason.context)
             LockReason.TooManyFailedPinAttempts -> appPrefs.setLockReasonContext(PIN_SENTINEL)
+            LockReason.TooManyFailedBiometricAttempts -> appPrefs.setLockReasonContext(BIOMETRIC_SENTINEL)
         }
     }
 
@@ -67,8 +71,10 @@ class LockReasonStore @Inject constructor(
     }
 
     private companion object {
-        // Sentinel chosen to be plainly not a real activity name and obviously a marker.
-        // Confined to this file — consumers see typed LockReason subclasses, never the string.
+        // Sentinels chosen so they can't collide with real master-password-failure
+        // contexts (those are human-readable activity names like "biometric setup").
+        // Confined to this file — callers always see typed LockReason subclasses.
         private const val PIN_SENTINEL = "__pin_failure__"
+        private const val BIOMETRIC_SENTINEL = "__biometric_failure__"
     }
 }

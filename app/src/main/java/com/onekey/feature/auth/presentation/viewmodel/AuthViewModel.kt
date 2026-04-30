@@ -69,6 +69,7 @@ class AuthViewModel @Inject constructor(
     val events: SharedFlow<AuthEvent> = _events.asSharedFlow()
 
     private var pinAttemptsRemaining = MAX_PIN_ATTEMPTS
+    private var biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
 
     val isSetupComplete: StateFlow<Boolean> = authRepository.isSetupComplete()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -167,10 +168,42 @@ class AuthViewModel @Inject constructor(
 
     fun unlockWithBiometric() {
         viewModelScope.launch {
+            // Defensive — if a stale BiometricPrompt completes after we've already locked
+            // out for too-many-failures, refuse the unlock. The button is hidden on
+            // LockScreen when lockReason is set, but the in-flight prompt can still fire.
+            if (lockReasonStore.reason.value != null) {
+                _state.value = AuthUiState.Error(
+                    "Use your master password — biometric is paused after recent failures."
+                )
+                return@launch
+            }
             _state.value = AuthUiState.Loading
             _state.value = when (val result = authRepository.unlockWithBiometric()) {
-                is AppResult.Success -> AuthUiState.Unlocked
+                is AppResult.Success -> {
+                    biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
+                    AuthUiState.Unlocked
+                }
                 is AppResult.Error -> AuthUiState.Error(result.message ?: "Biometric unlock failed")
+            }
+        }
+    }
+
+    /**
+     * Called by LockScreen on each `onAuthenticationFailed` from the BiometricPrompt
+     * (wrong finger / wrong face). Mirrors the PIN exhaustion shape: count down, on zero
+     * persist a lock reason, force the master-password fallback, and reset the counter
+     * so the user has full attempts again after they prove identity.
+     */
+    fun recordBiometricFailure() {
+        viewModelScope.launch {
+            biometricAttemptsRemaining--
+            if (biometricAttemptsRemaining <= 0) {
+                biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
+                lockReasonStore.set(LockReason.TooManyFailedBiometricAttempts)
+                authRepository.lock()
+                _state.value = AuthUiState.Error(
+                    "Too many wrong biometric attempts — please use your master password."
+                )
             }
         }
     }
@@ -196,6 +229,7 @@ class AuthViewModel @Inject constructor(
 
     private companion object {
         const val MAX_PIN_ATTEMPTS = 3
+        const val MAX_BIOMETRIC_ATTEMPTS = 3
     }
 
     /**
