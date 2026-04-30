@@ -48,6 +48,7 @@ fun VaultScreen(
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val recycleBinCount by viewModel.recycleBinCount.collectAsStateWithLifecycle()
+    val isRecycleBinEnabled by viewModel.isRecycleBinEnabled.collectAsStateWithLifecycle()
     val isVaultFooterVisible by viewModel.isVaultFooterVisible.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
@@ -231,14 +232,20 @@ fun VaultScreen(
                 }
 
                 // ── Recycle bin ───────────────────────────────────────────────────
-                item(key = "recycle_bin") {
-                    TagRow(
-                        icon = Icons.Default.Delete,
-                        name = "Recycle Bin",
-                        count = recycleBinCount,
-                        onClick = onRecycleBinClick,
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                // Render when the bin is enabled, OR when items still live in it after
+                // the user disabled the toggle — the disable-confirmation dialog promises
+                // those residuals stay restorable, so the entry has to remain reachable
+                // until the bin drains. Once empty + disabled, the tile hides cleanly.
+                if (isRecycleBinEnabled || recycleBinCount > 0) {
+                    item(key = "recycle_bin") {
+                        TagRow(
+                            icon = Icons.Default.Delete,
+                            name = "Recycle Bin",
+                            count = recycleBinCount,
+                            onClick = onRecycleBinClick,
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    }
                 }
 
 

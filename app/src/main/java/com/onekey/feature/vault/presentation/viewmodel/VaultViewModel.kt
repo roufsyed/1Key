@@ -33,6 +33,9 @@ class VaultViewModel @Inject constructor(
     val isVaultFooterVisible: StateFlow<Boolean> = appPrefs.isVaultFooterVisible()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val totalCount: StateFlow<Int> = credentialRepository.observeCount()
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
