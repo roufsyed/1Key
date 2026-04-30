@@ -39,10 +39,14 @@ class AutoLockManager @Inject constructor(
 
     fun suppressForPicker() {
         pickerActive = true
-        // Cancel any background lock job that fired in onStop just before this flag
-        // was set — otherwise it would lock the vault while the picker is open.
+        // Cancel both lock timers — picker time must not count against the user.
+        // backgroundJob may have just been started by onStop; idleJob has been
+        // counting down since the user's last interaction in the app. onStart
+        // restarts the idle timer when the picker returns.
         backgroundJob?.cancel()
         backgroundJob = null
+        idleJob?.cancel()
+        idleJob = null
     }
     fun clearPickerSuppression() { pickerActive = false }
 

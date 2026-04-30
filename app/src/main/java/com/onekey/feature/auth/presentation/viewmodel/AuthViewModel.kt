@@ -12,6 +12,7 @@ import com.onekey.core.domain.repository.BiometricUnlockGate
 import com.onekey.core.domain.usecase.SetupFromBackupUseCase
 import com.onekey.core.domain.usecase.SetupMasterPasswordUseCase
 import com.onekey.core.domain.usecase.UnlockVaultUseCase
+import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,7 +45,11 @@ class AuthViewModel @Inject constructor(
     private val unlockVault: UnlockVaultUseCase,
     private val setupFromBackup: SetupFromBackupUseCase,
     private val lockReasonStore: LockReasonStore,
+    private val autoLockManager: AutoLockManager,
 ) : ViewModel() {
+
+    fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
+    fun notifyPickerDone() { autoLockManager.clearPickerSuppression() }
 
     val lockReason: StateFlow<LockReason?> = lockReasonStore.reason
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)

@@ -55,6 +55,7 @@ fun OnboardingScreen(
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
+        viewModel.notifyPickerDone()
         if (uri != null) {
             pendingRestoreUri = uri
             showRestoreDialog = true
@@ -102,7 +103,10 @@ fun OnboardingScreen(
                         viewModel.clearError()
                     },
                     onSubmit = { viewModel.setup(password.toCharArray()) },
-                    onRestoreFromBackup = { restoreLauncher.launch(arrayOf("*/*")) },
+                    onRestoreFromBackup = {
+                        viewModel.notifyPickerLaunched()
+                        restoreLauncher.launch(arrayOf("*/*"))
+                    },
                 )
                 READY_STEP -> VaultReadyPage(onContinue = onSetupComplete)
                 else -> Unit
