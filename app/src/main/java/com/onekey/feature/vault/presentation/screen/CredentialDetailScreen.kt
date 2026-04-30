@@ -1175,12 +1175,15 @@ private fun TagPickerDialog(
 
 @Composable
 private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> Unit, onRemove: () -> Unit) {
-    var fieldKey by remember { mutableStateOf(field.key) }
-    var fieldValue by remember { mutableStateOf(field.value) }
-    var isSensitive by remember { mutableStateOf(field.isSensitive) }
-    var showValue by remember { mutableStateOf(!field.isSensitive) }
-
-    fun propagate() = onFieldChanged(CustomField(key = fieldKey, value = fieldValue, isSensitive = isSensitive))
+    // Field content is read straight from the prop and propagated through the callback —
+    // no internal mirror. Internal state used to drift when the parent removed an earlier
+    // row: each surviving row's `remember`d text would carry over into the wrong slot
+    // because Compose reused slots positionally. Reading the prop directly removes that
+    // class of bug entirely.
+    //
+    // The reveal toggle is genuinely view-only; key it on isSensitive so flipping the
+    // sensitivity switch resets visibility to the correct default for the new mode.
+    var showValue by remember(field.isSensitive) { mutableStateOf(!field.isSensitive) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -1208,8 +1211,8 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
             }
 
             OutlinedTextField(
-                value = fieldKey,
-                onValueChange = { fieldKey = it; propagate() },
+                value = field.key,
+                onValueChange = { onFieldChanged(field.copy(key = it)) },
                 label = { Text("Label") },
                 placeholder = { Text("e.g. API Key, PIN, Recovery Code") },
                 modifier = Modifier.fillMaxWidth(),
@@ -1217,17 +1220,17 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
             )
 
             OutlinedTextField(
-                value = fieldValue,
-                onValueChange = { fieldValue = it; propagate() },
+                value = field.value,
+                onValueChange = { onFieldChanged(field.copy(value = it)) },
                 label = { Text("Value") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                visualTransformation = if (isSensitive && !showValue) PasswordVisualTransformation()
+                visualTransformation = if (field.isSensitive && !showValue) PasswordVisualTransformation()
                                        else VisualTransformation.None,
                 keyboardOptions = KeyboardOptions(
-                    keyboardType = if (isSensitive) KeyboardType.Password else KeyboardType.Text,
+                    keyboardType = if (field.isSensitive) KeyboardType.Password else KeyboardType.Text,
                 ),
-                trailingIcon = if (isSensitive) {
+                trailingIcon = if (field.isSensitive) {
                     {
                         IconButton(onClick = { showValue = !showValue }) {
                             Icon(
@@ -1253,11 +1256,9 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
                     )
                 }
                 Switch(
-                    checked = isSensitive,
+                    checked = field.isSensitive,
                     onCheckedChange = { checked ->
-                        isSensitive = checked
-                        showValue = !checked
-                        propagate()
+                        onFieldChanged(field.copy(isSensitive = checked))
                     },
                 )
             }
