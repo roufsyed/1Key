@@ -341,7 +341,12 @@ class ImportExportViewModel @Inject constructor(
     fun verifyPasswordForExport(password: CharArray) {
         viewModelScope.launch {
             try {
-                when (authRepository.unlockWithPassword(password)) {
+                // PBKDF2 derivation runs inside unlockWithPassword — keep it off Main
+                // so the export-verify dialog doesn't freeze the UI on submit.
+                val outcome = withContext(Dispatchers.Default) {
+                    authRepository.unlockWithPassword(password)
+                }
+                when (outcome) {
                     is AppResult.Success -> {
                         exportVerifyAttempts = 0
                         _events.emit(ImportExportEvent.ExportPasswordVerified)
@@ -379,7 +384,10 @@ class ImportExportViewModel @Inject constructor(
     fun verifyPasswordForPlainExport(password: CharArray) {
         viewModelScope.launch {
             try {
-                when (val result = authRepository.unlockWithPassword(password)) {
+                val result = withContext(Dispatchers.Default) {
+                    authRepository.unlockWithPassword(password)
+                }
+                when (result) {
                     is AppResult.Success -> _events.emit(ImportExportEvent.PlainExportAllowed)
                     is AppResult.Error -> _events.emit(
                         ImportExportEvent.PlainExportDenied(result.message ?: "Wrong password")
