@@ -557,8 +557,8 @@ fun SettingsSecurityScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Once you remove your PIN, you'll need to type your master password " +
-                            "every time you unlock 1Key. You can set up a new PIN later in Settings.",
+                        "Once you remove your PIN, you will no longer be able to access vault using PIN. " +
+                            "You can set up a new PIN later in Settings.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
