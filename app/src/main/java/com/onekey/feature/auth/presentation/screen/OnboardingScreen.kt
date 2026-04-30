@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,16 +42,19 @@ fun OnboardingScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var step by remember { mutableStateOf(0) }
-    var showRestoreDialog by remember { mutableStateOf(false) }
-    var pendingRestoreUri by remember { mutableStateOf<Uri?>(null) }
+    // rememberSaveable so a rotation doesn't dump the user back to the welcome page
+    // mid-flow. Plain `remember` only survives recomposition, not activity recreation.
+    var step by rememberSaveable { mutableStateOf(0) }
+    var showRestoreDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingRestoreUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
     // Hoisted so that navigating Back → Continue between pages doesn't wipe what the user
     // already typed / accepted. AnimatedContent destroys child composables on transition,
-    // so any state held inside CreateVaultPage would be lost.
-    var password by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
-    var privacyAccepted by remember { mutableStateOf(false) }
+    // so any state held inside CreateVaultPage would be lost. Saveable so rotations don't
+    // wipe these either — same FBE-encrypted-Bundle tradeoff as the credential editor.
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var privacyAccepted by rememberSaveable { mutableStateOf(false) }
 
     val restoreLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
