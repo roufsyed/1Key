@@ -30,10 +30,9 @@ fun SettingsScreen(
     onSetupPin: () -> Unit,
     onChangePassword: () -> Unit,
     onVaultReset: () -> Unit,
-    onBackup: () -> Unit,
     onGeneral: () -> Unit,
     onSecurity: () -> Unit,
-    onBackupAndBin: () -> Unit,
+    onBackup: () -> Unit,
     onPrivacyPolicy: () -> Unit,
     onFaq: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
@@ -141,9 +140,9 @@ fun SettingsScreen(
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(
                         icon = Icons.Default.Backup,
-                        title = "Backup & Recycle Bin",
-                        subtitle = "Export, import, retention",
-                        onClick = onBackupAndBin,
+                        title = "Backup",
+                        subtitle = "Export your vault or import from another app",
+                        onClick = onBackup,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(
