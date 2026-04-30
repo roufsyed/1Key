@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -542,19 +543,27 @@ private fun CredentialEditContent(
     onAddTag: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    var title by remember(credential.id) { mutableStateOf(credential.title) }
-    var username by remember(credential.id) { mutableStateOf(credential.username) }
-    var password by remember(credential.id) { mutableStateOf(credential.password) }
-    var url by remember(credential.id) { mutableStateOf(credential.url) }
-    var notes by remember(credential.id) { mutableStateOf(credential.notes) }
-    var totpSecret by remember(credential.id) { mutableStateOf(credential.totpSecret ?: "") }
+    // rememberSaveable on the simple String/Boolean fields so a config change (rotation,
+    // multi-window resize, fold) doesn't wipe partially-typed edits. Bundle persistence
+    // is acceptable here — Android writes savedInstanceState through file-based encryption
+    // at rest, so the typed-but-unsaved values aren't sitting on disk in cleartext.
+    //
+    // selectedTags and customFields stay on plain `remember` because List<Tag> and
+    // List<CustomField> need a Saver/Parcelable to round-trip through Bundle, and the
+    // benefit isn't worth that scope for now.
+    var title by rememberSaveable(credential.id) { mutableStateOf(credential.title) }
+    var username by rememberSaveable(credential.id) { mutableStateOf(credential.username) }
+    var password by rememberSaveable(credential.id) { mutableStateOf(credential.password) }
+    var url by rememberSaveable(credential.id) { mutableStateOf(credential.url) }
+    var notes by rememberSaveable(credential.id) { mutableStateOf(credential.notes) }
+    var totpSecret by rememberSaveable(credential.id) { mutableStateOf(credential.totpSecret ?: "") }
     var selectedTags by remember(credential.id) { mutableStateOf(credential.tags) }
     var customFields by remember(credential.id) { mutableStateOf(credential.customFields) }
-    var showPassword by remember { mutableStateOf(false) }
-    var showTagPicker by remember { mutableStateOf(false) }
-    var showPasswordGenerator by remember { mutableStateOf(false) }
-    var showTotpScanner by remember { mutableStateOf(false) }
-    var showOcrScanner  by remember { mutableStateOf(false) }
+    var showPassword by rememberSaveable { mutableStateOf(false) }
+    var showTagPicker by rememberSaveable { mutableStateOf(false) }
+    var showPasswordGenerator by rememberSaveable { mutableStateOf(false) }
+    var showTotpScanner by rememberSaveable { mutableStateOf(false) }
+    var showOcrScanner by rememberSaveable { mutableStateOf(false) }
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
@@ -570,7 +579,7 @@ private fun CredentialEditContent(
             customFields != credential.customFields
         }
     }
-    var showDiscardDialog by remember { mutableStateOf(false) }
+    var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
 
     BackHandler(enabled = hasUnsavedChanges) {
         showDiscardDialog = true
