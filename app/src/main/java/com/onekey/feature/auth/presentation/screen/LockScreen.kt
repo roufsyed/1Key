@@ -575,7 +575,7 @@ private fun PinUnlockSection(
         TextButton(
             onClick = onFallbackToPassword,
             enabled = !isLoading,
-            modifier = Modifier.align(Alignment.End),
+            modifier = Modifier.align(Alignment.CenterHorizontally),
         ) {
             Text("Forgot PIN? Use master password")
         }
