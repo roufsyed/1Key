@@ -38,7 +38,10 @@ object DatabaseModule {
         Room.databaseBuilder(context, OneKeyDatabase::class.java, "onekey.db")
             .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
             .addCallback(DATABASE_CALLBACK)
-            .fallbackToDestructiveMigration()
+            // Deliberately NOT calling fallbackToDestructiveMigration(): for a password
+            // manager, silently wiping the user's encrypted vault on a schema slip is the
+            // worst possible failure mode. A real migration bug should crash so it's
+            // caught in dev/QA — never destroy data behind the user's back.
             .build()
 
     @Provides
