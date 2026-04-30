@@ -185,11 +185,21 @@ class CredentialRepositoryImpl @Inject constructor(
         }.flowOn(Dispatchers.Default)
     }
 
+    // Titles are stored unencrypted by schema (used for the alphabet index), so emitting
+    // them while locked isn't a leak per se. Gating anyway for consistency with the rest
+    // of the repo — every other observer drops out on lock, and downstream UI is allowed
+    // to assume that contract.
     override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
-        dao.observeAllTitlesAlphabetical(tag)
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeAllTitlesAlphabetical(tag)
+        }
 
     override fun observeFavoriteTitlesAlphabetical(): Flow<List<String>> =
-        dao.observeFavoriteTitlesAlphabetical()
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeFavoriteTitlesAlphabetical()
+        }
 
     private fun CredentialSortOrder.toOrderBy() = when (this) {
         CredentialSortOrder.NEWEST_FIRST -> "created_at DESC"
