@@ -160,6 +160,24 @@ fun SettingsFaqScreen(
             Spacer(Modifier.height(8.dp))
             FaqGroup("Backup & migration") {
                 FaqItem(
+                    question = "Why doesn't 1Key support automatic backups, and will it ever?",
+                    answer = "No, and we don't plan to. Here's why.\n\n" +
+                        "Backup files are encrypted with your master password. For a backup to " +
+                        "run automatically — especially on the unlock methods most people use " +
+                        "day to day, biometric and PIN — 1Key would need to keep your master " +
+                        "password on the device in some retrievable form, even if " +
+                        "hardware-protected.\n\n" +
+                        "That conflicts with our core promise: your master password lives only " +
+                        "in your head, never on this device. It's the one secret we keep out of " +
+                        "storage entirely, and we're not breaking that for any feature, no " +
+                        "matter how convenient it would be.\n\n" +
+                        "What we offer instead: one-tap manual backup from Settings → Backup & " +
+                        "Recycle Bin. You save the encrypted file wherever suits you — a local " +
+                        "folder, a USB drive, or a cloud-synced folder you control. We " +
+                        "recommend backing up after big changes (new accounts, password " +
+                        "updates, before app updates). The whole flow takes about ten seconds.",
+                )
+                FaqItem(
                     question = "What's the difference between an encrypted backup and a plain export?",
                     answer = "An encrypted .1key backup is locked with your master password — " +
                         "useless to anyone without it. JSON or CSV exports are plain text — " +
