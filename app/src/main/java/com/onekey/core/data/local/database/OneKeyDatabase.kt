@@ -44,10 +44,13 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        // Add encrypted URL columns; clear legacy plaintext url (vault key not available here).
+        // Add encrypted URL columns. The vault key isn't available during migration, so
+        // legacy plaintext url stays in place — `CredentialRepositoryImpl.toDomain()`
+        // reads url_encrypted when present and falls back to the legacy `url` column,
+        // and saves rewrite to encrypted form (clearing `url`). That gives us a lazy
+        // upgrade per credential without losing pre-v4 URLs at migration time.
         db.execSQL("ALTER TABLE credentials ADD COLUMN url_encrypted BLOB")
         db.execSQL("ALTER TABLE credentials ADD COLUMN iv_url BLOB")
-        db.execSQL("UPDATE credentials SET url = ''")
     }
 }
 
