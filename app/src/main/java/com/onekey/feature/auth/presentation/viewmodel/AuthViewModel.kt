@@ -141,6 +141,13 @@ class AuthViewModel @Inject constructor(
                     pinAttemptsRemaining--
                     if (pinAttemptsRemaining <= 0) {
                         pinAttemptsRemaining = MAX_PIN_ATTEMPTS
+                        // Same lockout shape as the biometric-setup and vault-deletion flows
+                        // in SettingsViewModel: reset the counter, persist a lock reason
+                        // (DataStore-backed so it survives force-stop / swipe-from-recents
+                        // and blocks biometric on next entry), then re-lock as a defensive
+                        // no-op (vault is already locked here, but keeps the pattern uniform).
+                        lockReasonStore.set(LockReason.TooManyFailedAttempts("PIN entry"))
+                        authRepository.lock()
                         _events.emit(AuthEvent.PinAttemptsExhausted)
                         _state.value = AuthUiState.Error(
                             "Too many wrong PINs — please use your master password."
