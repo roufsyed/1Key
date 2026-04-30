@@ -5,7 +5,12 @@ import android.view.WindowManager
 import androidx.activity.compose.setContent
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
@@ -16,10 +21,7 @@ import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.RootDetector
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -41,13 +43,12 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
 
         val rootCheck = rootDetector.check()
-        val isSetupComplete = runBlocking(Dispatchers.IO) { authRepository.isSetupComplete().first() }
-        val initialDarkTheme = runBlocking(Dispatchers.IO) { appPrefs.isDarkTheme().first() }
-        val initialScreenshotsEnabled = runBlocking(Dispatchers.IO) { appPrefs.isScreenshotsEnabled().first() }
-        if (!initialScreenshotsEnabled) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
-        // Observe the preference so the flag updates the moment the user toggles it in Settings,
-        // without requiring an Activity restart.
+        // Default to FLAG_SECURE until the screenshots preference hydrates from DataStore.
+        // Erring on "blocked" during the brief startup window is safer for a password
+        // manager — the observer below clears the flag if the user has enabled screenshots.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
         lifecycleScope.launch {
             appPrefs.isScreenshotsEnabled().collect { enabled ->
                 if (enabled) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -56,18 +57,27 @@ class MainActivity : FragmentActivity() {
         }
 
         setContent {
+            // isSetupComplete drives startDestination, which NavHost reads only once.
+            // Hold the nav graph until DataStore hydrates so cold start can never briefly
+            // mount the wrong root (e.g. Lock when the user hasn't onboarded yet).
+            val isSetupComplete by authRepository.isSetupComplete()
+                .collectAsStateWithLifecycle(initialValue = null)
             val isDarkTheme by appPrefs.isDarkTheme()
-                .collectAsStateWithLifecycle(initialValue = initialDarkTheme)
+                .collectAsStateWithLifecycle(initialValue = false)
 
             OneKeyTheme(darkTheme = isDarkTheme) {
-                if (rootCheck.isRooted) {
-                    RootWarningScreen(reason = rootCheck.reason ?: "Device appears to be rooted")
-                } else {
-                    OneKeyNavGraph(
-                        startDestination = when {
-                            !isSetupComplete -> Screen.Onboarding.route
-                            else -> Screen.Lock.route
-                        }
+                when {
+                    rootCheck.isRooted -> RootWarningScreen(
+                        reason = rootCheck.reason ?: "Device appears to be rooted"
+                    )
+                    isSetupComplete == null -> Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.background),
+                    )
+                    else -> OneKeyNavGraph(
+                        startDestination = if (isSetupComplete == true) Screen.Lock.route
+                        else Screen.Onboarding.route,
                     )
                 }
             }
