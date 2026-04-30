@@ -305,7 +305,20 @@ fun LockScreen(
     }
 
     if (lockReason != null && !lockReasonDismissed) {
-        val reason = lockReason as LockReason.TooManyFailedAttempts
+        val message = when (val r = lockReason) {
+            is LockReason.TooManyFailedAttempts ->
+                "Three wrong master-password attempts during ${r.context}. " +
+                    "That could mean someone other than you was trying to get in, " +
+                    "so we've paused biometric unlock to keep your data safe. " +
+                    "Enter your master password to confirm it's really you — " +
+                    "biometric will work as usual on your next unlock."
+            LockReason.TooManyFailedPinAttempts ->
+                "Three wrong PIN attempts. That could mean someone other than you was " +
+                    "trying to get in, so we've paused biometric unlock to keep your data safe. " +
+                    "Enter your master password to confirm it's really you — biometric will " +
+                    "work as usual on your next unlock."
+            null -> ""
+        }
         AlertDialog(
             onDismissRequest = { /* non-dismissible — user must acknowledge */ },
             icon = {
@@ -317,14 +330,7 @@ fun LockScreen(
             },
             title = { Text("Vault Locked") },
             text = {
-                Text(
-                    "Three wrong master-password attempts during ${reason.context}. " +
-                        "That could mean someone other than you was trying to get in, " +
-                        "so we've paused biometric unlock to keep your data safe. " +
-                        "Enter your master password to confirm it's really you — " +
-                        "biometric will work as usual on your next unlock.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Text(message, style = MaterialTheme.typography.bodyMedium)
             },
             confirmButton = {
                 // Dismissing the dialog here is local-only: the lockReason store stays set

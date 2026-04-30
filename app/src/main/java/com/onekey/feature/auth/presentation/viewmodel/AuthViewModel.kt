@@ -146,7 +146,7 @@ class AuthViewModel @Inject constructor(
                         // (DataStore-backed so it survives force-stop / swipe-from-recents
                         // and blocks biometric on next entry), then re-lock as a defensive
                         // no-op (vault is already locked here, but keeps the pattern uniform).
-                        lockReasonStore.set(LockReason.TooManyFailedAttempts("PIN entry"))
+                        lockReasonStore.set(LockReason.TooManyFailedPinAttempts)
                         authRepository.lock()
                         _events.emit(AuthEvent.PinAttemptsExhausted)
                         _state.value = AuthUiState.Error(

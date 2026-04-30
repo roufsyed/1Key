@@ -18,6 +18,8 @@ import javax.inject.Singleton
 sealed class LockReason {
     /** User entered the wrong master password too many times during a sensitive action. */
     data class TooManyFailedAttempts(val context: String) : LockReason()
+    /** User entered the wrong PIN too many times on the LockScreen. */
+    data object TooManyFailedPinAttempts : LockReason()
 }
 
 /**
@@ -35,7 +37,13 @@ class LockReasonStore @Inject constructor(
     @ApplicationScope appScope: CoroutineScope,
 ) {
     val reason: StateFlow<LockReason?> = appPrefs.getLockReasonContext()
-        .map { ctx -> ctx?.let { LockReason.TooManyFailedAttempts(it) } }
+        .map { ctx ->
+            when (ctx) {
+                null -> null
+                PIN_SENTINEL -> LockReason.TooManyFailedPinAttempts
+                else -> LockReason.TooManyFailedAttempts(ctx)
+            }
+        }
         .stateIn(appScope, SharingStarted.Eagerly, null)
 
     /**
@@ -44,12 +52,23 @@ class LockReasonStore @Inject constructor(
      * leaves the lock reason unpersisted, and biometric resumes on the next start.
      */
     suspend fun set(reason: LockReason) {
+        // PIN-failure variant carries no context, so we use a sentinel string that round-trips
+        // back to TooManyFailedPinAttempts on read. Keeps a single DataStore key authoritative
+        // for "is the vault locked due to too-many-failed-attempts" — important for
+        // BiometricUnlockGate which checks just that key for the locked-with-reason state.
         when (reason) {
             is LockReason.TooManyFailedAttempts -> appPrefs.setLockReasonContext(reason.context)
+            LockReason.TooManyFailedPinAttempts -> appPrefs.setLockReasonContext(PIN_SENTINEL)
         }
     }
 
     suspend fun clear() {
         appPrefs.setLockReasonContext(null)
+    }
+
+    private companion object {
+        // Sentinel chosen to be plainly not a real activity name and obviously a marker.
+        // Confined to this file — consumers see typed LockReason subclasses, never the string.
+        private const val PIN_SENTINEL = "__pin_failure__"
     }
 }
