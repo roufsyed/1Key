@@ -34,7 +34,7 @@ fun SettingsScreen(
     onGeneral: () -> Unit,
     onSecurity: () -> Unit,
     onBackupAndBin: () -> Unit,
-    onAbout: () -> Unit,
+    onPrivacyPolicy: () -> Unit,
     onFaq: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
@@ -154,10 +154,10 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(
-                        icon = Icons.Default.Info,
-                        title = "About",
-                        subtitle = "Privacy policy, version",
-                        onClick = onAbout,
+                        icon = Icons.Default.PrivacyTip,
+                        title = "Privacy Policy",
+                        subtitle = "What we collect, what we don't, and why",
+                        onClick = onPrivacyPolicy,
                     )
                 }
             }

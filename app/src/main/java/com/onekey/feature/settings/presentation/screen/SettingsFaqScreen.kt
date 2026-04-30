@@ -46,9 +46,12 @@ fun SettingsFaqScreen(
                 )
                 FaqItem(
                     question = "Where is my master password stored?",
-                    answer = "Nowhere. It's never written to disk — not as plaintext, not as a " +
-                        "hash. While the vault is unlocked we hold the derived encryption key " +
-                        "in memory; the moment you lock the vault, that key is dropped from memory.",
+                    answer = "Nowhere in cleartext. We do store a small password verifier — an " +
+                        "encrypted token only the correct password can decrypt — so we can " +
+                        "confirm a password attempt without persisting the password itself. The " +
+                        "vault key is encrypted by the Android Keystore and stored in that " +
+                        "wrapped form on disk; the unwrapped, usable form lives in memory only " +
+                        "while the vault is unlocked, and is dropped the moment the vault locks.",
                 )
                 FaqItem(
                     question = "What happens if I forget my master password?",
@@ -62,10 +65,12 @@ fun SettingsFaqScreen(
             FaqGroup("Memory & runtime") {
                 FaqItem(
                     question = "What does the app keep in memory while running?",
-                    answer = "Only what's on screen and the encryption key for the unlocked " +
-                        "session. Decrypted passwords are not cached. When the auto-lock fires, " +
-                        "the encryption key is dropped and the vault returns to its " +
-                        "encrypted-only state.",
+                    answer = "Only the encryption key for the unlocked session and whatever " +
+                        "you're actively viewing — the visible list of credentials, the field " +
+                        "you have open. Decrypted passwords are never written to disk and " +
+                        "they're released from memory when you navigate away or the vault " +
+                        "locks; the encryption key itself is dropped from memory the moment " +
+                        "the vault locks.",
                 )
                 FaqItem(
                     question = "Why does unlocking or creating a vault take a few seconds?",
@@ -97,8 +102,8 @@ fun SettingsFaqScreen(
                 FaqItem(
                     question = "Does the app talk to any servers?",
                     answer = "No. The app has no internet permission, no analytics, no crash " +
-                        "reporting, no telemetry. You can verify in Android's app permissions " +
-                        "screen — there's no \"Internet\" entry to grant or revoke.",
+                        "reporting, no telemetry. You can verify in Android Settings → Apps → " +
+                        "1Key → Mobile data & Wi-Fi: data usage is exactly zero, ever.",
                 )
                 FaqItem(
                     question = "Can the developer (or anyone else) see my passwords?",

@@ -39,10 +39,10 @@ import com.onekey.feature.auth.presentation.screen.SetupPinScreen
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.onekey.feature.importexport.presentation.screen.BackupScreen
 import com.onekey.feature.settings.presentation.screen.ManageCategoriesScreen
-import com.onekey.feature.settings.presentation.screen.SettingsAboutScreen
 import com.onekey.feature.settings.presentation.screen.SettingsBackupAndBinScreen
 import com.onekey.feature.settings.presentation.screen.SettingsFaqScreen
 import com.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
+import com.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
@@ -75,7 +75,7 @@ sealed class Screen(val route: String) {
     data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
     data object SettingsBackupAndBin : Screen("settings/backup_and_bin")
-    data object SettingsAbout : Screen("settings/about")
+    data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
     data object SettingsFaq : Screen("settings/faq")
     data object ManageCategories : Screen("manage_categories")
 }
@@ -260,7 +260,7 @@ fun OneKeyNavGraph(
                         onGeneral = { navController.navigate(Screen.SettingsGeneral.route) },
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
                         onBackupAndBin = { navController.navigate(Screen.SettingsBackupAndBin.route) },
-                        onAbout = { navController.navigate(Screen.SettingsAbout.route) },
+                        onPrivacyPolicy = { navController.navigate(Screen.SettingsPrivacyPolicy.route) },
                         onFaq = { navController.navigate(Screen.SettingsFaq.route) },
                     )
                 }
@@ -287,8 +287,8 @@ fun OneKeyNavGraph(
                     )
                 }
 
-                composable(Screen.SettingsAbout.route) {
-                    SettingsAboutScreen(onBack = { navController.popBackStack() })
+                composable(Screen.SettingsPrivacyPolicy.route) {
+                    SettingsPrivacyPolicyScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.SettingsFaq.route) {
