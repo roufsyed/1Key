@@ -49,6 +49,7 @@ import com.onekey.core.domain.model.CredentialHistoryEntry
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.model.OtpParams
+import com.onekey.core.domain.model.OtpType
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
@@ -310,14 +311,20 @@ private fun CredentialViewContent(
                     DetailField("Notes", credential.notes)
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
-                // TotpWidget consumes the raw secret today (defaults SHA1/30s/6).
-                // C2 expands TotpWidget to take full OtpParams so HOTP / Steam / advanced
-                // TOTP entries render correctly. C1 just drops the secret from the new
-                // structured field.
-                credential.otpParams?.takeIf { credential.type != CredentialType.BANK_ACCOUNT }?.let { params ->
-                    TotpWidget(secret = params.secret)
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                }
+                // TotpWidget renders rotating codes (TOTP / Steam). HOTP entries take
+                // the dedicated "Generate next code" UI on the 2FA list (added in C5);
+                // the rotating widget is gated on type here to keep the editor screen
+                // focused on its primary case and prevent a HOTP secret from silently
+                // ticking under a 30-second timer.
+                credential.otpParams
+                    ?.takeIf {
+                        credential.type != CredentialType.BANK_ACCOUNT &&
+                            (it.type == OtpType.TOTP || it.type == OtpType.STEAM)
+                    }
+                    ?.let { params ->
+                        TotpWidget(params = params)
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    }
             }
             credential.customFields.forEach { field ->
                 DetailField(
