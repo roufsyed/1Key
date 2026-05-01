@@ -123,4 +123,22 @@ dependencies {
 
     // ML Kit Text Recognition (on-device, Latin script)
     implementation(libs.mlkit.text.recognition)
+
+    // Testing — JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
+    // Robolectric is used by OtpAuthUriParser/Builder tests because both call
+    // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).
+    testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+}
+
+// Robolectric needs Android resources on the unit-test classpath so it can
+// stub android.net.Uri (used by OtpAuthUriParser / OtpAuthUriBuilder) and
+// other framework types. The setting also lets future test surfaces inflate
+// resources without an instrumented device.
+android {
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }

@@ -20,6 +20,8 @@ lifecycleProcess = "2.10.0"
 camerax = "1.3.4"
 mlkitBarcode = "17.3.0"
 mlkitTextRecognition = "16.0.1"
+junit = "4.13.2"
+robolectric = "4.13"
 
 [libraries]
 # Core
@@ -68,6 +70,9 @@ camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = 
 # ML Kit
 mlkit-barcode = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcode" }
 mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+# Testing
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
