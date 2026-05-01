@@ -56,6 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
@@ -359,7 +360,7 @@ fun BackupScreen(
     // ── Disable-encryption dialog ─────────────────────────────────────────────
 
     if (showDisableEncryptionDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
                 showDisableEncryptionDialog = false
                 disableEncPwdInput = ""
@@ -436,7 +437,7 @@ fun BackupScreen(
     // ── Export password dialog ────────────────────────────────────────────────
 
     if (showExportPasswordDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
                 if (!isVerifyingExportPassword) {
                     showExportPasswordDialog = false
@@ -515,7 +516,7 @@ fun BackupScreen(
     // ── Export vault-locked dialog ────────────────────────────────────────────
 
     if (showExportLockedDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {},
             icon = { Icon(Icons.Default.Lock, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Vault Locked") },
@@ -539,7 +540,7 @@ fun BackupScreen(
     // ── Result dialog (export success / error) ────────────────────────────────
 
     if (showResultDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showResultDialog = false; viewModel.acknowledgeResult() },
             icon = {
                 Icon(
@@ -561,7 +562,7 @@ fun BackupScreen(
 
     val awaitingImport = state as? ImportExportUiState.AwaitingImportPassword
     if (awaitingImport != null) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
                 importPasswordInput = ""
                 importPasswordVisible = false
@@ -629,7 +630,7 @@ fun BackupScreen(
 
     if (showSkippedDialog && importSuccessState != null) {
         val skipped = importSuccessState.result.skipped
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showSkippedDialog = false },
             icon = { Icon(Icons.Default.Info, null) },
             title = { Text("Skipped (${skipped.size})") },
@@ -671,7 +672,7 @@ fun BackupScreen(
 
     if (showFailedDialog && importSuccessState != null) {
         val failed = importSuccessState.result.failed
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showFailedDialog = false },
             icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Failed entries (${failed.size})") },

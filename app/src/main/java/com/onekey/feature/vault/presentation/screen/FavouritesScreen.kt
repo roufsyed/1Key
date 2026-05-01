@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialSortOrder
+import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.FavouritesViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -140,7 +141,7 @@ fun FavouritesScreen(
                             IconButton(onClick = { showSortMenu = true }) {
                                 Icon(Icons.Default.Sort, contentDescription = "Sort")
                             }
-                            DropdownMenu(
+                            LockAwareDropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false },
                             ) {

@@ -112,7 +112,7 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 private fun RootWarningScreen(reason: String) {
-    androidx.compose.material3.AlertDialog(
+    com.onekey.core.presentation.lockaware.LockAwareDialog(
         onDismissRequest = {},
         title = { androidx.compose.material3.Text("Security Warning") },
         text = {

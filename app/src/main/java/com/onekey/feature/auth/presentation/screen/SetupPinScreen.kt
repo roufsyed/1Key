@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
@@ -300,7 +301,7 @@ fun SetupPinScreen(
     }
 
     if (showForgotPinDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
                 showForgotPinDialog = false
                 forgotPinPasswordInput = ""

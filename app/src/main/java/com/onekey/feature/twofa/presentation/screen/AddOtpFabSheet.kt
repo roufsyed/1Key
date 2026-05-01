@@ -12,12 +12,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 
 /**
  * Bottom-sheet picker shown when the 2FA list FAB is tapped. Two choices:
@@ -37,7 +37,7 @@ fun AddOtpFabSheet(
     onEnterManually: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    ModalBottomSheet(
+    LockAwareModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {

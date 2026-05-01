@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -22,7 +23,7 @@ fun RestoreConflictDialog(
     onCancel: () -> Unit,
 ) {
     val displayedSubtitle = if (username.isNotBlank()) "$title — $username" else title
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = onCancel,
         icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },
         title = { Text("Already in your vault") },

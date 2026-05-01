@@ -21,6 +21,7 @@ import com.onekey.core.presentation.util.rememberCanUseBiometric
 import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
@@ -328,7 +329,7 @@ fun SettingsSecurityScreen(
     }
 
     if (showBiometricConfirmDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
                 showBiometricConfirmDialog = false
                 biometricPasswordInput = ""
@@ -408,7 +409,7 @@ fun SettingsSecurityScreen(
 
     if (showScreenshotDialog) {
         val enabling = pendingScreenshotsEnabled
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showScreenshotDialog = false },
             icon = { Icon(Icons.Default.Screenshot, contentDescription = null) },
             title = { Text(if (enabling) "Enable Screenshots?" else "Disable Screenshots?") },
@@ -446,7 +447,7 @@ fun SettingsSecurityScreen(
 
     if (showBackgroundLockDialog) {
         var pendingBackgroundLockTimeout by remember { mutableStateOf(backgroundLockTimeout) }
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showBackgroundLockDialog = false },
             icon = { Icon(Icons.Default.Timer, contentDescription = null) },
             title = { Text("Lock when app in background") },
@@ -499,7 +500,7 @@ fun SettingsSecurityScreen(
 
     if (showInactivityLockDialog) {
         var pendingInactivityLockTimeout by remember { mutableStateOf(inactivityLockTimeout) }
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showInactivityLockDialog = false },
             icon = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
             title = { Text("Lock after inactivity") },
@@ -542,7 +543,7 @@ fun SettingsSecurityScreen(
     }
 
     if (showRemovePinDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
                 showRemovePinDialog = false
                 removePinPasswordInput = ""
@@ -622,7 +623,7 @@ fun SettingsSecurityScreen(
     }
 
     if (showRestoreLastScreenDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showRestoreLastScreenDialog = false },
             icon = { Icon(Icons.Default.Restore, contentDescription = null) },
             title = { Text("Pick up where you left off?") },

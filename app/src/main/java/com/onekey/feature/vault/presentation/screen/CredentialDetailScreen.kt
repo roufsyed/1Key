@@ -51,6 +51,8 @@ import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
 import com.onekey.core.domain.model.Tag
+import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
 import com.onekey.feature.twofa.domain.OtpAuthUriParser
@@ -952,7 +954,7 @@ private fun CredentialEditContent(
     }
 
     if (showDiscardDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showDiscardDialog = false },
             title = { Text("Unsaved changes") },
             text = { Text("You have unsaved changes. Save or discard them?") },
@@ -1003,7 +1005,7 @@ private fun TotpQrScannerSheet(
         if (!hasPermission) permissionLauncher.launch(android.Manifest.permission.CAMERA)
     }
 
-    ModalBottomSheet(
+    LockAwareModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
@@ -1237,7 +1239,7 @@ private fun TagPickerDialog(
 ) {
     var customTagText by remember { mutableStateOf("") }
 
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Category") },
         text = {

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 
@@ -489,7 +490,7 @@ private fun CreateVaultPage(
 
 @Composable
 private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.PrivacyTip, contentDescription = null) },
         title = { Text("Privacy Policy") },
@@ -614,7 +615,7 @@ private fun RestoreFromBackupDialog(
 
     // Dismiss automatically once setup completes (LaunchedEffect handles navigation).
     // Keep dialog open while loading so the user can see the spinner.
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = { if (state !is AuthUiState.Loading) onDismiss() },
         icon = { Icon(Icons.Default.Restore, contentDescription = null) },
         title = { Text("Restore from Backup") },

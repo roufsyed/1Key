@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
@@ -248,9 +249,9 @@ fun SettingsScreen(
         val isVerifyingDeleteVault by settingsVm.isVerifyingDeleteVault.collectAsStateWithLifecycle()
         val canConfirm = deleteVaultPassword.isNotEmpty() && !isVerifyingDeleteVault
 
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = {
-                if (isVerifyingDeleteVault) return@AlertDialog
+                if (isVerifyingDeleteVault) return@LockAwareDialog
                 showDeleteVaultDialog = false
                 deleteVaultPassword = ""
                 deleteVaultPasswordVisible = false

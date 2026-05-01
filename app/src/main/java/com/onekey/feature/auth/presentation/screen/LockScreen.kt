@@ -51,6 +51,7 @@ import com.onekey.core.presentation.animation.AppIconBlue
 import com.onekey.core.presentation.animation.PremiumMorphEasing
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.util.rememberCanUseBiometric
 import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.core.security.LockReason
@@ -345,7 +346,7 @@ fun LockScreen(
                     "will work as usual on your next unlock."
             null -> ""
         }
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { /* non-dismissible — user must acknowledge */ },
             icon = {
                 Icon(

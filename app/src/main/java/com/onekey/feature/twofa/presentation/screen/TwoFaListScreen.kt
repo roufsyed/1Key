@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.twofa.presentation.viewmodel.HotpListEntry
 import com.onekey.feature.twofa.presentation.viewmodel.RotatingOtpEntry
 import com.onekey.feature.twofa.presentation.viewmodel.TwoFaListEntry
@@ -171,7 +172,7 @@ fun TwoFaListScreen(
         // overwrites it. Cleaning it up via LaunchedEffect would be tidier but adds churn
         // for a corner case nobody hits in practice.
         val entry = entries?.firstOrNull { it.credential.id == id } ?: return@let
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { pendingDeleteCredentialId = null },
             title = {
                 Text(if (entry.isLinkedCredential) "Remove 2FA code?" else "Remove 2FA account?")

@@ -1,11 +1,11 @@
 package com.onekey.feature.vault.presentation.screen
 
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 
 /**
  * Reframed delete confirmation. When the recycle bin is enabled it offers
@@ -29,7 +29,7 @@ fun BulkDeleteDialog(
         if (count == 1) "This is permanent — there's no recycle bin to restore from."
         else "This is permanent for all $count items — there's no recycle bin to restore from."
     }
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = onCancel,
         title = { Text(title) },
         text = { Text(subtitle) },

@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.PasswordConfig
 import com.onekey.core.domain.model.PasswordStrength
 import com.onekey.core.domain.model.PasswordType
+import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.onekey.feature.vault.presentation.viewmodel.PasswordGeneratorViewModel
 
 @Composable
@@ -41,7 +42,7 @@ fun PasswordGeneratorSheet(
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
 
-    ModalBottomSheet(
+    LockAwareModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {

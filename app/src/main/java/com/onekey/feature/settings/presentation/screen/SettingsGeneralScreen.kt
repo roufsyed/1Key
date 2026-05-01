@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -194,7 +195,7 @@ fun SettingsGeneralScreen(
     }
 
     if (showDisableBinDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showDisableBinDialog = false },
             icon = {
                 Icon(
@@ -237,7 +238,7 @@ fun SettingsGeneralScreen(
     }
 
     if (showRetentionPicker) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showRetentionPicker = false },
             icon = { Icon(Icons.Default.Schedule, contentDescription = null) },
             title = { Text("Auto-clear recycle bin") },

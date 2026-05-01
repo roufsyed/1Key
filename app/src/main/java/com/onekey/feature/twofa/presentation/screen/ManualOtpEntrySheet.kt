@@ -23,6 +23,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.OtpAlgorithm
 import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
+import com.onekey.core.presentation.lockaware.LockAwareExposedDropdownMenu
+import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.onekey.feature.twofa.domain.OtpSecretValidator
 import com.onekey.feature.twofa.presentation.viewmodel.ManualOtpEntryViewModel
 import kotlinx.coroutines.delay
@@ -114,7 +116,7 @@ fun ManualOtpEntrySheet(
         advancedFieldsValid &&
         state !is ManualOtpEntryViewModel.State.Saving
 
-    ModalBottomSheet(
+    LockAwareModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
@@ -403,7 +405,7 @@ private fun <T> EnumDropdown(
                 .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
                 .fillMaxWidth(),
         )
-        ExposedDropdownMenu(
+        LockAwareExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {

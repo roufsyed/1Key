@@ -32,6 +32,8 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.onekey.core.domain.model.CredentialType
+import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -226,7 +228,7 @@ fun OcrScannerSheet(
     }
 
     // ── Sheet ──────────────────────────────────────────────────────────────
-    ModalBottomSheet(
+    LockAwareModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
@@ -567,7 +569,7 @@ private fun OcrAssignmentDialog(
     onPick: (OcrTarget) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = onDismiss,
         title = { Text("Assign as…") },
         text = {

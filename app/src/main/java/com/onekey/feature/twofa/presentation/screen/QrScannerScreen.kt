@@ -32,6 +32,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.twofa.domain.ParsedOtpAuthUri
 import com.onekey.feature.twofa.presentation.viewmodel.QrScannerViewModel
 import com.onekey.feature.twofa.presentation.viewmodel.ScanEvent
@@ -273,7 +274,7 @@ private fun DetectedDialog(
     onDismiss: () -> Unit,
 ) {
     var title by remember(detected.suggestedTitle) { mutableStateOf(detected.suggestedTitle) }
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = onDismiss,
         title = { Text("Save 2FA Account") },
         text = {
@@ -308,7 +309,7 @@ private fun DetectedDialog(
 
 @Composable
 private fun SavingDialog() {
-    AlertDialog(
+    LockAwareDialog(
         onDismissRequest = {},
         text = {
             Row(

@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.vault.presentation.viewmodel.RecycleBinEvent
 import com.onekey.feature.vault.presentation.viewmodel.RecycleBinItem
 import com.onekey.feature.vault.presentation.viewmodel.RecycleBinViewModel
@@ -95,7 +96,7 @@ fun RecycleBinScreen(
     }
 
     pendingPurge?.let { item ->
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { pendingPurge = null },
             icon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete \"${item.credential.title}\" permanently?") },
@@ -117,7 +118,7 @@ fun RecycleBinScreen(
     }
 
     if (showEmptyDialog) {
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { showEmptyDialog = false },
             icon = { Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Empty the recycle bin?") },

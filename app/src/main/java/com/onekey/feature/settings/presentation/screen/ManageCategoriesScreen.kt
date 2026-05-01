@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.Tag
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
@@ -123,7 +124,7 @@ fun ManageCategoriesScreen(
     }
 
     tagToDelete?.let { tag ->
-        AlertDialog(
+        LockAwareDialog(
             onDismissRequest = { tagToDelete = null },
             icon = {
                 Icon(
