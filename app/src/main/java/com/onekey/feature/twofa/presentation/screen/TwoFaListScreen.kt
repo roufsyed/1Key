@@ -8,8 +8,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -45,6 +45,11 @@ fun TwoFaListScreen(
     // current `entriesList` at render time — if the entry has since disappeared, the
     // dialog simply doesn't show, which is the correct behavior.
     var pendingDeleteCredentialId by rememberSaveable { mutableStateOf<String?>(null) }
+    // Sheets driven by the FAB. `showFabPicker` opens the Scan-vs-Manual chooser;
+    // picking Manual flips `showManualSheet` while QR routes through `onScanQr`.
+    // Both saveable so a config change mid-entry doesn't lose the open state.
+    var showFabPicker by rememberSaveable { mutableStateOf(false) }
+    var showManualSheet by rememberSaveable { mutableStateOf(false) }
 
     val topAppBarState = rememberTopAppBarState()
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
@@ -75,11 +80,11 @@ fun TwoFaListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onScanQr,
+                onClick = { showFabPicker = true },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
             ) {
-                Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan QR Code")
+                Icon(Icons.Default.Add, contentDescription = "Add 2FA code")
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -101,7 +106,7 @@ fun TwoFaListScreen(
                     Text("No 2FA accounts", style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Tap the camera button to scan a QR code",
+                        "Tap the + button to scan or enter a setup key",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -143,6 +148,21 @@ fun TwoFaListScreen(
                 }
             }
         }
+    }
+
+    if (showFabPicker) {
+        AddOtpFabSheet(
+            onScanQr = onScanQr,
+            onEnterManually = { showManualSheet = true },
+            onDismiss = { showFabPicker = false },
+        )
+    }
+
+    if (showManualSheet) {
+        ManualOtpEntrySheet(
+            onDismiss = { showManualSheet = false },
+            onSaved = { showManualSheet = false },
+        )
     }
 
     pendingDeleteCredentialId?.let { id ->
