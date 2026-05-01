@@ -27,7 +27,6 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.onekey.core.domain.model.CredentialType
-import com.onekey.core.domain.model.TagWithCount
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
 import kotlinx.coroutines.delay
 

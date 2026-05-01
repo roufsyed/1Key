@@ -1,6 +1,5 @@
 package com.onekey.core.domain.usecase
 
-import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.CredentialRepository
 import kotlinx.coroutines.flow.Flow

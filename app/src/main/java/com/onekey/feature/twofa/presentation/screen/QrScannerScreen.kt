@@ -145,7 +145,6 @@ private fun CameraPreviewWithOverlay(
     onBarcodeDetected: (String) -> Unit,
     isScanning: Boolean,
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // rememberUpdatedState so the factory lambda always calls the latest callback

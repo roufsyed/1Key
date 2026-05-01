@@ -26,7 +26,7 @@ class ExportVaultUseCase @Inject constructor(
      * dropping it. CSV exports drop deletedAt at the format level — that's fine, CSV is for
      * cross-tool migration where the bin concept doesn't exist.
      */
-    private suspend fun collectAll(): List<com.onekey.core.domain.model.Credential>? {
+    private suspend fun collectAll(): List<Credential>? {
         val active = repository.getAllCredentials()
         if (active is AppResult.Error) return null
         val bin = repository.getAllInRecycleBin()

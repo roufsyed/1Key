@@ -327,7 +327,6 @@ private fun OcrCameraPreview(
     imageCaptureRef: MutableState<ImageCapture?>,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // When this composable leaves composition (state changes away from Preview)

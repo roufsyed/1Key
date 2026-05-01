@@ -1373,8 +1373,8 @@ private fun ReviewPhaseBody(
 
 @Composable
 private fun ReviewSummaryRow(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    color: androidx.compose.ui.graphics.Color,
+    icon: ImageVector,
+    color: Color,
     count: Int,
     singular: String,
     plural: String,

@@ -6,7 +6,6 @@ import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.feature.importexport.domain.ConflictPair
 import com.onekey.feature.importexport.domain.ConflictResolution
-import com.onekey.feature.importexport.domain.FailedEntry
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
 import com.onekey.feature.importexport.domain.ImportResult

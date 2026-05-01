@@ -1,4 +1,4 @@
-@file:OptIn(androidx.camera.core.ExperimentalGetImage::class)
+@file:OptIn(ExperimentalGetImage::class)
 
 package com.onekey.feature.vault.presentation.screen
 
@@ -981,7 +981,6 @@ private fun TotpCameraPreview(
     modifier: Modifier = Modifier,
     onSecretDetected: (String) -> Unit,
 ) {
-    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val onDetectedState = rememberUpdatedState(onSecretDetected)
     val detected = remember { AtomicBoolean(false) }
