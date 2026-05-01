@@ -11,9 +11,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
+import com.onekey.core.presentation.lockaware.LocalUserActivityPing
 import com.onekey.core.presentation.navigation.OneKeyNavGraph
 import com.onekey.core.presentation.navigation.Screen
 import com.onekey.core.presentation.theme.OneKeyTheme
@@ -74,19 +76,34 @@ class MainActivity : FragmentActivity() {
                 .collectAsStateWithLifecycle(initialValue = false)
 
             OneKeyTheme(darkTheme = isDarkTheme) {
-                when {
-                    rootCheck.isRooted -> RootWarningScreen(
-                        reason = rootCheck.reason ?: "Device appears to be rooted"
-                    )
-                    initialSetupComplete == null -> Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background),
-                    )
-                    else -> OneKeyNavGraph(
-                        startDestination = if (initialSetupComplete == true) Screen.Lock.route
-                        else Screen.Onboarding.route,
-                    )
+                // Provide the user-activity ping at the composition root so every
+                // dialog / sheet / popup downstream — even ones rendered in their
+                // own Window — can reset the inactivity timer. Without this, the
+                // M3 dialog/sheet/popup family is blind to the timer, since their
+                // touches never reach Activity.onUserInteraction().
+                //
+                // `remember` keeps the lambda's identity stable across
+                // recompositions; `staticCompositionLocalOf` would otherwise
+                // invalidate the entire subtree on every frame because each
+                // recomposition would manufacture a fresh lambda instance.
+                val userActivityPing = remember(autoLockManager) {
+                    { autoLockManager.onUserActivity() }
+                }
+                CompositionLocalProvider(LocalUserActivityPing provides userActivityPing) {
+                    when {
+                        rootCheck.isRooted -> RootWarningScreen(
+                            reason = rootCheck.reason ?: "Device appears to be rooted"
+                        )
+                        initialSetupComplete == null -> Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                        )
+                        else -> OneKeyNavGraph(
+                            startDestination = if (initialSetupComplete == true) Screen.Lock.route
+                            else Screen.Onboarding.route,
+                        )
+                    }
                 }
             }
         }
