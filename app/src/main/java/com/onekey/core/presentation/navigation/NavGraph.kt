@@ -361,6 +361,11 @@ fun OneKeyNavGraph(
                         onCredentialClick = { id ->
                             navController.navigate(Screen.CredentialDetail.createRoute(id))
                         },
+                        onAddCredential = { type, initialTag ->
+                            navController.navigate(
+                                Screen.CredentialDetail.createRoute(null, initialTag, type.name)
+                            )
+                        },
                     )
                 }
             }

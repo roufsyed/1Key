@@ -60,7 +60,6 @@ fun VaultScreen(
     // add-credential bottom sheet stays open through a config change.
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val focusRequester = remember { FocusRequester() }
 
     val topAppBarState = rememberTopAppBarState()
@@ -264,59 +263,74 @@ fun VaultScreen(
     }
 
     if (showBottomSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showBottomSheet = false },
-            sheetState = sheetState,
+        AddCredentialBottomSheet(
+            onTypePicked = { type ->
+                showBottomSheet = false
+                onAddClick(type)
+            },
+            onDismiss = { showBottomSheet = false },
+        )
+    }
+}
+
+/**
+ * Shared "What are you saving?" type-picker sheet. Used by Vault home and the tagged-list
+ * screen's TAG_ALL / TAG_FAVORITES branches — anywhere there's no implicit credential type
+ * from the surrounding context.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun AddCredentialBottomSheet(
+    onTypePicked: (CredentialType) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Text(
+            "What are you saving?",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 32.dp),
         ) {
-            Text(
-                "What are you saving?",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(bottom = 32.dp),
-            ) {
-                NEW_CREDENTIAL_TYPE_ORDER.forEach { type ->
-                    ListItem(
-                        leadingContent = {
-                            Icon(
-                                tagIcon(type.displayName),
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        },
-                        headlineContent = { Text(type.displayName) },
-                        modifier = Modifier.clickable {
-                            showBottomSheet = false
-                            onAddClick(type)
-                        },
-                    )
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            NEW_CREDENTIAL_TYPE_ORDER.forEach { type ->
                 ListItem(
                     leadingContent = {
                         Icon(
-                            Icons.Default.Label,
+                            tagIcon(type.displayName),
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.primary,
                         )
                     },
-                    headlineContent = {
-                        Text(
-                            "Other",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    modifier = Modifier.clickable {
-                        showBottomSheet = false
-                        onAddClick(CredentialType.OTHER)
-                    },
+                    headlineContent = { Text(type.displayName) },
+                    modifier = Modifier.clickable { onTypePicked(type) },
                 )
             }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            ListItem(
+                leadingContent = {
+                    Icon(
+                        Icons.Default.Label,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                headlineContent = {
+                    Text(
+                        "Other",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                modifier = Modifier.clickable { onTypePicked(CredentialType.OTHER) },
+            )
         }
     }
 }

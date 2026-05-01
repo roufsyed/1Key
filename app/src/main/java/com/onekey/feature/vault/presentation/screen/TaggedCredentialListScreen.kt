@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialSortOrder
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.TaggedCredentialListViewModel
 import kotlinx.coroutines.flow.collectLatest
@@ -40,6 +42,7 @@ import kotlinx.coroutines.launch
 fun TaggedCredentialListScreen(
     onBack: () -> Unit,
     onCredentialClick: (String) -> Unit,
+    onAddCredential: (type: CredentialType, initialTag: String) -> Unit,
     viewModel: TaggedCredentialListViewModel = hiltViewModel(),
 ) {
     val credentials by viewModel.credentials.collectAsStateWithLifecycle()
@@ -53,6 +56,10 @@ fun TaggedCredentialListScreen(
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    // Bottom-sheet picker only fires for the meta-tags (TAG_ALL / TAG_FAVORITES) where
+    // there's no implicit credential type. Default and custom tags route directly via
+    // resolveAddTarget below — no sheet, no extra tap.
+    var showAddSheet by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -174,6 +181,31 @@ fun TaggedCredentialListScreen(
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            // Hidden during selection mode so the FAB doesn't sit over the action bar.
+            if (!isSelectionMode) {
+                FloatingActionButton(
+                    onClick = {
+                        when (val raw = viewModel.rawTag) {
+                            TAG_ALL, TAG_FAVORITES -> showAddSheet = true
+                            else -> {
+                                // Default tag whose name matches a CredentialType displayName
+                                // (Login / Bank Account / …) → use that type. Custom tag with
+                                // no matching display name → fall back to LOGIN. Either way,
+                                // pre-fill the new credential's tag with the current rawTag.
+                                val type = CredentialType.entries.find { it.displayName == raw }
+                                    ?: CredentialType.LOGIN
+                                onAddCredential(type, raw)
+                            }
+                        }
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Add credential")
+                }
+            }
+        },
     ) { padding ->
         val credList = credentials
         if (credList == null) {
@@ -251,6 +283,20 @@ fun TaggedCredentialListScreen(
                 viewModel.deleteSelectedNow()
             },
             onCancel = { showDeleteDialog = false },
+        )
+    }
+
+    if (showAddSheet) {
+        AddCredentialBottomSheet(
+            onTypePicked = { type ->
+                showAddSheet = false
+                // Match Vault home: picked type sets both the credential type AND its
+                // initial tag (so e.g. picking LOGIN auto-tags as "Login"). OTHER skips
+                // the auto-tag since there's no natural label for it.
+                val initialTag = if (type == CredentialType.OTHER) "" else type.displayName
+                onAddCredential(type, initialTag)
+            },
+            onDismiss = { showAddSheet = false },
         )
     }
 }
