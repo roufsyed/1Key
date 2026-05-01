@@ -31,6 +31,108 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.onekey.core.domain.model.CredentialType
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/**
+ * Where an OCR-extracted text block can be routed. The launching screen passes a list
+ * of targets sized to its credential type — SECURE_NOTE only offers [Notes], BANK_ACCOUNT
+ * offers [Username] + [Password] + several [CustomField]s + [Notes], etc.
+ */
+sealed class OcrTarget(val label: String) {
+    data object Username : OcrTarget("Username")
+    data object Password : OcrTarget("Password")
+    data object Url : OcrTarget("URL")
+    /** Multi-block target. Tapping the same block again removes it from the notes set. */
+    data object Notes : OcrTarget("Notes")
+    /** Maps to a custom field on the credential. The launching screen upserts by key. */
+    data class CustomField(val key: String, val sensitive: Boolean) : OcrTarget(key)
+}
+
+data class OcrCustomFieldAssignment(
+    val key: String,
+    val value: String,
+    val sensitive: Boolean,
+)
+
+data class OcrAssignments(
+    val username: String? = null,
+    val password: String? = null,
+    val url: String? = null,
+    val notes: String? = null,
+    val customFields: List<OcrCustomFieldAssignment> = emptyList(),
+)
+
+/**
+ * Default OCR target list per credential type. Mirrors the editor's `fieldSuggestionsFor`
+ * + the universal Notes fallback. Username/Password/URL are dropped for `SECURE_NOTE` and
+ * `OTHER` since those types have no auth fields rendered. They stay for `CREDIT_CARD`
+ * because users may also store the online-card-portal login on the same record.
+ */
+fun ocrTargetsFor(type: CredentialType): List<OcrTarget> = when (type) {
+    CredentialType.LOGIN, CredentialType.PASSWORD -> listOf(
+        OcrTarget.Username,
+        OcrTarget.Password,
+        OcrTarget.Url,
+        OcrTarget.Notes,
+    )
+    CredentialType.SECURE_NOTE, CredentialType.OTHER -> listOf(
+        OcrTarget.Notes,
+    )
+    CredentialType.CREDIT_CARD -> listOf(
+        OcrTarget.Username,
+        OcrTarget.Password,
+        OcrTarget.CustomField("Cardholder", sensitive = false),
+        OcrTarget.CustomField("Card Number", sensitive = true),
+        OcrTarget.CustomField("Expiry", sensitive = false),
+        OcrTarget.CustomField("CVV", sensitive = true),
+        OcrTarget.CustomField("PIN", sensitive = true),
+        OcrTarget.CustomField("Billing Zip", sensitive = false),
+        OcrTarget.CustomField("Network", sensitive = false),
+        OcrTarget.Notes,
+    )
+    CredentialType.BANK_ACCOUNT -> listOf(
+        OcrTarget.Username,
+        OcrTarget.Password,
+        OcrTarget.CustomField("Account Holder", sensitive = false),
+        OcrTarget.CustomField("Account Number", sensitive = true),
+        OcrTarget.CustomField("Bank Name", sensitive = false),
+        OcrTarget.CustomField("IFSC / Routing", sensitive = true),
+        OcrTarget.CustomField("IBAN", sensitive = true),
+        OcrTarget.CustomField("Branch", sensitive = false),
+        OcrTarget.CustomField("PIN", sensitive = true),
+        OcrTarget.Notes,
+    )
+    CredentialType.SERVER -> listOf(
+        OcrTarget.Username,
+        OcrTarget.Password,
+        OcrTarget.CustomField("Host", sensitive = false),
+        OcrTarget.CustomField("Port", sensitive = false),
+        OcrTarget.CustomField("SSH Key Path", sensitive = false),
+        OcrTarget.CustomField("API Token", sensitive = true),
+        OcrTarget.Notes,
+    )
+    CredentialType.DATABASE -> listOf(
+        OcrTarget.Username,
+        OcrTarget.Password,
+        OcrTarget.CustomField("Host", sensitive = false),
+        OcrTarget.CustomField("Port", sensitive = false),
+        OcrTarget.CustomField("Database", sensitive = false),
+        OcrTarget.CustomField("Connection String", sensitive = true),
+        OcrTarget.Notes,
+    )
+    CredentialType.EMAIL -> listOf(
+        OcrTarget.Username,
+        OcrTarget.Password,
+        OcrTarget.CustomField("IMAP Host", sensitive = false),
+        OcrTarget.CustomField("SMTP Host", sensitive = false),
+        OcrTarget.CustomField("App Password", sensitive = true),
+        OcrTarget.Notes,
+    )
+}
 
 // ---------------------------------------------------------------------------
 // State machine
@@ -50,7 +152,8 @@ private sealed class OcrSheetState {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OcrScannerSheet(
-    onResult: (username: String?, password: String?, notes: String?) -> Unit,
+    targets: List<OcrTarget>,
+    onResult: (OcrAssignments) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -77,10 +180,11 @@ fun OcrScannerSheet(
     // ── UI state ───────────────────────────────────────────────────────────
     var ocrState        by remember { mutableStateOf<OcrSheetState>(OcrSheetState.Preview) }
     val imageCaptureRef = remember { mutableStateOf<ImageCapture?>(null) }
-    var selectedUsername by remember { mutableStateOf<String?>(null) }
-    var selectedPassword by remember { mutableStateOf<String?>(null) }
-    var selectedNotes    by remember { mutableStateOf<List<String>>(emptyList()) }
-    var pendingBlock     by remember { mutableStateOf<String?>(null) }
+    // Single-block assignments: Username, Password, Url, and each CustomField map to one block.
+    var singleAssignments by remember { mutableStateOf<Map<OcrTarget, String>>(emptyMap()) }
+    // Notes is the only target that aggregates multiple blocks.
+    var notesBlocks       by remember { mutableStateOf<List<String>>(emptyList()) }
+    var pendingBlock      by remember { mutableStateOf<String?>(null) }
 
     // ── Capture + OCR (all callbacks on main thread) ───────────────────────
     fun captureAndProcess() {
@@ -93,9 +197,6 @@ fun OcrScannerSheet(
             object : ImageCapture.OnImageCapturedCallback() {
 
                 override fun onCaptureSuccess(image: ImageProxy) {
-                    // Convert to bitmap immediately so we can close the proxy early.
-                    // toBitmap() is available since CameraX 1.2 and does not require
-                    // @ExperimentalGetImage, keeping this file annotation-free.
                     val rotationDegrees = image.imageInfo.rotationDegrees
                     val bitmap = image.toBitmap()
                     image.close()
@@ -115,11 +216,9 @@ fun OcrScannerSheet(
                         .addOnFailureListener {
                             ocrState = OcrSheetState.Preview
                         }
-                    // No addOnCompleteListener needed — proxy already closed above.
                 }
 
                 override fun onError(exception: ImageCaptureException) {
-                    // Runs on main thread (same executor passed to takePicture).
                     ocrState = OcrSheetState.Preview
                 }
             }
@@ -235,22 +334,17 @@ fun OcrScannerSheet(
                 is OcrSheetState.Selecting -> {
                     OcrSelectionContent(
                         blocks = state.blocks,
-                        selectedUsername = selectedUsername,
-                        selectedPassword = selectedPassword,
-                        selectedNotes = selectedNotes,
+                        targets = targets,
+                        singleAssignments = singleAssignments,
+                        notesBlocks = notesBlocks,
                         onBlockTap = { pendingBlock = it },
                         onDone = {
-                            onResult(
-                                selectedUsername,
-                                selectedPassword,
-                                selectedNotes.takeIf { it.isNotEmpty() }?.joinToString("\n"),
-                            )
+                            onResult(buildAssignments(targets, singleAssignments, notesBlocks))
                             onDismiss()
                         },
                         onRetake = {
-                            selectedUsername = null
-                            selectedPassword = null
-                            selectedNotes = emptyList()
+                            singleAssignments = emptyMap()
+                            notesBlocks = emptyList()
                             imageCaptureRef.value = null
                             ocrState = OcrSheetState.Preview
                         },
@@ -262,60 +356,65 @@ fun OcrScannerSheet(
 
     // ── Assignment dialog (rendered outside the sheet so it layers on top) ─
     pendingBlock?.let { block ->
-        // Capture current notes state so button label reflects it at render time.
-        val blockInNotes = block in selectedNotes
-        AlertDialog(
-            onDismissRequest = { pendingBlock = null },
-            title = { Text("Assign as…") },
-            text = {
-                Text(
-                    block,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Button(
-                        onClick = {
-                            selectedUsername = block
-                            if (selectedPassword == block) selectedPassword = null
-                            selectedNotes = selectedNotes - block
-                            pendingBlock = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Username") }
-                    OutlinedButton(
-                        onClick = {
-                            selectedPassword = block
-                            if (selectedUsername == block) selectedUsername = null
-                            selectedNotes = selectedNotes - block
-                            pendingBlock = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Password") }
-                    OutlinedButton(
-                        onClick = {
-                            if (blockInNotes) {
-                                selectedNotes = selectedNotes - block
-                            } else {
-                                if (selectedUsername == block) selectedUsername = null
-                                if (selectedPassword == block) selectedPassword = null
-                                selectedNotes = selectedNotes + block
-                            }
-                            pendingBlock = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text(if (blockInNotes) "Remove from Notes" else "Add to Notes") }
+        OcrAssignmentDialog(
+            block = block,
+            targets = targets,
+            assignedTarget = currentAssignmentFor(block, singleAssignments, notesBlocks),
+            blockInNotes = block in notesBlocks,
+            onPick = { picked ->
+                when (picked) {
+                    OcrTarget.Notes -> {
+                        if (block in notesBlocks) {
+                            notesBlocks = notesBlocks - block
+                        } else {
+                            // Block can only live in one slot at a time.
+                            singleAssignments = singleAssignments.filterValues { it != block }
+                            notesBlocks = notesBlocks + block
+                        }
+                    }
+                    else -> {
+                        // Replace semantics: assigning a block to a single-slot target removes
+                        // it from any prior slot AND removes any prior block already in `picked`.
+                        notesBlocks = notesBlocks - block
+                        singleAssignments = singleAssignments
+                            .filterValues { it != block }
+                            .plus(picked to block)
+                    }
                 }
+                pendingBlock = null
             },
-            dismissButton = null,
+            onDismiss = { pendingBlock = null },
         )
     }
+}
+
+private fun currentAssignmentFor(
+    block: String,
+    singleAssignments: Map<OcrTarget, String>,
+    notesBlocks: List<String>,
+): String? = when {
+    block in notesBlocks -> OcrTarget.Notes.label
+    else -> singleAssignments.entries.firstOrNull { it.value == block }?.key?.label
+}
+
+private fun buildAssignments(
+    targets: List<OcrTarget>,
+    singleAssignments: Map<OcrTarget, String>,
+    notesBlocks: List<String>,
+): OcrAssignments {
+    val customFields = targets
+        .filterIsInstance<OcrTarget.CustomField>()
+        .mapNotNull { target ->
+            val value = singleAssignments[target] ?: return@mapNotNull null
+            OcrCustomFieldAssignment(key = target.key, value = value, sensitive = target.sensitive)
+        }
+    return OcrAssignments(
+        username = singleAssignments[OcrTarget.Username],
+        password = singleAssignments[OcrTarget.Password],
+        url = singleAssignments[OcrTarget.Url],
+        notes = notesBlocks.takeIf { it.isNotEmpty() }?.joinToString("\n"),
+        customFields = customFields,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -329,8 +428,6 @@ private fun OcrCameraPreview(
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // When this composable leaves composition (state changes away from Preview)
-    // clear the stale capture reference so the button cannot fire against it.
     DisposableEffect(Unit) {
         onDispose { imageCaptureRef.value = null }
     }
@@ -360,7 +457,6 @@ private fun OcrCameraPreview(
                             preview,
                             imageCapture,
                         )
-                        // Only expose the capture ref after a successful bind.
                         imageCaptureRef.value = imageCapture
                     }
                 }, ContextCompat.getMainExecutor(ctx))
@@ -379,42 +475,41 @@ private fun OcrCameraPreview(
 @Composable
 private fun OcrSelectionContent(
     blocks: List<String>,
-    selectedUsername: String?,
-    selectedPassword: String?,
-    selectedNotes: List<String>,
+    targets: List<OcrTarget>,
+    singleAssignments: Map<OcrTarget, String>,
+    notesBlocks: List<String>,
     onBlockTap: (String) -> Unit,
     onDone: () -> Unit,
     onRetake: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
 
-        // Username + Password slot row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OcrSlotCard(label = "Username", value = selectedUsername, modifier = Modifier.weight(1f))
-            OcrSlotCard(label = "Password", value = selectedPassword, modifier = Modifier.weight(1f))
+        // Compact summary: one chip per assigned target. Skipped entirely when nothing's
+        // been picked yet — keeps the empty state tidy.
+        val assignedSummary = targets.mapNotNull { target ->
+            when (target) {
+                OcrTarget.Notes -> if (notesBlocks.isNotEmpty()) {
+                    target.label to "${notesBlocks.size} block${if (notesBlocks.size == 1) "" else "s"}"
+                } else null
+                else -> singleAssignments[target]?.let { target.label to it }
+            }
         }
-
-        // Notes slot — only shown when at least one block is assigned
-        if (selectedNotes.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            OcrSlotCard(
-                label = "Notes",
-                value = "${selectedNotes.size} block${if (selectedNotes.size == 1) "" else "s"} selected",
+        if (assignedSummary.isNotEmpty()) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp),
-            )
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                assignedSummary.forEach { (label, value) ->
+                    OcrSlotCard(label = label, value = value, modifier = Modifier.fillMaxWidth())
+                }
+            }
+            Spacer(Modifier.height(10.dp))
         }
 
-        Spacer(Modifier.height(10.dp))
-
         Text(
-            "Tap a block to assign it as username, password, or notes.",
+            "Tap a block to assign it to a field. Tap an already-Notes block again to remove it.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -422,7 +517,6 @@ private fun OcrSelectionContent(
 
         Spacer(Modifier.height(8.dp))
 
-        // Scrollable block list — capped at 260 dp so the action row stays visible
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -432,12 +526,7 @@ private fun OcrSelectionContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             blocks.forEach { block ->
-                val assignment = when {
-                    block == selectedUsername  -> "Username"
-                    block == selectedPassword  -> "Password"
-                    block in selectedNotes     -> "Notes"
-                    else                       -> null
-                }
+                val assignment = currentAssignmentFor(block, singleAssignments, notesBlocks)
                 OcrTextBlockCard(
                     text = block,
                     assignment = assignment,
@@ -449,7 +538,6 @@ private fun OcrSelectionContent(
 
         Spacer(Modifier.height(12.dp))
 
-        // Action row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -463,11 +551,64 @@ private fun OcrSelectionContent(
             }
             Button(
                 onClick = onDone,
-                enabled = selectedUsername != null || selectedPassword != null || selectedNotes.isNotEmpty(),
+                enabled = singleAssignments.isNotEmpty() || notesBlocks.isNotEmpty(),
                 modifier = Modifier.weight(1f),
             ) { Text("Done") }
         }
     }
+}
+
+@Composable
+private fun OcrAssignmentDialog(
+    block: String,
+    targets: List<OcrTarget>,
+    assignedTarget: String?,
+    blockInNotes: Boolean,
+    onPick: (OcrTarget) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Assign as…") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    block,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (assignedTarget != null) {
+                    Text(
+                        "Currently assigned to: $assignedTarget",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                targets.forEach { target ->
+                    val label = when (target) {
+                        OcrTarget.Notes -> if (blockInNotes) "Remove from Notes" else "Add to Notes"
+                        else -> target.label
+                    }
+                    OutlinedButton(
+                        onClick = { onPick(target) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(label) }
+                }
+            }
+        },
+        dismissButton = null,
+    )
 }
 
 @Composable
@@ -517,11 +658,16 @@ private fun OcrTextBlockCard(
 @Composable
 private fun OcrSlotCard(label: String, value: String?, modifier: Modifier = Modifier) {
     OutlinedCard(modifier = modifier) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(0.4f),
             )
             Text(
                 text = value ?: "—",
@@ -530,6 +676,7 @@ private fun OcrSlotCard(label: String, value: String?, modifier: Modifier = Modi
                         else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(0.6f),
             )
         }
     }

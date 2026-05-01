@@ -854,10 +854,36 @@ private fun CredentialEditContent(
 
     if (showOcrScanner) {
         OcrScannerSheet(
-            onResult = { scannedUsername, scannedPassword, scannedNotes ->
-                if (scannedUsername != null) username = scannedUsername
-                if (scannedPassword != null) password = scannedPassword
-                if (scannedNotes != null) notes = scannedNotes
+            targets = ocrTargetsFor(credential.type),
+            onResult = { assignments ->
+                assignments.username?.let { username = it }
+                assignments.password?.let { password = it }
+                assignments.url?.let { url = it }
+                assignments.notes?.let { notes = it }
+                if (assignments.customFields.isNotEmpty()) {
+                    // Upsert: replace existing fields with matching key, append the rest.
+                    // Sensitivity is taken from the OCR target table (e.g. CVV / API Token →
+                    // sensitive; Cardholder / Branch → not), so the user doesn't have to toggle.
+                    val updatedFields = customFields.toMutableList()
+                    val updatedIds = customFieldIds.toMutableList()
+                    for (cf in assignments.customFields) {
+                        val existingIndex = updatedFields.indexOfFirst { it.key == cf.key }
+                        if (existingIndex >= 0) {
+                            updatedFields[existingIndex] = updatedFields[existingIndex].copy(
+                                value = cf.value,
+                                isSensitive = cf.sensitive,
+                            )
+                        } else {
+                            updatedFields.add(
+                                CustomField(key = cf.key, value = cf.value, isSensitive = cf.sensitive)
+                            )
+                            updatedIds.add(nextCustomFieldId)
+                            nextCustomFieldId += 1
+                        }
+                    }
+                    customFields = updatedFields
+                    customFieldIds = updatedIds
+                }
             },
             onDismiss = { showOcrScanner = false },
         )
