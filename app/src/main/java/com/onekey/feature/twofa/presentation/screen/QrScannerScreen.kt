@@ -32,7 +32,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
-import com.onekey.feature.twofa.domain.OtpAuthParams
+import com.onekey.feature.twofa.domain.ParsedOtpAuthUri
 import com.onekey.feature.twofa.presentation.viewmodel.QrScannerViewModel
 import com.onekey.feature.twofa.presentation.viewmodel.ScanEvent
 import com.onekey.feature.twofa.presentation.viewmodel.ScanState
@@ -269,7 +269,7 @@ private fun CameraPreviewWithOverlay(
 @Composable
 private fun DetectedDialog(
     detected: ScanState.Detected,
-    onSave: (OtpAuthParams, String) -> Unit,
+    onSave: (ParsedOtpAuthUri, String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var title by remember(detected.suggestedTitle) { mutableStateOf(detected.suggestedTitle) }
@@ -278,11 +278,11 @@ private fun DetectedDialog(
         title = { Text("Save 2FA Account") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (detected.params.issuer.isNotEmpty()) {
-                    LabelValue("Service", detected.params.issuer)
+                if (detected.parsed.issuer.isNotEmpty()) {
+                    LabelValue("Service", detected.parsed.issuer)
                 }
-                if (detected.params.account.isNotEmpty()) {
-                    LabelValue("Account", detected.params.account)
+                if (detected.parsed.account.isNotEmpty()) {
+                    LabelValue("Account", detected.parsed.account)
                 }
                 OutlinedTextField(
                     value = title,
@@ -296,7 +296,7 @@ private fun DetectedDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onSave(detected.params, title) },
+                onClick = { onSave(detected.parsed, title) },
                 enabled = title.isNotBlank(),
             ) { Text("Save") }
         },

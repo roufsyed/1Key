@@ -1124,8 +1124,8 @@ private fun TotpCameraPreview(
                                     .addOnSuccessListener { barcodes ->
                                         val raw = barcodes.firstOrNull()?.rawValue
                                             ?: return@addOnSuccessListener
-                                        val params = OtpAuthUriParser.parse(raw)
-                                        if (params == null) {
+                                        val parsed = OtpAuthUriParser.parse(raw)
+                                        if (parsed == null) {
                                             val now = android.os.SystemClock.elapsedRealtime()
                                             if (now - lastInvalidAtMs >= 2_500L) {
                                                 lastInvalidAtMs = now
@@ -1134,7 +1134,12 @@ private fun TotpCameraPreview(
                                             return@addOnSuccessListener
                                         }
                                         if (detected.compareAndSet(false, true)) {
-                                            onDetectedState.value(params.secret)
+                                            // The in-editor scanner only carries the secret string back
+                                            // to the form field — algorithm/digits/period/counter come
+                                            // through the dedicated 2FA list manual-entry sheet (C7) or
+                                            // a fresh credential created via QrScannerScreen, both of
+                                            // which preserve full params end-to-end.
+                                            onDetectedState.value(parsed.params.secret)
                                         }
                                     }
                                     .addOnCompleteListener { imageProxy.close() }

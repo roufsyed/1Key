@@ -5,12 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
-import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
 import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.VaultLockedException
-import com.onekey.feature.twofa.domain.OtpAuthParams
 import com.onekey.feature.twofa.domain.OtpAuthUriParser
+import com.onekey.feature.twofa.domain.ParsedOtpAuthUri
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +23,15 @@ import javax.inject.Inject
 
 sealed class ScanState {
     data object Scanning : ScanState()
-    data class Detected(val params: OtpAuthParams, val suggestedTitle: String) : ScanState()
+
+    /**
+     * The camera read a valid `otpauth://` URI. [parsed] carries the full generation
+     * params (algorithm/digits/period/counter/type, including auto-detected Steam)
+     * plus issuer/account; downstream save uses [parsed.params] verbatim, so a
+     * SHA-256 / 8-digit / Steam QR persists faithfully without any defaults applied.
+     */
+    data class Detected(val parsed: ParsedOtpAuthUri, val suggestedTitle: String) : ScanState()
+
     data object Saving : ScanState()
     data object Saved : ScanState()
     data class Error(val message: String) : ScanState()
@@ -64,29 +71,30 @@ class QrScannerViewModel @Inject constructor(
 
     fun onBarcodeDetected(rawValue: String) {
         if (!processed.compareAndSet(false, true)) return
-        val params = OtpAuthUriParser.parse(rawValue)
-        if (params == null) {
+        val parsed = OtpAuthUriParser.parse(rawValue)
+        if (parsed == null) {
             processed.set(false)
             emitInvalidQrThrottled()
             return
         }
-        _state.value = ScanState.Detected(params, buildTitle(params))
+        _state.value = ScanState.Detected(parsed, buildTitle(parsed))
     }
 
-    fun save(params: OtpAuthParams, title: String) {
+    fun save(parsed: ParsedOtpAuthUri, title: String) {
         viewModelScope.launch {
             _state.value = ScanState.Saving
             val credential = Credential(
                 id = "",
-                title = title.ifBlank { buildTitle(params) },
-                username = params.account,
+                title = title.ifBlank { buildTitle(parsed) },
+                username = parsed.account,
                 password = "",
                 url = "",
                 notes = "",
-                // C1 keeps the QR-scan flow on default TOTP params. C3 extends
-                // OtpAuthUriParser to surface algorithm/digits/period/counter/type
-                // and replaces this with the parser-supplied OtpParams.
-                otpParams = OtpParams.defaultTotp(params.secret),
+                // Persist the full parsed params (algorithm/digits/period/counter/type)
+                // — saving as defaultTotp would silently drop SHA-256, 8-digit, 60s,
+                // HOTP, and Steam QRs into a vanilla SHA-1/30s/6 entry that yields
+                // wrong codes against the issuer.
+                otpParams = parsed.params,
                 tags = emptyList(),
                 customFields = emptyList(),
                 isFavorite = false,
@@ -121,11 +129,11 @@ class QrScannerViewModel @Inject constructor(
         viewModelScope.launch { _events.emit(ScanEvent.InvalidQr) }
     }
 
-    private fun buildTitle(params: OtpAuthParams): String = when {
-        params.issuer.isNotEmpty() && params.account.isNotEmpty() ->
-            "${params.issuer} — ${params.account}"
-        params.issuer.isNotEmpty() -> params.issuer
-        else -> params.account
+    private fun buildTitle(parsed: ParsedOtpAuthUri): String = when {
+        parsed.issuer.isNotEmpty() && parsed.account.isNotEmpty() ->
+            "${parsed.issuer} — ${parsed.account}"
+        parsed.issuer.isNotEmpty() -> parsed.issuer
+        else -> parsed.account
     }
 
     private companion object {
