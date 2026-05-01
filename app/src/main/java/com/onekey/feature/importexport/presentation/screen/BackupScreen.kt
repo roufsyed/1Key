@@ -49,7 +49,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +57,7 @@ import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.LockAwareWindowDialog
 import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
@@ -918,7 +918,7 @@ private fun ImportPreviewDialog(
     val phase = state.toDialogPhase()
     val totalCount = preview.parsed.credentials.size
 
-    Dialog(
+    LockAwareWindowDialog(
         onDismissRequest = { if (phase == ImportDialogPhase.Preview) onCancelPreview() },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,

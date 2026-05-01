@@ -10,6 +10,7 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -188,6 +190,21 @@ fun OcrScannerSheet(
     var notesBlocks       by remember { mutableStateOf<List<String>>(emptyList()) }
     var pendingBlock      by remember { mutableStateOf<String?>(null) }
 
+    /**
+     * True when the user has assigned at least one captured text block to a
+     * field. Drives the discard guard on every dismiss path so a stray swipe
+     * doesn't throw away the work the user did selecting blocks.
+     *
+     * State checks (`Selecting`) aren't part of this — the assignments live
+     * across state transitions (e.g. Retake clears them, NoText shouldn't
+     * have any). We rely directly on the assignment containers.
+     */
+    val hasChanges by remember {
+        derivedStateOf { singleAssignments.isNotEmpty() || notesBlocks.isNotEmpty() }
+    }
+
+    var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
+
     // ── Capture + OCR (all callbacks on main thread) ───────────────────────
     fun captureAndProcess() {
         val capture = imageCaptureRef.value ?: return
@@ -227,10 +244,39 @@ fun OcrScannerSheet(
         )
     }
 
+    // ── Dismiss guard ──────────────────────────────────────────────────────
+    // Block hide-attempts (swipe-down, scrim tap, system back) when the user
+    // has accumulated assignments; surface the discard dialog instead. The
+    // success path through the "Done" button calls `onResult` then `onDismiss`
+    // which flips the parent's `showSheet` flag — that programmatic dismissal
+    // tears down without going through `confirmValueChange`, so no bypass flag
+    // is needed.
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target ->
+            if (target == SheetValue.Hidden && hasChanges) {
+                showDiscardDialog = true
+                false
+            } else {
+                true
+            }
+        },
+    )
+
+    // While the discard dialog is up, system-back should close the dialog
+    // ("Keep selecting"), not unwind into the sheet's own back-handling.
+    BackHandler(enabled = showDiscardDialog) {
+        showDiscardDialog = false
+    }
+
     // ── Sheet ──────────────────────────────────────────────────────────────
     LockAwareModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = {
+            // Only fires when `confirmValueChange` allowed the hide, which
+            // means the user has no unsaved assignments.
+            onDismiss()
+        },
+        sheetState = sheetState,
     ) {
         Column(
             modifier = Modifier
@@ -386,6 +432,38 @@ fun OcrScannerSheet(
                 pendingBlock = null
             },
             onDismiss = { pendingBlock = null },
+        )
+    }
+
+    if (showDiscardDialog) {
+        LockAwareDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Discard scanned text?") },
+            text = {
+                Text(
+                    "Your field selections will be lost. This can't be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardDialog = false
+                        // Forwarding to the parent flips its `showSheet` flag
+                        // and removes the sheet from composition without
+                        // re-entering `confirmValueChange`.
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardDialog = false }) {
+                    Text("Keep selecting")
+                }
+            },
         )
     }
 }

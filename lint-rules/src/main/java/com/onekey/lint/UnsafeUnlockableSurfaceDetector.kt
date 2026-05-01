@@ -107,13 +107,15 @@ class UnsafeUnlockableSurfaceDetector : Detector(), SourceCodeScanner {
         // Mapping from the banned function's simple name to the lock-aware
         // wrapper a developer should use instead. Centralised here so the
         // diagnostic message stays accurate as wrappers are renamed.
-        // `AlertDialog` and `Dialog` both map to `LockAwareDialog` because the
-        // Material3 alert dialog is the only dialog surface this codebase uses.
-        // `Popup` has no current wrapper — we direct the developer to apply
-        // `Modifier.lockAware()` manually if they have a legitimate need.
+        //  - `AlertDialog` → `LockAwareDialog` wraps M3's structured AlertDialog.
+        //  - `Dialog` (raw `androidx.compose.ui.window.Dialog`) → `LockAwareWindowDialog`
+        //    is a content-slot dialog used when AlertDialog's title/text/buttons
+        //    layout doesn't fit (e.g. the multi-phase import preview).
+        //  - `Popup` has no wrapper today — direct the developer to apply
+        //    `Modifier.lockAware()` to the popup's content root manually.
         private val WRAPPER_BY_NAME = mapOf(
             "AlertDialog" to "LockAwareDialog",
-            "Dialog" to "LockAwareDialog",
+            "Dialog" to "LockAwareWindowDialog",
             "ModalBottomSheet" to "LockAwareModalBottomSheet",
             "DropdownMenu" to "LockAwareDropdownMenu",
             "ExposedDropdownMenu" to "LockAwareExposedDropdownMenu",

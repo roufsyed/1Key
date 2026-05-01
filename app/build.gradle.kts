@@ -168,5 +168,7 @@ android {
         //    newer AGP that re-ships its bundled checks.
         disable.add("NullSafeMutableLiveData")
         disable.add("FrequentlyChangingValue")
+        disable.add("RememberInComposition")
+        disable.add("AutoboxingStateCreation")
     }
 }

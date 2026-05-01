@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -23,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.OtpAlgorithm
 import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
+import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareExposedDropdownMenu
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
@@ -70,9 +72,33 @@ fun ManualOtpEntrySheet(
     var algorithm by rememberSaveable { mutableStateOf(OtpAlgorithm.SHA1.name) }
     var digits by rememberSaveable { mutableIntStateOf(OtpParams.DEFAULT_DIGITS) }
     var period by rememberSaveable { mutableStateOf(OtpParams.DEFAULT_PERIOD_SECONDS.toString()) }
-    var counter by rememberSaveable { mutableStateOf("0") }
+    var counter by rememberSaveable { mutableStateOf(DEFAULT_COUNTER_TEXT) }
 
     var secretValidation by remember { mutableStateOf<OtpSecretValidator.Result?>(null) }
+
+    /**
+     * True when the form holds anything the user typed or any non-default
+     * advanced setting. Drives the "Discard 2FA entry?" guard on every dismiss
+     * path — Cancel button, swipe-to-hide, scrim tap, system back. We compare
+     * advanced fields against the literal default values rather than tracking
+     * a "has touched" flag because rememberSaveable only persists values, not
+     * touch history; equality with defaults is the source of truth that
+     * survives rotation cleanly.
+     */
+    val hasChanges by remember {
+        derivedStateOf {
+            issuer.isNotBlank() ||
+                account.isNotBlank() ||
+                secret.isNotBlank() ||
+                type != OtpType.TOTP.name ||
+                algorithm != OtpAlgorithm.SHA1.name ||
+                digits != OtpParams.DEFAULT_DIGITS ||
+                period != OtpParams.DEFAULT_PERIOD_SECONDS.toString() ||
+                counter != DEFAULT_COUNTER_TEXT
+        }
+    }
+
+    var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
 
     // Debounced validate-on-change with pasted-URI hijack. The order of operations
     // here matters: URI paste runs first and exits early, replacing every form
@@ -117,9 +143,47 @@ fun ManualOtpEntrySheet(
         advancedFieldsValid &&
         state !is ManualOtpEntryViewModel.State.Saving
 
+    /**
+     * Block hide-attempts (swipe-down, scrim tap, system back) when the form
+     * is dirty by returning `false` and surfacing the discard dialog instead.
+     * Programmatic dismissal — when [onDismiss] / [onSaved] flips the parent's
+     * `showSheet` flag — bypasses this guard entirely because the sheet is
+     * removed from composition without going through `animateToDismiss`, which
+     * is the only call site Material3 consults `confirmValueChange` from.
+     *
+     * The lambda captures the hasChanges State delegate (always-fresh) and the
+     * showDiscardDialog setter, both Compose-snapshot-safe.
+     */
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { target ->
+            if (target == SheetValue.Hidden && hasChanges) {
+                showDiscardDialog = true
+                false
+            } else {
+                true
+            }
+        },
+    )
+
+    /**
+     * System-back inside an open `ModalBottomSheet` runs through the sheet's
+     * own predictive-back handling, which calls `confirmValueChange` — so the
+     * guard above is sufficient. We still install a [BackHandler] gated on the
+     * discard dialog being open: with the dialog up, system-back should close
+     * the dialog ("Keep editing"), not unwind the discard flow.
+     */
+    BackHandler(enabled = showDiscardDialog) {
+        showDiscardDialog = false
+    }
+
     LockAwareModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        onDismissRequest = {
+            // Reached only when `confirmValueChange` allowed the hide, which
+            // means !hasChanges. Forwarding directly is safe.
+            onDismiss()
+        },
+        sheetState = sheetState,
     ) {
         Column(
             modifier = Modifier
@@ -192,7 +256,12 @@ fun ManualOtpEntrySheet(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
-                    onClick = onDismiss,
+                    // Cancel routes through the same guard as swipe / back: if
+                    // the form has unsaved input, surface the discard dialog
+                    // instead of immediately discarding.
+                    onClick = {
+                        if (hasChanges) showDiscardDialog = true else onDismiss()
+                    },
                     modifier = Modifier.weight(1f),
                 ) { Text("Cancel") }
                 Button(
@@ -227,6 +296,39 @@ fun ManualOtpEntrySheet(
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showDiscardDialog) {
+        LockAwareDialog(
+            onDismissRequest = { showDiscardDialog = false },
+            title = { Text("Discard 2FA entry?") },
+            text = {
+                Text(
+                    "What you've entered will be lost. This can't be undone.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardDialog = false
+                        // The parent will set its `showSheet` flag to false on
+                        // this callback; that removes the sheet from composition
+                        // without re-entering `confirmValueChange`, so no extra
+                        // bypass flag is needed.
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) { Text("Discard") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardDialog = false }) {
+                    Text("Keep editing")
+                }
+            },
+        )
     }
 }
 
@@ -424,3 +526,10 @@ private fun <T> EnumDropdown(
 }
 
 private const val SECRET_VALIDATION_DEBOUNCE_MILLIS = 250L
+
+/**
+ * Initial text for the HOTP counter field. Compared against `counter` to
+ * decide whether the user has touched it — kept as a constant so the
+ * `hasChanges` derivation and the field's initialiser can't drift.
+ */
+private const val DEFAULT_COUNTER_TEXT = "0"
