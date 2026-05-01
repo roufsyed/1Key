@@ -45,7 +45,8 @@ class RestoreFromRecycleBinUseCase @Inject constructor(
         password = existing.password.takeIf { it.isNotBlank() } ?: binItem.password,
         url = existing.url.takeIf { it.isNotBlank() } ?: binItem.url,
         notes = existing.notes.takeIf { it.isNotBlank() } ?: binItem.notes,
-        totpSecret = if (!existing.totpSecret.isNullOrBlank()) existing.totpSecret else binItem.totpSecret,
+        // Existing OTP enrolment wins as a unit — params are bound to their secret.
+        otpParams = existing.otpParams ?: binItem.otpParams,
         tags = if (existing.tags.isNotEmpty()) existing.tags else binItem.tags,
         customFields = if (existing.customFields.isNotEmpty()) existing.customFields else binItem.customFields,
         isFavorite = existing.isFavorite || binItem.isFavorite,

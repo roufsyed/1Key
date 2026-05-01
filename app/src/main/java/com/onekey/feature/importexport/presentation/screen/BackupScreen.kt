@@ -1845,7 +1845,7 @@ private fun PreviewCredentialCard(
                     credential.notes.take(60) + "…" else credential.notes
                 PreviewFieldRow(Icons.Default.StickyNote2, preview)
             }
-            AnimatedRow(visible = opts.totp && credential.totpSecret != null) {
+            AnimatedRow(visible = opts.totp && credential.otpParams != null) {
                 PreviewFieldRow(Icons.Default.Shield, "2FA / TOTP enabled")
             }
             AnimatedRow(visible = opts.tags && credential.tags.isNotEmpty()) {
@@ -1893,7 +1893,7 @@ private fun PreviewCredentialCard(
                 (opts.password && credential.password.isNotBlank()) ||
                 (opts.url && credential.url.isNotBlank()) ||
                 (opts.notes && credential.notes.isNotBlank()) ||
-                (opts.totp && credential.totpSecret != null) ||
+                (opts.totp && credential.otpParams != null) ||
                 (opts.tags && credential.tags.isNotEmpty()) ||
                 credential.customFields.any { it.key in opts.customFieldKeys }
             AnimatedRow(visible = !anyVisible) {

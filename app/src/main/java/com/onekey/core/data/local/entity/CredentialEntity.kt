@@ -40,6 +40,23 @@ data class CredentialEntity(
     @ColumnInfo(name = "type", defaultValue = "LOGIN") val type: String = "LOGIN",
     // Null = active. Non-null = soft-deleted at this epoch ms; auto-purged after 30 days.
     @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
+    // ── 2FA params (added in DB v9) ──────────────────────────────────────────
+    // These are *metadata* describing how to use `totpSecretEncrypted`, not secrets
+    // themselves — algorithm/period/digits/counter being plaintext doesn't help an
+    // attacker without the secret. Storing them as columns (vs. an encrypted blob)
+    // lets the DAO partition rotating-vs-HOTP entries with a WHERE clause, which is
+    // load-bearing for keeping HOTP out of the per-second recompute loop.
+    //
+    // For pre-v9 rows the DEFAULT clauses on MIGRATION_8_9 yield TOTP / SHA1 / 6 / 30 —
+    // exactly the constants the old `TotpGenerator` hard-coded, so existing entries
+    // produce bit-identical codes.
+    @ColumnInfo(name = "otp_type", defaultValue = "TOTP") val otpType: String = "TOTP",
+    @ColumnInfo(name = "totp_algorithm", defaultValue = "SHA1") val totpAlgorithm: String = "SHA1",
+    @ColumnInfo(name = "totp_digits", defaultValue = "6") val totpDigits: Int = 6,
+    @ColumnInfo(name = "totp_period", defaultValue = "30") val totpPeriod: Long = 30L,
+    // Null for non-HOTP entries; persisted counter for HOTP. Increment is a transactional
+    // DAO write (CredentialDao.atomicIncrementHotpCounter) — never mutated in memory.
+    @ColumnInfo(name = "hotp_counter") val hotpCounter: Long? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

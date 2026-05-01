@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
 import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.VaultLockedException
@@ -82,7 +83,10 @@ class QrScannerViewModel @Inject constructor(
                 password = "",
                 url = "",
                 notes = "",
-                totpSecret = params.secret,
+                // C1 keeps the QR-scan flow on default TOTP params. C3 extends
+                // OtpAuthUriParser to surface algorithm/digits/period/counter/type
+                // and replaces this with the parser-supplied OtpParams.
+                otpParams = OtpParams.defaultTotp(params.secret),
                 tags = emptyList(),
                 customFields = emptyList(),
                 isFavorite = false,

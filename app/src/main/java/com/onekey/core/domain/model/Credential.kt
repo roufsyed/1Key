@@ -10,7 +10,14 @@ data class Credential(
     val password: String,
     val url: String,
     val notes: String,
-    val totpSecret: String?,
+    /**
+     * Full one-time-password setup for this credential, or `null` if 2FA isn't enrolled.
+     * The structured shape (rather than a bare secret string) carries algorithm, digits,
+     * period, type (TOTP / HOTP / STEAM), and HOTP counter through every layer — entity
+     * mapping, generator, list partitioning, export, import. Pre-v9 entries that only
+     * had a raw secret decode as [OtpParams.defaultTotp] (SHA-1 / 6 / 30s).
+     */
+    val otpParams: OtpParams?,
     val tags: List<String>,
     val customFields: List<CustomField>,
     val isFavorite: Boolean = false,

@@ -73,7 +73,9 @@ class VaultExporterImpl @Inject constructor(
             "url" to url,
             "notes" to notes,
             "tags" to tags,
-            "totp_secret" to (totpSecret ?: ""),
+            // C1: emit raw secret only (preserves the legacy export shape). C8 upgrades
+            // this to a full `otpauth://` URI so non-default params round-trip.
+            "totp_secret" to (otpParams?.secret ?: ""),
             "custom_fields" to customFields.map { mapOf("key" to it.key, "value" to it.value, "sensitive" to it.isSensitive) },
             "created_at" to createdAt,
             "updated_at" to updatedAt,
@@ -86,7 +88,7 @@ class VaultExporterImpl @Inject constructor(
     private fun Credential.toCsvRow() = arrayOf(
         title, username, password, url, notes,
         tags.joinToString("|"),
-        totpSecret ?: "",
+        otpParams?.secret ?: "",
         createdAt.toString(),
         updatedAt.toString(),
     )

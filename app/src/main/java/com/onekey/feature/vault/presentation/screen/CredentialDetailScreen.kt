@@ -48,6 +48,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.CustomField
+import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
@@ -309,8 +310,12 @@ private fun CredentialViewContent(
                     DetailField("Notes", credential.notes)
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
-                if (credential.totpSecret != null && credential.type != CredentialType.BANK_ACCOUNT) {
-                    TotpWidget(secret = credential.totpSecret)
+                // TotpWidget consumes the raw secret today (defaults SHA1/30s/6).
+                // C2 expands TotpWidget to take full OtpParams so HOTP / Steam / advanced
+                // TOTP entries render correctly. C1 just drops the secret from the new
+                // structured field.
+                credential.otpParams?.takeIf { credential.type != CredentialType.BANK_ACCOUNT }?.let { params ->
+                    TotpWidget(secret = params.secret)
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
@@ -564,7 +569,14 @@ private fun CredentialEditContent(
     var password by rememberSaveable(credential.id) { mutableStateOf(credential.password) }
     var url by rememberSaveable(credential.id) { mutableStateOf(credential.url) }
     var notes by rememberSaveable(credential.id) { mutableStateOf(credential.notes) }
-    var totpSecret by rememberSaveable(credential.id) { mutableStateOf(credential.totpSecret ?: "") }
+    // The editor's secret text-field reads/writes only the secret string. Algorithm /
+    // digits / period / type stay at the entry's current values (or default TOTP for
+    // new credentials). Power users use the dedicated 2FA list's manual-entry sheet
+    // (added in C7) to set advanced params; that flow is the single supported path
+    // for non-default OTP setup.
+    var totpSecret by rememberSaveable(credential.id) {
+        mutableStateOf(credential.otpParams?.secret ?: "")
+    }
     var selectedTags by remember(credential.id) { mutableStateOf(credential.tags) }
     var customFields by remember(credential.id) { mutableStateOf(credential.customFields) }
     // Stable per-field ids so add/remove keeps each row's slot identity bound to *its*
@@ -605,7 +617,7 @@ private fun CredentialEditContent(
             password != credential.password ||
             url.trim() != credential.url ||
             notes.trim() != credential.notes ||
-            totpSecret.trim() != (credential.totpSecret ?: "") ||
+            totpSecret.trim() != (credential.otpParams?.secret ?: "") ||
             selectedTags != credential.tags ||
             customFields != credential.customFields
         }
@@ -614,6 +626,18 @@ private fun CredentialEditContent(
 
     BackHandler(enabled = hasUnsavedChanges) {
         showDiscardDialog = true
+    }
+
+    /**
+     * Builds the saveable OTP params from the editor's text field. Empty input clears
+     * the enrolment. Non-empty input preserves the credential's existing algorithm /
+     * digits / period / type / counter when present (so editing a Steam or HOTP entry's
+     * secret doesn't silently downgrade it to default TOTP), and falls back to default
+     * TOTP for a fresh enrolment.
+     */
+    fun buildOtpParamsForSave(): OtpParams? {
+        val trimmed = totpSecret.trim().takeIf { it.isNotEmpty() } ?: return null
+        return credential.otpParams?.copy(secret = trimmed) ?: OtpParams.defaultTotp(trimmed)
     }
 
     Scaffold(
@@ -634,7 +658,7 @@ private fun CredentialEditContent(
                                 password = password,
                                 url = url.trim(),
                                 notes = notes.trim(),
-                                totpSecret = totpSecret.trim().takeIf { it.isNotEmpty() },
+                                otpParams = buildOtpParamsForSave(),
                                 tags = selectedTags,
                                 customFields = customFields,
                             ))
@@ -935,7 +959,7 @@ private fun CredentialEditContent(
                             password = password,
                             url = url.trim(),
                             notes = notes.trim(),
-                            totpSecret = totpSecret.trim().takeIf { it.isNotEmpty() },
+                            otpParams = buildOtpParamsForSave(),
                             tags = selectedTags,
                             customFields = customFields,
                         ))

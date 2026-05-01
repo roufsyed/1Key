@@ -103,6 +103,25 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
+// Adds 2FA params columns: otp_type, algorithm, digits, period, hotp_counter. Each
+// non-null column ships a DEFAULT matching the constants the previous TotpGenerator
+// hard-coded (TOTP / SHA1 / 6 digits / 30s) so pre-v9 entries decode bit-identically.
+// hotp_counter stays nullable — only HOTP entries populate it.
+//
+// This unlocks Option C (full RFC 6238 + HOTP + Steam Guard). Storing as plaintext
+// columns instead of an encrypted JSON blob is deliberate: these are metadata, not
+// secrets, and the DAO needs to filter on otp_type at the SQL layer to keep HOTP
+// entries out of the per-second TOTP recompute loop.
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN otp_type TEXT NOT NULL DEFAULT 'TOTP'")
+        db.execSQL("ALTER TABLE credentials ADD COLUMN totp_algorithm TEXT NOT NULL DEFAULT 'SHA1'")
+        db.execSQL("ALTER TABLE credentials ADD COLUMN totp_digits INTEGER NOT NULL DEFAULT 6")
+        db.execSQL("ALTER TABLE credentials ADD COLUMN totp_period INTEGER NOT NULL DEFAULT 30")
+        db.execSQL("ALTER TABLE credentials ADD COLUMN hotp_counter INTEGER")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -119,7 +138,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

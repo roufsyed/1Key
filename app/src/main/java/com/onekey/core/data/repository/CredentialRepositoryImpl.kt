@@ -253,7 +253,7 @@ class CredentialRepositoryImpl @Inject constructor(
         password = "",
         url = "",
         notes = "",
-        totpSecret = null,
+        otpParams = null,
         tags = entity.tags,
         customFields = emptyList(),
         isFavorite = entity.isFavorite,
@@ -274,9 +274,7 @@ class CredentialRepositoryImpl @Inject constructor(
                 crypto.decryptString(EncryptedData(urlEncrypted, ivUrl), key)
             else url,
             notes = crypto.decryptString(EncryptedData(notesEncrypted, ivNotes), key),
-            totpSecret = if (totpSecretEncrypted != null && ivTotp != null)
-                crypto.decryptString(EncryptedData(totpSecretEncrypted, ivTotp), key)
-            else null,
+            otpParams = decryptOtpParams(key),
             tags = tags,
             customFields = customFields.map { cf ->
                 CustomField(
@@ -295,13 +293,40 @@ class CredentialRepositoryImpl @Inject constructor(
         )
     }
 
+    /**
+     * Build an [OtpParams] from this entity's persisted columns, or null when no
+     * 2FA secret is enrolled. Unknown enum strings (e.g. an `otp_type` written by a
+     * future schema and read back after a downgrade) collapse to TOTP / SHA-1 via
+     * [OtpType.fromNameOrDefault] / [OtpAlgorithm.fromNameOrDefault] so the read
+     * path never throws — the worst case is a code the user re-enrolls, never a
+     * crash. Out-of-range digits or non-positive period from a corrupt row also
+     * fall back to defaults rather than failing OtpParams.init's `require()` and
+     * killing the entire flow emission.
+     */
+    private fun CredentialEntity.decryptOtpParams(key: javax.crypto.SecretKey): OtpParams? {
+        if (totpSecretEncrypted == null || ivTotp == null) return null
+        val secret = crypto.decryptString(EncryptedData(totpSecretEncrypted, ivTotp), key)
+        val safeDigits = totpDigits.takeIf { it in OtpParams.MIN_DIGITS..OtpParams.MAX_DIGITS }
+            ?: OtpParams.DEFAULT_DIGITS
+        val safePeriod = totpPeriod.takeIf { it > 0L } ?: OtpParams.DEFAULT_PERIOD_SECONDS
+        val type = OtpType.fromNameOrDefault(otpType)
+        return OtpParams(
+            type = type,
+            secret = secret,
+            algorithm = OtpAlgorithm.fromNameOrDefault(totpAlgorithm),
+            digits = safeDigits,
+            period = safePeriod,
+            counter = if (type == OtpType.HOTP) hotpCounter?.coerceAtLeast(0L) ?: 0L else 0L,
+        )
+    }
+
     private fun Credential.toEntity(): CredentialEntity {
         val key = keyHolder.requireKey()
         val now = System.currentTimeMillis()
         val encUsername = crypto.encryptString(username, key)
         val encPassword = crypto.encryptString(password, key)
         val encNotes = crypto.encryptString(notes, key)
-        val encTotp = totpSecret?.let { crypto.encryptString(it, key) }
+        val encTotp = otpParams?.let { crypto.encryptString(it.secret, key) }
         val encUrl = crypto.encryptString(url, key)
 
         return CredentialEntity(
@@ -336,6 +361,15 @@ class CredentialRepositoryImpl @Inject constructor(
             updatedAt = now,
             type = type.name,
             deletedAt = deletedAt,
+            // OTP metadata only carries meaning when a secret is enrolled. When
+            // otpParams is null we still write the column DEFAULTs (TOTP/SHA1/6/30)
+            // so the row stays well-formed; nothing reads them while the secret
+            // column is null.
+            otpType = (otpParams?.type ?: OtpType.TOTP).name,
+            totpAlgorithm = (otpParams?.algorithm ?: OtpAlgorithm.SHA1).name,
+            totpDigits = otpParams?.digits ?: OtpParams.DEFAULT_DIGITS,
+            totpPeriod = otpParams?.period ?: OtpParams.DEFAULT_PERIOD_SECONDS,
+            hotpCounter = if (otpParams?.type == OtpType.HOTP) otpParams.counter else null,
         )
     }
 }

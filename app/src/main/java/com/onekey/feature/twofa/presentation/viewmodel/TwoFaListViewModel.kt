@@ -23,8 +23,8 @@ data class TotpEntry(
     val remainingSeconds: Int,
     val progress: Float,
 ) {
-    // True when the credential contains data beyond the TOTP secret itself.
-    // Deleting from the 2FA screen should only clear totpSecret in this case.
+    // True when the credential carries data beyond the OTP enrolment itself.
+    // Deleting from the 2FA screen should only clear otpParams in this case.
     val isLinkedCredential: Boolean =
         credential.password.isNotEmpty()
             || credential.notes.isNotEmpty()
@@ -52,7 +52,7 @@ class TwoFaListViewModel @Inject constructor(
         .transformLatest { credentials ->
             while (true) {
                 emit(credentials.mapNotNull { cred ->
-                    val secret = cred.totpSecret ?: return@mapNotNull null
+                    val secret = cred.otpParams?.secret ?: return@mapNotNull null
                     runCatching { totpGenerator.generate(secret) }.getOrNull()?.let { result ->
                         TotpEntry(cred, result.code, result.remainingSeconds, result.progress)
                     }
@@ -71,7 +71,7 @@ class TwoFaListViewModel @Inject constructor(
     fun removeTotp(entry: TotpEntry) {
         viewModelScope.launch {
             if (entry.isLinkedCredential) {
-                saveCredential(entry.credential.copy(totpSecret = null))
+                saveCredential(entry.credential.copy(otpParams = null))
             } else {
                 deleteCredential(entry.credential.id)
             }

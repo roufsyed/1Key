@@ -246,7 +246,7 @@ class CredentialDetailViewModel @Inject constructor(
 
     private fun emptyCredential() = Credential(
         id = "", title = "", username = "", password = "", url = "",
-        notes = "", totpSecret = null,
+        notes = "", otpParams = null,
         tags = if (initialTag.isNotEmpty()) listOf(initialTag) else emptyList(),
         customFields = emptyList(), createdAt = 0L, updatedAt = 0L,
         type = initialType,

@@ -7,6 +7,7 @@ import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.CustomField
+import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.security.CryptoManager
@@ -96,7 +97,12 @@ class VaultImporterImpl @Inject constructor(
                         password = map["password"] as? String ?: "",
                         url = map["url"] as? String ?: "",
                         notes = map["notes"] as? String ?: "",
-                        totpSecret = (map["totp_secret"] as? String)?.takeIf { it.isNotBlank() },
+                        // C1 keeps imports on default TOTP params (legacy export shape:
+                        // raw base32 in `totp_secret`). C8 upgrades the importer to
+                        // detect `otpauth://` URIs and surface algorithm/digits/period.
+                        otpParams = (map["totp_secret"] as? String)
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { OtpParams.defaultTotp(it) },
                         tags = (map["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                         isFavorite = (map["is_favorite"] as? Boolean)
                             ?: (map["favorite"] as? Boolean) ?: false,
@@ -179,7 +185,9 @@ class VaultImporterImpl @Inject constructor(
                             password = col["password"] ?: "",
                             url = col["url"] ?: "",
                             notes = col["notes"] ?: "",
-                            totpSecret = col["totp_secret"]?.takeIf { it.isNotBlank() },
+                            otpParams = col["totp_secret"]
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let { OtpParams.defaultTotp(it) },
                             tags = col["tags"]?.split("|")?.filter { it.isNotBlank() } ?: emptyList(),
                             isFavorite = col["favorite"]?.lowercase() in TRUTHY_VALUES,
                             customFields = customFields,

@@ -13,6 +13,7 @@ import com.onekey.core.data.local.database.MIGRATION_4_5
 import com.onekey.core.data.local.database.MIGRATION_5_6
 import com.onekey.core.data.local.database.MIGRATION_6_7
 import com.onekey.core.data.local.database.MIGRATION_7_8
+import com.onekey.core.data.local.database.MIGRATION_8_9
 import com.onekey.core.data.local.database.OneKeyDatabase
 import dagger.Module
 import dagger.Provides
@@ -36,7 +37,16 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): OneKeyDatabase =
         Room.databaseBuilder(context, OneKeyDatabase::class.java, "onekey.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7,
+                MIGRATION_7_8,
+                MIGRATION_8_9,
+            )
             .addCallback(DATABASE_CALLBACK)
             // Deliberately NOT calling fallbackToDestructiveMigration(): for a password
             // manager, silently wiping the user's encrypted vault on a schema slip is the

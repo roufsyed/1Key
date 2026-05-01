@@ -171,7 +171,7 @@ class ImportVaultUseCase @Inject constructor(
         password = if (opts.password) password else "",
         url = if (opts.url) url else "",
         notes = if (opts.notes) notes else "",
-        totpSecret = if (opts.totp) totpSecret else null,
+        otpParams = if (opts.totp) otpParams else null,
         tags = if (opts.tags) tags else emptyList(),
         customFields = customFields.filter { it.key in opts.customFieldKeys },
         isFavorite = if (opts.isFavorite) isFavorite else false,
@@ -189,7 +189,7 @@ class ImportVaultUseCase @Inject constructor(
         if (clashesString(existing.password, incoming.password)) clashes.add("password")
         if (clashesString(existing.url, incoming.url)) clashes.add("url")
         if (clashesString(existing.notes, incoming.notes)) clashes.add("notes")
-        if (clashesNullableString(existing.totpSecret, incoming.totpSecret)) clashes.add("2FA secret")
+        if (clashesNullableString(existing.otpParams?.secret, incoming.otpParams?.secret)) clashes.add("2FA secret")
         if (clashesList(existing.tags, incoming.tags)) clashes.add("tags")
         if (clashesCustomFields(existing.customFields, incoming.customFields)) clashes.add("custom fields")
         return clashes
@@ -224,7 +224,10 @@ class ImportVaultUseCase @Inject constructor(
         password = existing.password.takeIf { it.isNotBlank() } ?: incoming.password,
         url = existing.url.takeIf { it.isNotBlank() } ?: incoming.url,
         notes = existing.notes.takeIf { it.isNotBlank() } ?: incoming.notes,
-        totpSecret = if (!existing.totpSecret.isNullOrBlank()) existing.totpSecret else incoming.totpSecret,
+        // Existing OTP enrolment wins as a unit — algorithm/digits/period/counter
+        // are tied to the secret, so we never mix one credential's secret with
+        // another's params.
+        otpParams = existing.otpParams ?: incoming.otpParams,
         tags = if (existing.tags.isNotEmpty()) existing.tags else incoming.tags,
         customFields = if (existing.customFields.isNotEmpty()) existing.customFields else incoming.customFields,
         isFavorite = existing.isFavorite || incoming.isFavorite,
