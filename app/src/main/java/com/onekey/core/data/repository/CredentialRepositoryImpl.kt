@@ -207,11 +207,22 @@ class CredentialRepositoryImpl @Inject constructor(
         CredentialSortOrder.ALPHABETICAL -> "lower(title) ASC"
     }
 
-    override fun observeWithTotp(): Flow<List<Credential>> =
+    override fun observeRotatingOtp(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeWithTotp().map { list -> list.toDomainListSafe() }
+            else dao.observeRotatingOtp().map { list -> list.toDomainListSafe() }
         }.flowOn(Dispatchers.Default)
+
+    override fun observeHotpEntries(): Flow<List<Credential>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeHotpEntries().map { list -> list.toDomainListSafe() }
+        }.flowOn(Dispatchers.Default)
+
+    override suspend fun incrementHotpCounter(credentialId: String): AppResult<Long?> =
+        runCatchingResult {
+            dao.atomicIncrementHotpCounter(credentialId, System.currentTimeMillis())
+        }
 
     override suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit> =
         runCatchingResult { dao.setFavorite(id, isFavorite) }

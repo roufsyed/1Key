@@ -45,7 +45,33 @@ interface CredentialRepository {
     fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>>
     fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
     fun observeFavoriteTitlesAlphabetical(): Flow<List<String>>
-    fun observeWithTotp(): Flow<List<Credential>>
+    /**
+     * Time-based OTP enrolments (TOTP, Steam Guard) — anything that rotates on a
+     * clock. Drives the per-second recompute loop in TwoFaListViewModel.
+     */
+    fun observeRotatingOtp(): Flow<List<Credential>>
+
+    /**
+     * Counter-based OTP enrolments (HOTP). Static list — only re-emits when a
+     * row's counter changes or the entry is added/removed/edited. Combined with
+     * [observeRotatingOtp] for the unified 2FA list display.
+     */
+    fun observeHotpEntries(): Flow<List<Credential>>
+
+    /**
+     * Atomically advance the HOTP counter for [credentialId]. Returns the counter
+     * value to use for the *current* code generation; the row is persisted at
+     * (returned + 1) for the next tap. See
+     * [com.onekey.core.data.local.dao.CredentialDao.atomicIncrementHotpCounter] for
+     * the atomicity contract.
+     *
+     * Returns [AppResult.Error] for IO/transaction failures and [AppResult.Success]
+     * with `null` data when the credential isn't a HOTP entry (or has been deleted
+     * since the user observed it). Callers should treat the null-data case as a
+     * no-op rather than synthesising a counter.
+     */
+    suspend fun incrementHotpCounter(credentialId: String): AppResult<Long?>
+
     suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit>
     suspend fun deleteAllCredentials(): AppResult<Unit>
 }

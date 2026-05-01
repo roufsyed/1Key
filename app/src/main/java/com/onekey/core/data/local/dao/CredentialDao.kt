@@ -80,8 +80,67 @@ interface CredentialDao {
     @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY updated_at DESC")
     fun favoritesPagingSource(): PagingSource<Int, CredentialEntity>
 
-    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND totp_secret_encrypted IS NOT NULL ORDER BY title ASC")
-    fun observeWithTotp(): Flow<List<CredentialEntity>>
+    /**
+     * Time-based OTP entries (TOTP, Steam Guard) — anything that rotates on a clock.
+     * Drives the per-second recompute loop in TwoFaListViewModel. Excluding HOTP
+     * here is load-bearing: HOTP codes only advance on explicit user tap; including
+     * them in the recompute loop would silently regenerate codes every second
+     * without persisting the counter, desyncing the user from the issuer.
+     */
+    @Query(
+        """SELECT * FROM credentials
+           WHERE deleted_at IS NULL
+             AND totp_secret_encrypted IS NOT NULL
+             AND otp_type IN ('TOTP', 'STEAM')
+           ORDER BY title ASC"""
+    )
+    fun observeRotatingOtp(): Flow<List<CredentialEntity>>
+
+    /**
+     * Counter-based OTP entries (HOTP). Static list — only re-emits when a row's
+     * counter is incremented or the entry itself is added/removed/edited. The 2FA
+     * list combines this with [observeRotatingOtp] for display, with HOTP rows
+     * showing a "Generate next code" button instead of a countdown ring.
+     */
+    @Query(
+        """SELECT * FROM credentials
+           WHERE deleted_at IS NULL
+             AND totp_secret_encrypted IS NOT NULL
+             AND otp_type = 'HOTP'
+           ORDER BY title ASC"""
+    )
+    fun observeHotpEntries(): Flow<List<CredentialEntity>>
+
+    /**
+     * Atomically advance the HOTP counter for [id] by one. Returns the counter value
+     * the caller should use for THIS code generation; the row is persisted at
+     * `returned + 1` so the next tap derives the next code without re-reading.
+     *
+     * Why pre-increment-and-return: the persisted counter convention here is "value
+     * to use for the next generation" — matching what `otpauth://hotp/?counter=0`
+     * URIs encode (counter=0 → first code uses 0, then the entry advances to 1).
+     *
+     * Atomicity matters because two concurrent taps must produce two distinct codes,
+     * not the same code twice. The `@Transaction` wrapping the read+update keeps it
+     * in a single SQLite transaction, and Room serialises write-side coroutines so
+     * two callers can't interleave against the same row.
+     *
+     * Returns null when no row matches [id] (deleted between observation and tap)
+     * or the row's counter is null (the entry isn't a HOTP entry). Caller treats
+     * null as a no-op rather than guessing.
+     */
+    @Transaction
+    suspend fun atomicIncrementHotpCounter(id: String, now: Long): Long? {
+        val current = getHotpCounter(id) ?: return null
+        setHotpCounter(id, current + 1, now)
+        return current
+    }
+
+    @Query("SELECT hotp_counter FROM credentials WHERE id = :id AND deleted_at IS NULL")
+    suspend fun getHotpCounter(id: String): Long?
+
+    @Query("UPDATE credentials SET hotp_counter = :counter, updated_at = :now WHERE id = :id")
+    suspend fun setHotpCounter(id: String, counter: Long, now: Long)
 
     @Query("UPDATE credentials SET is_favorite = :isFavorite WHERE id = :id")
     suspend fun setFavorite(id: String, isFavorite: Boolean)

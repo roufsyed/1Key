@@ -2,14 +2,15 @@ package com.onekey.feature.twofa.presentation.screen
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,7 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.onekey.feature.twofa.presentation.viewmodel.TotpEntry
+import com.onekey.feature.twofa.presentation.viewmodel.HotpListEntry
+import com.onekey.feature.twofa.presentation.viewmodel.RotatingOtpEntry
+import com.onekey.feature.twofa.presentation.viewmodel.TwoFaListEntry
 import com.onekey.feature.twofa.presentation.viewmodel.TwoFaListViewModel
 import kotlinx.coroutines.launch
 
@@ -37,7 +40,7 @@ fun TwoFaListScreen(
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    // Store the credential id (saveable) rather than the full TotpEntry so the
+    // Store the credential id (saveable) rather than the full entry so the
     // confirm-delete dialog survives rotation. The matching entry is resolved from the
     // current `entriesList` at render time — if the entry has since disappeared, the
     // dialog simply doesn't show, which is the correct behavior.
@@ -110,23 +113,32 @@ fun TwoFaListScreen(
                 contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
             ) {
                 items(entriesList, key = { it.credential.id }) { entry ->
-                    TotpEntryRow(
-                        entry = entry,
-                        onLongClick = { pendingDeleteCredentialId = entry.credential.id },
-                        onCopyCode = { code ->
-                            // Routes through SecureClipboardManager — its app-singleton
-                            // scope makes the 30s clear survive navigation away from this
-                            // screen, which is exactly when the user needs it (they
-                            // copy the code, then switch apps to paste it).
-                            viewModel.copyCode(code)
-                            scope.launch {
-                                snackbarHostState.showSnackbar(
-                                    message = "Code copied — clipboard will be cleared automatically in 30s",
-                                    duration = SnackbarDuration.Short,
-                                )
-                            }
-                        },
-                    )
+                    val onCopy: (String) -> Unit = { code ->
+                        // Routes through SecureClipboardManager — its app-singleton
+                        // scope makes the 30s clear survive navigation away from this
+                        // screen, which is exactly when the user needs it (they
+                        // copy the code, then switch apps to paste it).
+                        viewModel.copyCode(code)
+                        scope.launch {
+                            snackbarHostState.showSnackbar(
+                                message = "Code copied — clipboard will be cleared automatically in 30s",
+                                duration = SnackbarDuration.Short,
+                            )
+                        }
+                    }
+                    when (entry) {
+                        is RotatingOtpEntry -> RotatingOtpRow(
+                            entry = entry,
+                            onLongClick = { pendingDeleteCredentialId = entry.credential.id },
+                            onCopyCode = onCopy,
+                        )
+                        is HotpListEntry -> HotpRow(
+                            entry = entry,
+                            onLongClick = { pendingDeleteCredentialId = entry.credential.id },
+                            onGenerate = { viewModel.generateNextHotpCode(entry) },
+                            onCopyCode = onCopy,
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
             }
@@ -172,12 +184,12 @@ fun TwoFaListScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TotpEntryRow(
-    entry: TotpEntry,
+private fun RotatingOtpRow(
+    entry: RotatingOtpEntry,
     onLongClick: () -> Unit,
     onCopyCode: (String) -> Unit,
 ) {
-    // Flat clickable row to match the home / all-items list language. The TOTP code stays
+    // Flat clickable row to match the home / all-items list language. The OTP code stays
     // the visual hero — same monospace + countdown ring, just without card chrome.
     Column(
         modifier = Modifier
@@ -185,34 +197,7 @@ private fun TotpEntryRow(
             .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        Text(entry.credential.title, style = MaterialTheme.typography.titleMedium)
-        if (entry.credential.username.isNotEmpty()) {
-            Text(
-                entry.credential.username,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (entry.isLinkedCredential) {
-            val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
-            Spacer(Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Icon(
-                    Icons.Default.Lock,
-                    contentDescription = null,
-                    modifier = Modifier.size(11.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    categoryLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
+        EntryHeader(entry)
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -236,6 +221,106 @@ private fun TotpEntryRow(
                 )
                 Text("${entry.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
             }
+        }
+    }
+}
+
+/**
+ * HOTP row variant. Mirrors [RotatingOtpRow]'s visual rhythm — same title /
+ * username / linked-badge header — but trades the timer ring for a
+ * "Generate next code" affordance. The body shows the most-recently-generated
+ * code or a placeholder dash sequence until the user taps generate.
+ *
+ * Tapping the entire row (anywhere outside the button) copies the last code, the
+ * same gesture rotating rows use. Tapping the button triggers the atomic counter
+ * advance via the VM. Long-press still routes to the delete dialog.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HotpRow(
+    entry: HotpListEntry,
+    onLongClick: () -> Unit,
+    onGenerate: () -> Unit,
+    onCopyCode: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                // Row-tap copies the last generated code; if no code exists yet we
+                // bounce the tap to the generate flow so the row isn't dead.
+                onClick = {
+                    val code = entry.code
+                    if (code != null) onCopyCode(code) else onGenerate()
+                },
+                onLongClick = onLongClick,
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        EntryHeader(entry)
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = entry.code?.chunked(3)?.joinToString(" ") ?: "— — —",
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 32.sp,
+                    letterSpacing = 4.sp,
+                ),
+                color = if (entry.code != null) MaterialTheme.colorScheme.onSurface
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            FilledIconButton(
+                onClick = onGenerate,
+                enabled = !entry.generating,
+                modifier = Modifier.size(44.dp),
+            ) {
+                if (entry.generating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Generate next code",
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntryHeader(entry: TwoFaListEntry) {
+    Text(entry.credential.title, style = MaterialTheme.typography.titleMedium)
+    if (entry.credential.username.isNotEmpty()) {
+        Text(
+            entry.credential.username,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (entry.isLinkedCredential) {
+        val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
+        Spacer(Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                Icons.Default.Lock,
+                contentDescription = null,
+                modifier = Modifier.size(11.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                categoryLabel,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
