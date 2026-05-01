@@ -7,6 +7,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.security.CryptoManager
+import com.onekey.feature.twofa.domain.OtpAuthUriBuilder
 import java.io.File
 import java.io.FileWriter
 import java.io.StringWriter
@@ -63,6 +64,19 @@ class VaultExporterImpl @Inject constructor(
         }
     }
 
+    /**
+     * Encode a credential's OTP enrolment as a string fit for the `totp_secret`
+     * export column. The shape is `otpauth://...?...` for any enrolled entry —
+     * the spec format Aegis / 2FAS / Bitwarden / 1Password understand on import,
+     * carrying every field needed to reproduce codes (algorithm, digits, period,
+     * counter, type). Empty string when there's no OTP, matching the prior
+     * convention so consumers that grep `totp_secret == ""` still work.
+     */
+    private fun Credential.exportableOtp(): String =
+        otpParams?.let { params ->
+            OtpAuthUriBuilder.build(params, issuer = title, account = username)
+        } ?: ""
+
     private fun Credential.toDto(): Map<String, Any> {
         val base = mapOf<String, Any>(
             "id" to id,
@@ -73,9 +87,7 @@ class VaultExporterImpl @Inject constructor(
             "url" to url,
             "notes" to notes,
             "tags" to tags,
-            // C1: emit raw secret only (preserves the legacy export shape). C8 upgrades
-            // this to a full `otpauth://` URI so non-default params round-trip.
-            "totp_secret" to (otpParams?.secret ?: ""),
+            "totp_secret" to exportableOtp(),
             "custom_fields" to customFields.map { mapOf("key" to it.key, "value" to it.value, "sensitive" to it.isSensitive) },
             "created_at" to createdAt,
             "updated_at" to updatedAt,
@@ -88,7 +100,7 @@ class VaultExporterImpl @Inject constructor(
     private fun Credential.toCsvRow() = arrayOf(
         title, username, password, url, notes,
         tags.joinToString("|"),
-        otpParams?.secret ?: "",
+        exportableOtp(),
         createdAt.toString(),
         updatedAt.toString(),
     )

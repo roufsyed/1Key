@@ -11,6 +11,7 @@ import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.security.CryptoManager
+import com.onekey.feature.twofa.domain.OtpAuthUriParser
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileReader
@@ -97,12 +98,7 @@ class VaultImporterImpl @Inject constructor(
                         password = map["password"] as? String ?: "",
                         url = map["url"] as? String ?: "",
                         notes = map["notes"] as? String ?: "",
-                        // C1 keeps imports on default TOTP params (legacy export shape:
-                        // raw base32 in `totp_secret`). C8 upgrades the importer to
-                        // detect `otpauth://` URIs and surface algorithm/digits/period.
-                        otpParams = (map["totp_secret"] as? String)
-                            ?.takeIf { it.isNotBlank() }
-                            ?.let { OtpParams.defaultTotp(it) },
+                        otpParams = parseImportedOtp(map["totp_secret"] as? String),
                         tags = (map["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                         isFavorite = (map["is_favorite"] as? Boolean)
                             ?: (map["favorite"] as? Boolean) ?: false,
@@ -185,9 +181,7 @@ class VaultImporterImpl @Inject constructor(
                             password = col["password"] ?: "",
                             url = col["url"] ?: "",
                             notes = col["notes"] ?: "",
-                            otpParams = col["totp_secret"]
-                                ?.takeIf { it.isNotBlank() }
-                                ?.let { OtpParams.defaultTotp(it) },
+                            otpParams = parseImportedOtp(col["totp_secret"]),
                             tags = col["tags"]?.split("|")?.filter { it.isNotBlank() } ?: emptyList(),
                             isFavorite = col["favorite"]?.lowercase() in TRUTHY_VALUES,
                             customFields = customFields,
@@ -204,7 +198,34 @@ class VaultImporterImpl @Inject constructor(
         return ParsedImport(credentials, failed)
     }
 
+    /**
+     * Parse the `totp_secret` import column into [OtpParams]. Two shapes are
+     * accepted to round-trip exports from this app and from third-party tools:
+     *
+     * - `otpauth://...` URI — extended exports (post-C8) and Aegis / 2FAS / 1Password
+     *   files use this. We delegate to [OtpAuthUriParser], which carries algorithm,
+     *   digits, period, counter, and Steam auto-detection through verbatim.
+     * - Bare base32 secret — pre-C8 exports and CSV files from sources that only
+     *   store the secret. We default everything else to TOTP / SHA-1 / 6 / 30,
+     *   the same fallback the QR scanner used before C3.
+     *
+     * Blank / null collapses to no enrolment. Returning null rather than an empty
+     * [OtpParams] keeps the contract simple: `credential.otpParams != null` always
+     * means "this credential has 2FA."
+     */
+    private fun parseImportedOtp(raw: String?): OtpParams? {
+        val trimmed = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return if (trimmed.startsWith(OTPAUTH_PREFIX)) {
+            OtpAuthUriParser.parse(trimmed)?.params
+                ?: OtpParams.defaultTotp(trimmed)
+        } else {
+            OtpParams.defaultTotp(trimmed)
+        }
+    }
+
     companion object {
+        private const val OTPAUTH_PREFIX = "otpauth://"
+
         private val KNOWN_JSON_KEYS = setOf(
             "id", "title", "username", "password", "url", "notes",
             "totp_secret", "tags", "custom_fields", "created_at", "updated_at",
