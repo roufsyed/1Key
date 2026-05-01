@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "1Key"
 include(":app")
+include(":lint-rules")

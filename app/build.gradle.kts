@@ -129,6 +129,18 @@ dependencies {
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+
+    // Custom lint rules. `lintChecks` puts the rules on this module's lint
+    // classpath; AGP's lint task discovers them via the registry in the lint
+    // module's JAR manifest. The `UnsafeUnlockableSurface` rule fails the build
+    // if anyone uses raw M3 Dialog / Sheet / DropdownMenu / TextField outside
+    // `core.presentation.lockaware`, preventing future regressions of the
+    // inactivity-timer fix.
+    //
+    // `lintChecks` (not `lintPublish`) because we consume these rules ourselves;
+    // `lintPublish` bundles them for library consumers, which doesn't apply to
+    // an app module.
+    lintChecks(project(":lint-rules"))
 }
 
 // Robolectric needs Android resources on the unit-test classpath so it can
@@ -140,5 +152,21 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+    }
+
+    lint {
+        // AGP 8.7.2 + Kotlin 2.0 + Compose 1.7 trips two bundled detectors that
+        // throw IncompatibleClassChangeError because they were compiled against
+        // an older Kotlin Analysis API. Disabling them is the documented
+        // workaround upstream until AGP republishes against Kotlin 2.0.
+        //
+        //  - NullSafeMutableLiveData: NonNullableMutableLiveDataDetector. We
+        //    don't use MutableLiveData anywhere — everything is StateFlow /
+        //    SharedFlow — so the rule has nothing useful to find here.
+        //  - FrequentlyChangingValue: FrequentlyChangingValueDetector. Same
+        //    bundled-detector class loader issue. Re-enable once we're on a
+        //    newer AGP that re-ships its bundled checks.
+        disable.add("NullSafeMutableLiveData")
+        disable.add("FrequentlyChangingValue")
     }
 }
