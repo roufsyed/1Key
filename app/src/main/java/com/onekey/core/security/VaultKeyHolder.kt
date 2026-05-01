@@ -8,6 +8,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
+ * Thrown by [VaultKeyHolder.requireKey] when the in-memory key has been cleared
+ * (auto-lock fired, manual lock, vault reset). Callers that race against the
+ * lock — e.g. a save() coroutine that started while unlocked but completes
+ * after — pattern-match this type instead of the [Throwable.message] string so
+ * a future copy edit doesn't silently break the routing.
+ */
+class VaultLockedException : IllegalStateException("Vault is locked")
+
+/**
  * Holds the in-memory vault key after unlock. Never persisted to disk.
  * On lock or process death the key is zeroed and GC'd.
  */
@@ -23,7 +32,7 @@ class VaultKeyHolder @Inject constructor() {
         _isUnlocked.value = true
     }
 
-    fun requireKey(): SecretKey = checkNotNull(_key) { "Vault is locked" }
+    fun requireKey(): SecretKey = _key ?: throw VaultLockedException()
 
     fun lock() {
         // Flip the unlocked flag *before* dropping the key reference. Subscribers gated

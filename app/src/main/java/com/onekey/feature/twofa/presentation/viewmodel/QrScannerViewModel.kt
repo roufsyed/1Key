@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
+import com.onekey.core.security.AutoLockManager
+import com.onekey.core.security.VaultLockedException
 import com.onekey.feature.twofa.domain.OtpAuthParams
 import com.onekey.feature.twofa.domain.OtpAuthUriParser
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +37,16 @@ sealed class ScanEvent {
 @HiltViewModel
 class QrScannerViewModel @Inject constructor(
     private val saveCredential: SaveCredentialUseCase,
+    private val autoLockManager: AutoLockManager,
 ) : ViewModel() {
+
+    /**
+     * Suppress the inactivity auto-lock while the QR camera preview is active.
+     * Pair every call with [endCameraSession]. See
+     * [AutoLockManager.acquireInactivitySuppression] for the rationale.
+     */
+    fun beginCameraSession() = autoLockManager.acquireInactivitySuppression()
+    fun endCameraSession() = autoLockManager.releaseInactivitySuppression()
 
     private val _state = MutableStateFlow<ScanState>(ScanState.Scanning)
     val state: StateFlow<ScanState> = _state.asStateFlow()
@@ -80,8 +91,16 @@ class QrScannerViewModel @Inject constructor(
             )
             when (val result = saveCredential(credential)) {
                 is AppResult.Success -> _state.value = ScanState.Saved
-                is AppResult.Error -> _state.value =
-                    ScanState.Error(result.message ?: result.exception.message ?: "Save failed")
+                is AppResult.Error -> {
+                    if (result.exception is VaultLockedException) {
+                        // Vault auto-locked between scan and save. NavGraph routes to
+                        // LockScreen on the next recomposition; leaving state on Saving
+                        // avoids a misleading snackbar with the raw exception message.
+                        return@launch
+                    }
+                    _state.value =
+                        ScanState.Error(result.message ?: result.exception.message ?: "Save failed")
+                }
             }
         }
     }

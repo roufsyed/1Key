@@ -63,6 +63,15 @@ fun QrScannerScreen(
         if (!hasPermission) permissionLauncher.launch(android.Manifest.permission.CAMERA)
     }
 
+    // Camera previews don't surface touch events, so the inactivity auto-lock
+    // would otherwise fire mid-scan. Pair acquire/release with the screen's
+    // composition lifetime — onDispose runs on back-press, vault-lock-driven
+    // navigation, and process death equivalents in compose.
+    DisposableEffect(Unit) {
+        viewModel.beginCameraSession()
+        onDispose { viewModel.endCameraSession() }
+    }
+
     LaunchedEffect(state) {
         if (state is ScanState.Saved) onSaved()
     }

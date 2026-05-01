@@ -18,7 +18,9 @@ import com.onekey.core.domain.usecase.GetCredentialUseCase
 import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
 import com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase
 import com.onekey.core.domain.usecase.SaveCredentialUseCase
+import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.SecureClipboardManager
+import com.onekey.core.security.VaultLockedException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -45,8 +47,22 @@ class CredentialDetailViewModel @Inject constructor(
     private val historyRepository: CredentialHistoryRepository,
     private val tagRepository: TagRepository,
     private val secureClipboard: SecureClipboardManager,
+    private val autoLockManager: AutoLockManager,
     appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
+
+    /**
+     * Suppress the inactivity auto-lock while a camera-based flow (OCR scanner,
+     * 2FA QR scanner) is active. Camera previews don't generate touch events,
+     * so the idle timer would otherwise lock the vault mid-scan. Pair every
+     * call with [endCameraSession]; the underlying counter clamps at zero so
+     * an unmatched end is a no-op rather than corrupting timer state.
+     *
+     * The background timer is intentionally NOT suppressed here — turning the
+     * screen off mid-scan should still lock the vault.
+     */
+    fun beginCameraSession() = autoLockManager.acquireInactivitySuppression()
+    fun endCameraSession() = autoLockManager.releaseInactivitySuppression()
 
     val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
@@ -110,7 +126,18 @@ class CredentialDetailViewModel @Inject constructor(
             }
             when (val result = saveCredential(credential)) {
                 is AppResult.Success -> _uiState.value = CredentialDetailUiState.Saved
-                is AppResult.Error -> _uiState.value = CredentialDetailUiState.Error(result.message ?: "Save failed")
+                is AppResult.Error -> {
+                    if (result.exception is VaultLockedException) {
+                        // Vault auto-locked between editor open and Save tap. Don't surface
+                        // the cryptic "Vault is locked" message — NavGraph's
+                        // LaunchedEffect(isUnlocked) routes to LockScreen on the next
+                        // recomposition. Leaving uiState on Success(isEditing=true) means
+                        // that with restoreLastScreenOnUnlock enabled, the user lands back
+                        // on this editor with their typed values still in rememberSaveable.
+                        return@launch
+                    }
+                    _uiState.value = CredentialDetailUiState.Error(result.message ?: "Save failed")
+                }
             }
         }
     }

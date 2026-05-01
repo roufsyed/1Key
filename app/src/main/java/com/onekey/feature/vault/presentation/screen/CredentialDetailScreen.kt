@@ -149,6 +149,8 @@ fun CredentialDetailScreen(
                     availableTags = availableTags,
                     onSave = viewModel::save,
                     onAddTag = viewModel::addTag,
+                    onBeginCameraSession = viewModel::beginCameraSession,
+                    onEndCameraSession = viewModel::endCameraSession,
                     onBack = onBack,
                 )
             } else {
@@ -545,6 +547,8 @@ private fun CredentialEditContent(
     availableTags: List<Tag>,
     onSave: (Credential) -> Unit,
     onAddTag: (String) -> Unit,
+    onBeginCameraSession: () -> Unit,
+    onEndCameraSession: () -> Unit,
     onBack: () -> Unit,
 ) {
     // rememberSaveable on the simple String/Boolean fields so a config change (rotation,
@@ -578,6 +582,19 @@ private fun CredentialEditContent(
     var showPasswordGenerator by rememberSaveable { mutableStateOf(false) }
     var showTotpScanner by rememberSaveable { mutableStateOf(false) }
     var showOcrScanner by rememberSaveable { mutableStateOf(false) }
+    // Latched true once OCR successfully fills fields. Holds inactivity-suppression for
+    // the rest of the editor session — the user just spent N seconds at the camera and
+    // will spend more reading the auto-filled values; the idle timer can't tell that
+    // apart from "user walked away". Released when the editor leaves composition (save,
+    // back, or vault-lock-driven nav). Background-lock is unaffected: turning the screen
+    // off mid-review still locks the vault.
+    var ocrUsed by rememberSaveable { mutableStateOf(false) }
+    if (ocrUsed) {
+        DisposableEffect(Unit) {
+            onBeginCameraSession()
+            onDispose { onEndCameraSession() }
+        }
+    }
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
@@ -846,6 +863,14 @@ private fun CredentialEditContent(
     }
 
     if (showTotpScanner) {
+        // Suppress inactivity auto-lock for the duration the sheet is in
+        // composition. onDispose runs whether the sheet is dismissed by the
+        // user, by a successful scan, by back-navigation, or by the parent
+        // screen tearing down (e.g. config change without survival).
+        DisposableEffect(Unit) {
+            onBeginCameraSession()
+            onDispose { onEndCameraSession() }
+        }
         TotpQrScannerSheet(
             onSecretScanned = { secret -> totpSecret = secret },
             onDismiss = { showTotpScanner = false },
@@ -853,9 +878,15 @@ private fun CredentialEditContent(
     }
 
     if (showOcrScanner) {
+        DisposableEffect(Unit) {
+            onBeginCameraSession()
+            onDispose { onEndCameraSession() }
+        }
         OcrScannerSheet(
             targets = ocrTargetsFor(credential.type),
             onResult = { assignments ->
+                // Latch the post-OCR review window — see comment at `ocrUsed` declaration.
+                ocrUsed = true
                 assignments.username?.let { username = it }
                 assignments.password?.let { password = it }
                 assignments.url?.let { url = it }
