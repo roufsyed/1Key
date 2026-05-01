@@ -25,6 +25,7 @@ import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
 import com.onekey.core.presentation.lockaware.LockAwareExposedDropdownMenu
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.twofa.domain.OtpSecretValidator
 import com.onekey.feature.twofa.presentation.viewmodel.ManualOtpEntryViewModel
 import kotlinx.coroutines.delay
@@ -138,7 +139,7 @@ fun ManualOtpEntrySheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            OutlinedTextField(
+            LockAwareOutlinedTextField(
                 value = issuer,
                 onValueChange = { issuer = it },
                 label = { Text("Service") },
@@ -147,7 +148,7 @@ fun ManualOtpEntrySheet(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
             )
-            OutlinedTextField(
+            LockAwareOutlinedTextField(
                 value = account,
                 onValueChange = { account = it },
                 label = { Text("Account") },
@@ -244,7 +245,7 @@ private fun SecretField(
         else -> null
     }
     Column {
-        OutlinedTextField(
+        LockAwareOutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             label = { Text("Setup key") },
@@ -348,7 +349,7 @@ private fun AdvancedSection(
             )
 
             if (type == OtpType.TOTP) {
-                OutlinedTextField(
+                LockAwareOutlinedTextField(
                     value = period,
                     onValueChange = onPeriodChange,
                     label = { Text("Period (seconds)") },
@@ -360,7 +361,7 @@ private fun AdvancedSection(
                     modifier = Modifier.fillMaxWidth(),
                 )
             } else {
-                OutlinedTextField(
+                LockAwareOutlinedTextField(
                     value = counter,
                     onValueChange = onCounterChange,
                     label = { Text("Counter") },
@@ -395,7 +396,7 @@ private fun <T> EnumDropdown(
         expanded = expanded,
         onExpandedChange = { expanded = it },
     ) {
-        OutlinedTextField(
+        LockAwareOutlinedTextField(
             value = selectedLabel,
             onValueChange = {},
             readOnly = true,

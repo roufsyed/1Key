@@ -28,6 +28,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
+import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
 import kotlinx.coroutines.delay
 
@@ -100,7 +101,7 @@ fun VaultScreen(
                         }
                     },
                     title = {
-                        TextField(
+                        LockAwareTextField(
                             value = searchQuery,
                             onValueChange = { viewModel.setSearchQuery(it) },
                             placeholder = {

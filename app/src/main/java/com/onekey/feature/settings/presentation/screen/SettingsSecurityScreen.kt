@@ -22,6 +22,7 @@ import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
@@ -351,7 +352,7 @@ fun SettingsSecurityScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = biometricPasswordInput,
                         onValueChange = { input ->
                             biometricPasswordInput = input
@@ -566,7 +567,7 @@ fun SettingsSecurityScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = removePinPasswordInput,
                         onValueChange = { input ->
                             removePinPasswordInput = input

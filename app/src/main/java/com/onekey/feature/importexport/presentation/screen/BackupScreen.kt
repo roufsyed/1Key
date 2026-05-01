@@ -57,6 +57,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
@@ -385,7 +386,7 @@ fun BackupScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = disableEncPwdInput,
                         onValueChange = { input ->
                             disableEncPwdInput = input
@@ -455,7 +456,7 @@ fun BackupScreen(
                             "You will need the same password to restore from this file.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = exportPasswordInput,
                         onValueChange = { input ->
                             exportPasswordInput = input
@@ -583,7 +584,7 @@ fun BackupScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = importPasswordInput,
                         onValueChange = { importPasswordInput = it },
                         label = { Text("Backup password") },

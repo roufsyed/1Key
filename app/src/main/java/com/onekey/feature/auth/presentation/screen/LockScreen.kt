@@ -52,6 +52,7 @@ import com.onekey.core.presentation.animation.PremiumMorphEasing
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.core.presentation.util.rememberCanUseBiometric
 import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.core.security.LockReason
@@ -572,7 +573,7 @@ private fun PinUnlockSection(
             }
         }
         Spacer(Modifier.height(20.dp))
-        OutlinedTextField(
+        LockAwareOutlinedTextField(
             value = pin,
             onValueChange = { new ->
                 if (new.length <= 6 && new.all { it.isDigit() }) {
@@ -650,7 +651,7 @@ private fun PasswordUnlockSection(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.graphicsLayer { translationX = shakeOffset.value },
     ) {
-        OutlinedTextField(
+        LockAwareOutlinedTextField(
             value = password,
             onValueChange = { password = it },
             label = { Text("Master Password") },

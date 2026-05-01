@@ -19,6 +19,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
@@ -217,7 +218,7 @@ fun SetupPinScreen(
 
             val pinFieldEnabled = state !is AuthUiState.Loading &&
                 !(step == STEP_VERIFY_CURRENT && currentPinExhausted)
-            OutlinedTextField(
+            LockAwareOutlinedTextField(
                 value = pinForCurrentStep,
                 onValueChange = { new ->
                     if (new.length <= 6 && new.all { it.isDigit() }) {
@@ -323,7 +324,7 @@ fun SetupPinScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = forgotPinPasswordInput,
                         onValueChange = { input ->
                             forgotPinPasswordInput = input

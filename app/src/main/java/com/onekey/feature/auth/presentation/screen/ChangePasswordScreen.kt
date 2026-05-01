@@ -18,6 +18,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.auth.presentation.viewmodel.ChangePasswordUiState
 import com.onekey.feature.auth.presentation.viewmodel.ChangePasswordViewModel
 
@@ -145,7 +146,7 @@ private fun PasswordField(
     isError: Boolean = false,
     supportingText: String? = null,
 ) {
-    OutlinedTextField(
+    LockAwareOutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },

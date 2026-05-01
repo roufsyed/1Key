@@ -33,6 +33,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.twofa.domain.ParsedOtpAuthUri
 import com.onekey.feature.twofa.presentation.viewmodel.QrScannerViewModel
 import com.onekey.feature.twofa.presentation.viewmodel.ScanEvent
@@ -285,7 +286,7 @@ private fun DetectedDialog(
                 if (detected.parsed.account.isNotEmpty()) {
                     LabelValue("Account", detected.parsed.account)
                 }
-                OutlinedTextField(
+                LockAwareOutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
                     label = { Text("Title") },

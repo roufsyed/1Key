@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 
@@ -371,7 +372,7 @@ private fun CreateVaultPage(
 
         Spacer(Modifier.height(32.dp))
 
-        OutlinedTextField(
+        LockAwareOutlinedTextField(
             value = password,
             onValueChange = onPasswordChange,
             label = { Text("Master Password") },
@@ -392,7 +393,7 @@ private fun CreateVaultPage(
 
         Spacer(Modifier.height(12.dp))
 
-        OutlinedTextField(
+        LockAwareOutlinedTextField(
             value = confirmPassword,
             onValueChange = onConfirmPasswordChange,
             label = { Text("Confirm Password") },
@@ -633,7 +634,7 @@ private fun RestoreFromBackupDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                OutlinedTextField(
+                LockAwareOutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("Backup password") },

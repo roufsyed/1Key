@@ -53,6 +53,7 @@ import com.onekey.core.domain.model.OtpType
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
 import com.onekey.feature.twofa.domain.OtpAuthUriParser
@@ -682,7 +683,7 @@ private fun CredentialEditContent(
             modifier = Modifier.padding(padding).imePadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
+            LockAwareOutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
 
             // Type-aware body. NO_AUTH types (Secure Note, Credit Card, Other) drop
             // auth fields entirely and either promote notes to a primary content area
@@ -690,7 +691,7 @@ private fun CredentialEditContent(
             // fit this app's TOTP shape. Login-shaped types keep the full layout.
             when {
                 credential.type in NO_AUTH_TYPES -> {
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
                         label = {
@@ -707,7 +708,7 @@ private fun CredentialEditContent(
                     )
                 }
                 else -> {
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
                         label = { Text("Username") },
@@ -718,7 +719,7 @@ private fun CredentialEditContent(
                             }
                         },
                     )
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("Password") },
@@ -736,8 +737,8 @@ private fun CredentialEditContent(
                             }
                         }
                     )
-                    OutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
+                    LockAwareOutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
                         label = { Text("Notes") },
@@ -750,7 +751,7 @@ private fun CredentialEditContent(
                         },
                     )
                     if (credential.type != CredentialType.BANK_ACCOUNT) {
-                        OutlinedTextField(
+                        LockAwareOutlinedTextField(
                             value = totpSecret,
                             onValueChange = { totpSecret = it },
                             label = { Text("TOTP Secret (base32)") },
@@ -1271,7 +1272,7 @@ private fun TagPickerDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    OutlinedTextField(
+                    LockAwareOutlinedTextField(
                         value = customTagText,
                         onValueChange = { customTagText = it },
                         label = { Text("New category") },
@@ -1336,7 +1337,7 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
                 }
             }
 
-            OutlinedTextField(
+            LockAwareOutlinedTextField(
                 value = field.key,
                 onValueChange = { onFieldChanged(field.copy(key = it)) },
                 label = { Text("Label") },
@@ -1345,7 +1346,7 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
                 singleLine = true,
             )
 
-            OutlinedTextField(
+            LockAwareOutlinedTextField(
                 value = field.value,
                 onValueChange = { onFieldChanged(field.copy(value = it)) },
                 label = { Text("Value") },
