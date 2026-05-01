@@ -27,9 +27,9 @@ import com.onekey.feature.twofa.presentation.viewmodel.TotpViewModel
  * defensively bails on HOTP, but the caller is expected to gate on
  * `params.type in TOTP, STEAM` for clarity.
  *
- * Steam codes (5 alphanumerics) currently render through the same digit-chunk
- * formatter as TOTP, which is mildly off (`RXK BC`). C6 swaps in a Steam-aware
- * formatter that displays the 5-character code as a single block.
+ * Code formatting goes through [formatOtpCode], which renders Steam Guard's
+ * 5-character codes as a single contiguous block (`RXKBC`) and applies 4-digit
+ * grouping for 7- and 8-digit TOTP codes — keeping every OTP surface consistent.
  */
 @Composable
 fun TotpWidget(
@@ -49,7 +49,7 @@ fun TotpWidget(
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = state.code.chunked(3).joinToString(" "),
+                text = formatOtpCode(params, state.code),
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 32.sp,

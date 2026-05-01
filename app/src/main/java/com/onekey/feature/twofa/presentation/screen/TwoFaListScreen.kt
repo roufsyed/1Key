@@ -191,6 +191,10 @@ private fun RotatingOtpRow(
 ) {
     // Flat clickable row to match the home / all-items list language. The OTP code stays
     // the visual hero — same monospace + countdown ring, just without card chrome.
+    // Steam entries (5 alphanumerics) render as a single block via formatOtpCode,
+    // while 6/7/8-digit codes get the standard chunking.
+    val params = entry.credential.otpParams
+    val displayCode = if (params != null) formatOtpCode(params, entry.code) else entry.code
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -201,7 +205,7 @@ private fun RotatingOtpRow(
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = entry.code.chunked(3).joinToString(" "),
+                text = displayCode,
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 32.sp,
@@ -243,6 +247,10 @@ private fun HotpRow(
     onGenerate: () -> Unit,
     onCopyCode: (String) -> Unit,
 ) {
+    val params = entry.credential.otpParams
+    val displayCode = entry.code?.let { code ->
+        if (params != null) formatOtpCode(params, code) else code
+    } ?: "— — —"
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -261,7 +269,7 @@ private fun HotpRow(
         Spacer(Modifier.height(10.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = entry.code?.chunked(3)?.joinToString(" ") ?: "— — —",
+                text = displayCode,
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 32.sp,
