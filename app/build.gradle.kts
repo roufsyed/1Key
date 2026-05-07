@@ -26,9 +26,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            manifestPlaceholders["appName"] = "1Key"
         }
         debug {
             isDebuggable = true
+            manifestPlaceholders["appName"] = "1Key-debug"
         }
     }
 
