@@ -39,7 +39,6 @@ import com.onekey.feature.auth.presentation.screen.SetupPinScreen
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.onekey.feature.importexport.presentation.screen.BackupScreen
 import com.onekey.feature.settings.presentation.screen.ManageCategoriesScreen
-import com.onekey.feature.settings.presentation.screen.SettingsBackupScreen
 import com.onekey.feature.settings.presentation.screen.SettingsFaqScreen
 import com.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
 import com.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScreen
@@ -74,7 +73,6 @@ sealed class Screen(val route: String) {
     data object RecycleBin : Screen("recycle_bin")
     data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
-    data object SettingsBackup : Screen("settings/backup")
     data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
     data object SettingsFaq : Screen("settings/faq")
     data object ManageCategories : Screen("manage_categories")
@@ -280,7 +278,7 @@ fun OneKeyNavGraph(
                         },
                         onGeneral = { navController.navigate(Screen.SettingsGeneral.route) },
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
-                        onBackup = { navController.navigate(Screen.SettingsBackup.route) },
+                        onBackup = { navController.navigate(Screen.Backup.route) },
                         onPrivacyPolicy = { navController.navigate(Screen.SettingsPrivacyPolicy.route) },
                         onFaq = { navController.navigate(Screen.SettingsFaq.route) },
                     )
@@ -298,13 +296,6 @@ fun OneKeyNavGraph(
                         onBack = { navController.popBackStack() },
                         onSetupPin = { navController.navigate(Screen.SetupPin.route) },
                         onChangePassword = { navController.navigate(Screen.ChangePassword.route) },
-                    )
-                }
-
-                composable(Screen.SettingsBackup.route) {
-                    SettingsBackupScreen(
-                        onBack = { navController.popBackStack() },
-                        onBackup = { navController.navigate(Screen.Backup.route) },
                     )
                 }
 

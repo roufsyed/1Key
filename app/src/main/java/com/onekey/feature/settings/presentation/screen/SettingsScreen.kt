@@ -141,7 +141,7 @@ fun SettingsScreen(
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(
                         icon = Icons.Default.Backup,
-                        title = "Backup",
+                        title = "Backup & Import",
                         subtitle = "Export your vault or import from another app",
                         onClick = onBackup,
                     )
