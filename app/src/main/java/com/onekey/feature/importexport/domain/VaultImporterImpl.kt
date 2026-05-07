@@ -103,14 +103,17 @@ class VaultImporterImpl @Inject constructor(
                         isFavorite = (map["is_favorite"] as? Boolean)
                             ?: (map["favorite"] as? Boolean) ?: false,
                         customFields = allCustomFields,
-                        createdAt = (map["created_at"] as? Double)?.toLong() ?: now,
-                        updatedAt = (map["updated_at"] as? Double)?.toLong() ?: now,
+                        // Foreign exports may encode timestamps as ISO strings, RFC dates,
+                        // or epoch sec/μs/ns rather than the ms Long we write — TimestampParser
+                        // normalises every shape. Unrecognised input → fall through to `now`.
+                        createdAt = TimestampParser.parseToEpochMillis(map["created_at"]) ?: now,
+                        updatedAt = TimestampParser.parseToEpochMillis(map["updated_at"]) ?: now,
                         // Forward-compat: missing `type` (older exports, third-party files)
                         // becomes LOGIN, matching the migration default for legacy rows.
                         type = CredentialType.fromNameOrDefault(map["type"] as? String),
                         // Round-trip the recycle-bin marker so a backup→restore preserves
                         // bin state. Older exports without the field stay active (null).
-                        deletedAt = (map["deleted_at"] as? Double)?.toLong(),
+                        deletedAt = TimestampParser.parseToEpochMillis(map["deleted_at"]),
                     )
                 )
             }.onFailure { e ->
@@ -185,8 +188,8 @@ class VaultImporterImpl @Inject constructor(
                             tags = col["tags"]?.split("|")?.filter { it.isNotBlank() } ?: emptyList(),
                             isFavorite = col["favorite"]?.lowercase() in TRUTHY_VALUES,
                             customFields = customFields,
-                            createdAt = col["created_at"]?.toLongOrNull() ?: now,
-                            updatedAt = col["updated_at"]?.toLongOrNull() ?: now,
+                            createdAt = TimestampParser.parseToEpochMillis(col["created_at"]) ?: now,
+                            updatedAt = TimestampParser.parseToEpochMillis(col["updated_at"]) ?: now,
                         )
                     )
                 }.onFailure { e ->
