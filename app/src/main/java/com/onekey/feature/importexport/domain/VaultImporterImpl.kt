@@ -134,6 +134,9 @@ class VaultImporterImpl @Inject constructor(
                         // Round-trip the recycle-bin marker so a backup→restore preserves
                         // bin state. Older exports without the field stay active (null).
                         deletedAt = TimestampParser.parseToEpochMillis(normalized["deleted_at"]),
+                        // Optional — null when the source export didn't carry a
+                        // last-used timestamp (e.g. our own pre-DB-v10 backups).
+                        accessedAt = TimestampParser.parseToEpochMillis(normalized["accessed_at"]),
                     )
                 )
             }.onFailure { e ->
@@ -214,6 +217,7 @@ class VaultImporterImpl @Inject constructor(
                             customFields = customFields,
                             createdAt = TimestampParser.parseToEpochMillis(col["created_at"]) ?: now,
                             updatedAt = TimestampParser.parseToEpochMillis(col["updated_at"]) ?: now,
+                            accessedAt = TimestampParser.parseToEpochMillis(col["accessed_at"]),
                         )
                     )
                 }.onFailure { e ->
@@ -256,7 +260,7 @@ class VaultImporterImpl @Inject constructor(
         private val KNOWN_JSON_KEYS = setOf(
             "id", "title", "username", "password", "url", "notes",
             "totp_secret", "tags", "custom_fields", "created_at", "updated_at",
-            "is_favorite", "favorite", "type", "deleted_at",
+            "is_favorite", "favorite", "type", "deleted_at", "accessed_at",
         )
 
         // Foreign-tool JSON keys we translate into canonical snake_case before
@@ -267,6 +271,7 @@ class VaultImporterImpl @Inject constructor(
             // Firefox passwords export
             "timeCreated" to "created_at",
             "timePasswordChanged" to "updated_at",
+            "timeLastUsed" to "accessed_at",
             "guid" to "id",
             // Bitwarden, 1Password (newer JSON shape), generic camelCase
             "createdAt" to "created_at",
@@ -278,6 +283,10 @@ class VaultImporterImpl @Inject constructor(
             "modifiedAt" to "updated_at",
             "modifiedDate" to "updated_at",
             "lastModified" to "updated_at",
+            // Generic "last accessed / used" variants
+            "accessedAt" to "accessed_at",
+            "lastAccessed" to "accessed_at",
+            "lastUsed" to "accessed_at",
         )
 
         // Foreign-tool internal-metadata keys we silently drop instead of
@@ -309,6 +318,8 @@ class VaultImporterImpl @Inject constructor(
             "updated_at" to "updated_at", "updated" to "updated_at",
             "modified" to "updated_at", "last_modified" to "updated_at",
             "date_modified" to "updated_at",
+            "accessed_at" to "accessed_at", "last_accessed" to "accessed_at",
+            "last_used" to "accessed_at", "accessed_on" to "accessed_at",
             "id" to "id", "uuid" to "id",
             "favorite" to "favorite", "is_favorite" to "favorite", "starred" to "favorite",
             "fav" to "favorite",                                 // LastPass

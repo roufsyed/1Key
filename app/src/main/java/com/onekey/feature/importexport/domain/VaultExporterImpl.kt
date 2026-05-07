@@ -78,7 +78,7 @@ class VaultExporterImpl @Inject constructor(
         } ?: ""
 
     private fun Credential.toDto(): Map<String, Any> {
-        val base = mapOf<String, Any>(
+        var dto = mapOf<String, Any>(
             "id" to id,
             "type" to type.name,
             "title" to title,
@@ -92,9 +92,13 @@ class VaultExporterImpl @Inject constructor(
             "created_at" to createdAt,
             "updated_at" to updatedAt,
         )
-        // deletedAt only emitted for bin items so active backups stay byte-compatible
-        // with the previous format (no spurious "deleted_at": null lines everywhere).
-        return if (deletedAt != null) base + ("deleted_at" to deletedAt) else base
+        // deletedAt / accessedAt only emitted when set, so active backups stay
+        // byte-compatible with the previous format (no spurious "key": null
+        // lines everywhere) and so legacy entries that never carried an
+        // accessed_at don't suddenly start showing one in the export.
+        if (deletedAt != null) dto = dto + ("deleted_at" to deletedAt)
+        if (accessedAt != null) dto = dto + ("accessed_at" to accessedAt)
+        return dto
     }
 
     private fun Credential.toCsvRow() = arrayOf(
@@ -103,12 +107,13 @@ class VaultExporterImpl @Inject constructor(
         exportableOtp(),
         createdAt.toString(),
         updatedAt.toString(),
+        accessedAt?.toString().orEmpty(),
     )
 
     private companion object {
         val CSV_HEADERS = arrayOf(
             "title", "username", "password", "url", "notes",
-            "tags", "totp_secret", "created_at", "updated_at",
+            "tags", "totp_secret", "created_at", "updated_at", "accessed_at",
         )
     }
 }

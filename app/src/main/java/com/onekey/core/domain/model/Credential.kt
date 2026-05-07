@@ -26,6 +26,12 @@ data class Credential(
     val type: CredentialType = CredentialType.LOGIN,
     /** Null = active. Non-null = soft-deleted at this epoch ms (in the recycle bin). */
     val deletedAt: Long? = null,
+    /**
+     * "Last used / accessed" timestamp carried from the source export (e.g. Firefox's
+     * `timeLastUsed`). Null when the source didn't supply one, or for entries
+     * created in 1Key before this column existed. Not auto-updated on view.
+     */
+    val accessedAt: Long? = null,
 )
 
 @Immutable

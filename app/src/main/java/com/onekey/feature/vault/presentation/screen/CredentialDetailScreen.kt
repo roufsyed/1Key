@@ -418,6 +418,14 @@ private fun MetadataSection(credential: Credential) {
     val updatedText = remember(credential.updatedAt) {
         if (credential.updatedAt > 0L) "Modified: ${credential.updatedAt.toFormattedDateTime()}" else null
     }
+    // Only present when the source export carried a "last used" timestamp
+    // (Firefox `timeLastUsed` and friends). Hidden for entries that have
+    // never been imported with one — currently most rows in the vault.
+    val accessedText = remember(credential.accessedAt) {
+        credential.accessedAt
+            ?.takeIf { it > 0L }
+            ?.let { "Last accessed: ${it.toFormattedDateTime()}" }
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -429,6 +437,9 @@ private fun MetadataSection(credential: Credential) {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         updatedText?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        accessedText?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }

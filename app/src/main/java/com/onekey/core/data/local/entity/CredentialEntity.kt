@@ -27,6 +27,11 @@ data class CredentialEntity(
     @ColumnInfo(name = "custom_fields") val customFields: List<CustomFieldEntity>,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    // Last "used" timestamp from the source export (Firefox `timeLastUsed`,
+    // similar in others). Nullable so legacy rows that pre-date DB v10 stay
+    // null instead of being misread as "accessed at epoch 0". Not auto-updated
+    // when the user views a credential — purely import-driven for now.
+    @ColumnInfo(name = "accessed_at") val accessedAt: Long? = null,
     @ColumnInfo(name = "iv_username") val ivUsername: ByteArray,
     @ColumnInfo(name = "iv_password") val ivPassword: ByteArray,
     @ColumnInfo(name = "iv_notes") val ivNotes: ByteArray,

@@ -122,6 +122,16 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
     }
 }
 
+// Adds `accessed_at` to carry the "last used / accessed" timestamp from
+// foreign exports (Firefox's `timeLastUsed`, etc.). Nullable — no DEFAULT
+// clause — so existing rows stay null instead of being misread as "accessed
+// at epoch 0".
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN accessed_at INTEGER")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -138,7 +148,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

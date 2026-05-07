@@ -272,6 +272,7 @@ class CredentialRepositoryImpl @Inject constructor(
         updatedAt = entity.updatedAt,
         type = CredentialType.fromNameOrDefault(entity.type),
         deletedAt = entity.deletedAt,
+        accessedAt = entity.accessedAt,
     )
 
     private fun CredentialEntity.toDomain(): Credential {
@@ -301,6 +302,7 @@ class CredentialRepositoryImpl @Inject constructor(
             updatedAt = updatedAt,
             type = CredentialType.fromNameOrDefault(type),
             deletedAt = deletedAt,
+            accessedAt = accessedAt,
         )
     }
 
@@ -370,6 +372,7 @@ class CredentialRepositoryImpl @Inject constructor(
             isFavorite = isFavorite,
             createdAt = if (createdAt == 0L) now else createdAt,
             updatedAt = now,
+            accessedAt = accessedAt,
             type = type.name,
             deletedAt = deletedAt,
             // OTP metadata only carries meaning when a secret is enrolled. When
