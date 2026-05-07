@@ -81,39 +81,59 @@ class VaultImporterImpl @Inject constructor(
 
         list.forEachIndexed { index, map ->
             runCatching {
-                val knownCustomFields = parseCustomFields(map["custom_fields"])
-                val unknownCustomFields = map.entries
+                // Translate foreign-tool keys (Firefox `timeCreated`, Bitwarden
+                // `revisionDate`, generic `createdAt`, …) into our canonical
+                // snake_case names so the rest of the parser doesn't need to
+                // know about every tool's flavour. Canonical wins on collision:
+                // if a source carries both `created_at` AND `timeCreated`, we
+                // keep the explicit canonical one. Then drop known-noise keys
+                // so they don't pollute the credential's custom-fields list.
+                val normalized: MutableMap<String, Any> = map.toMutableMap()
+                for ((alias, canonical) in JSON_KEY_ALIASES) {
+                    val value = normalized.remove(alias) ?: continue
+                    normalized.putIfAbsent(canonical, value)
+                }
+                JSON_KEY_IGNORED.forEach { normalized.remove(it) }
+
+                val knownCustomFields = parseCustomFields(normalized["custom_fields"])
+                val unknownCustomFields = normalized.entries
                     .filter { (k, v) ->
                         k !in KNOWN_JSON_KEYS && (v is String || v is Number || v is Boolean)
                     }
-                    .map { (k, v) -> CustomField(key = k, value = v.toString(), isSensitive = false) }
+                    .map { (k, v) ->
+                        CustomField(
+                            key = CustomFieldKeyFormatter.prettify(k),
+                            value = v.toString(),
+                            isSensitive = false,
+                        )
+                    }
 
                 val allCustomFields = (knownCustomFields + unknownCustomFields).take(CustomField.MAX_FIELDS)
 
                 credentials.add(
                     Credential(
-                        id = (map["id"] as? String) ?: UUID.randomUUID().toString(),
-                        title = map["title"] as? String ?: "",
-                        username = map["username"] as? String ?: "",
-                        password = map["password"] as? String ?: "",
-                        url = map["url"] as? String ?: "",
-                        notes = map["notes"] as? String ?: "",
-                        otpParams = parseImportedOtp(map["totp_secret"] as? String),
-                        tags = (map["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
-                        isFavorite = (map["is_favorite"] as? Boolean)
-                            ?: (map["favorite"] as? Boolean) ?: false,
+                        id = (normalized["id"] as? String) ?: UUID.randomUUID().toString(),
+                        title = normalized["title"] as? String ?: "",
+                        username = normalized["username"] as? String ?: "",
+                        password = normalized["password"] as? String ?: "",
+                        url = normalized["url"] as? String ?: "",
+                        notes = normalized["notes"] as? String ?: "",
+                        otpParams = parseImportedOtp(normalized["totp_secret"] as? String),
+                        tags = (normalized["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
+                        isFavorite = (normalized["is_favorite"] as? Boolean)
+                            ?: (normalized["favorite"] as? Boolean) ?: false,
                         customFields = allCustomFields,
                         // Foreign exports may encode timestamps as ISO strings, RFC dates,
                         // or epoch sec/μs/ns rather than the ms Long we write — TimestampParser
                         // normalises every shape. Unrecognised input → fall through to `now`.
-                        createdAt = TimestampParser.parseToEpochMillis(map["created_at"]) ?: now,
-                        updatedAt = TimestampParser.parseToEpochMillis(map["updated_at"]) ?: now,
+                        createdAt = TimestampParser.parseToEpochMillis(normalized["created_at"]) ?: now,
+                        updatedAt = TimestampParser.parseToEpochMillis(normalized["updated_at"]) ?: now,
                         // Forward-compat: missing `type` (older exports, third-party files)
                         // becomes LOGIN, matching the migration default for legacy rows.
-                        type = CredentialType.fromNameOrDefault(map["type"] as? String),
+                        type = CredentialType.fromNameOrDefault(normalized["type"] as? String),
                         // Round-trip the recycle-bin marker so a backup→restore preserves
                         // bin state. Older exports without the field stay active (null).
-                        deletedAt = TimestampParser.parseToEpochMillis(map["deleted_at"]),
+                        deletedAt = TimestampParser.parseToEpochMillis(normalized["deleted_at"]),
                     )
                 )
             }.onFailure { e ->
@@ -172,7 +192,11 @@ class VaultImporterImpl @Inject constructor(
                         .mapNotNull { (idx, header) ->
                             val value = row.getOrElse(idx) { "" }.trim()
                             if (value.isEmpty()) null
-                            else CustomField(key = header, value = value, isSensitive = false)
+                            else CustomField(
+                                key = CustomFieldKeyFormatter.prettify(header),
+                                value = value,
+                                isSensitive = false,
+                            )
                         }
                         .take(CustomField.MAX_FIELDS)
 
@@ -233,6 +257,35 @@ class VaultImporterImpl @Inject constructor(
             "id", "title", "username", "password", "url", "notes",
             "totp_secret", "tags", "custom_fields", "created_at", "updated_at",
             "is_favorite", "favorite", "type", "deleted_at",
+        )
+
+        // Foreign-tool JSON keys we translate into canonical snake_case before
+        // the per-row parser runs. Resolved in `parseJsonContent` so
+        // KNOWN_JSON_KEYS remains the single source of truth for "what we
+        // handle natively".
+        private val JSON_KEY_ALIASES = mapOf(
+            // Firefox passwords export
+            "timeCreated" to "created_at",
+            "timePasswordChanged" to "updated_at",
+            "guid" to "id",
+            // Bitwarden, 1Password (newer JSON shape), generic camelCase
+            "createdAt" to "created_at",
+            "updatedAt" to "updated_at",
+            "creationDate" to "created_at",
+            "revisionDate" to "updated_at",
+            "dateCreated" to "created_at",
+            "dateModified" to "updated_at",
+            "modifiedAt" to "updated_at",
+            "modifiedDate" to "updated_at",
+            "lastModified" to "updated_at",
+        )
+
+        // Foreign-tool internal-metadata keys we silently drop instead of
+        // exposing as custom fields. Firefox writes these on every entry and
+        // they have no UX value to a 1Key user.
+        private val JSON_KEY_IGNORED = setOf(
+            "httpRealm",         // Firefox — HTTP basic-auth realm
+            "formActionOrigin",  // Firefox — form-submission URL
         )
 
         private val CSV_HEADER_MAP = mapOf(
