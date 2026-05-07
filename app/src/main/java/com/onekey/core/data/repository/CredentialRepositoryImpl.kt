@@ -230,6 +230,10 @@ class CredentialRepositoryImpl @Inject constructor(
     override suspend fun deleteAllCredentials(): AppResult<Unit> =
         runCatchingResult { dao.deleteAll() }
 
+    override suspend fun markAccessed(id: String): AppResult<Unit> = runCatchingResult {
+        dao.touchAccessedAt(id, System.currentTimeMillis())
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     /**
@@ -302,7 +306,11 @@ class CredentialRepositoryImpl @Inject constructor(
             updatedAt = updatedAt,
             type = CredentialType.fromNameOrDefault(type),
             deletedAt = deletedAt,
-            accessedAt = accessedAt,
+            // Pre-MIGRATION_10_11 rows can technically still be null here for
+            // a brief window if the migration hasn't completed before a query
+            // runs. Fall back to `updatedAt` so the UI always has something
+            // to render — matching the migration's backfill rule.
+            accessedAt = accessedAt ?: updatedAt,
         )
     }
 
@@ -372,7 +380,10 @@ class CredentialRepositoryImpl @Inject constructor(
             isFavorite = isFavorite,
             createdAt = if (createdAt == 0L) now else createdAt,
             updatedAt = now,
-            accessedAt = accessedAt,
+            // First write wins: foreign imports already provided a value;
+            // manual creation goes through with null and gets `now` here.
+            // Subsequent saves preserve whatever's already on the row.
+            accessedAt = accessedAt ?: now,
             type = type.name,
             deletedAt = deletedAt,
             // OTP metadata only carries meaning when a secret is enrolled. When

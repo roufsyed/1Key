@@ -81,6 +81,26 @@ class CredentialDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<CredentialDetailUiState>(CredentialDetailUiState.Loading)
     val uiState: StateFlow<CredentialDetailUiState> = _uiState.asStateFlow()
 
+    /**
+     * Frozen snapshot of `accessed_at` taken on the first non-null emission of
+     * this screen's credential — what the UI shows under "Last accessed" on
+     * the Details panel. Display-only, deliberately decoupled from the live
+     * credential in [uiState] so that:
+     *
+     *   1. The user sees their *previous* access time (the whole point of the
+     *      field). Bumping accessed_at on view would otherwise make the
+     *      displayed value race forward to "now" on every open.
+     *   2. Edits / saves round-trip the *live* credential, which carries the
+     *      post-bump accessed_at. Keeping the frozen value off the credential
+     *      means a save can't accidentally roll the timestamp back to the
+     *      moment the screen opened.
+     *
+     * Stays null for the new-credential flow (no id to read) and during the
+     * brief window before the first emission lands.
+     */
+    private val _displayAccessedAt = MutableStateFlow<Long?>(null)
+    val displayAccessedAt: StateFlow<Long?> = _displayAccessedAt.asStateFlow()
+
     val availableTags: StateFlow<List<Tag>> = tagRepository.observeTags()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -93,11 +113,34 @@ class CredentialDetailViewModel @Inject constructor(
             _uiState.value = CredentialDetailUiState.Success(emptyCredential(), isEditing = true)
         } else {
             viewModelScope.launch {
-                // includingDeleted so a navigated-to recycle-bin item shows a restore banner
-                // instead of the screen hanging on Loading forever.
+                // Single Room subscription drives both the live UI state and
+                // the one-shot accessed_at snapshot. The capture branch fires
+                // exactly once — on the first emission with a non-null
+                // credential — so the bump's own re-emission can't overwrite
+                // the snapshot, and a missing/deleted row simply leaves the
+                // snapshot null (UI hides "Last accessed" in that case).
+                //
+                // includingDeleted is intentional: a navigated-to recycle-bin
+                // item still renders (with a restore banner) instead of
+                // hanging on Loading.
+                var hasCapturedAccess = false
                 getCredential.includingDeleted(credentialId)
                     .distinctUntilChanged()
                     .collect { credential ->
+                        if (credential != null && !hasCapturedAccess) {
+                            hasCapturedAccess = true
+                            // Order matters: set the display snapshot BEFORE
+                            // the UI state transitions to Success so the very
+                            // first frame of the Details panel already has
+                            // its "Last accessed" value to render. Avoids a
+                            // one-frame "Last accessed: —" flicker.
+                            _displayAccessedAt.value = credential.accessedAt
+                            // Fire-and-forget under the outer launch so the
+                            // bump cancels cleanly if the user navigates
+                            // away. The DAO's WHERE clause silently no-ops
+                            // for soft-deleted rows.
+                            launch { credentialRepository.markAccessed(credentialId) }
+                        }
                         _uiState.update { state ->
                             when {
                                 credential == null -> CredentialDetailUiState.Error("Credential not found")
@@ -217,12 +260,30 @@ class CredentialDetailViewModel @Inject constructor(
     /** Routes through SecureClipboardManager for sensitive auto-clear + sensitivity flag. */
     fun copyUsername() {
         val cred = (_uiState.value as? CredentialDetailUiState.Success)?.credential ?: return
-        if (cred.username.isNotEmpty()) secureClipboard.copySecure("Username", cred.username)
+        if (cred.username.isNotEmpty()) {
+            secureClipboard.copySecure("Username", cred.username)
+            bumpAccessedAt(cred.id)
+        }
     }
 
     fun copyPassword() {
         val cred = (_uiState.value as? CredentialDetailUiState.Success)?.credential ?: return
-        if (cred.password.isNotEmpty()) secureClipboard.copySecure("Password", cred.password)
+        if (cred.password.isNotEmpty()) {
+            secureClipboard.copySecure("Password", cred.password)
+            bumpAccessedAt(cred.id)
+        }
+    }
+
+    /**
+     * Records that the user actually used this credential. Skipped for
+     * unsaved-new entries (blank id) and silently skipped at the SQL layer
+     * for soft-deleted ones. Fire-and-forget — a failed bump shouldn't
+     * abort the copy itself, the user already has the value on the
+     * clipboard.
+     */
+    private fun bumpAccessedAt(id: String) {
+        if (id.isBlank()) return
+        viewModelScope.launch { credentialRepository.markAccessed(id) }
     }
 
     data class RestoreConflict(val binItem: Credential, val existing: Credential)

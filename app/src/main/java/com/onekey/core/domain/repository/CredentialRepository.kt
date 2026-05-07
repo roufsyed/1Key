@@ -74,4 +74,12 @@ interface CredentialRepository {
 
     suspend fun toggleFavorite(id: String, isFavorite: Boolean): AppResult<Unit>
     suspend fun deleteAllCredentials(): AppResult<Unit>
+
+    /**
+     * Bumps `accessed_at` to the current epoch ms for an active credential.
+     * Soft-deleted (recycle-bin) rows are silently skipped at the SQL level —
+     * "accessed" should reflect real usage, not casual viewing of bin items.
+     * Independent of `updated_at`; does not bump it.
+     */
+    suspend fun markAccessed(id: String): AppResult<Unit>
 }

@@ -132,6 +132,9 @@ fun CredentialDetailScreen(
     viewModel: CredentialDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Display-only snapshot, exposed alongside uiState rather than mixed into it
+    // so the credential data carried by uiState stays purely the live row.
+    val displayAccessedAt by viewModel.displayAccessedAt.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
     val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
 
@@ -162,6 +165,7 @@ fun CredentialDetailScreen(
                 val binEnabled by viewModel.isRecycleBinEnabled.collectAsStateWithLifecycle()
                 CredentialViewContent(
                     credential = state.credential,
+                    displayAccessedAt = displayAccessedAt,
                     history = history,
                     binEnabled = binEnabled,
                     isInRecycleBin = state.credential.deletedAt != null,
@@ -203,6 +207,7 @@ fun CredentialDetailScreen(
 @Composable
 private fun CredentialViewContent(
     credential: Credential,
+    displayAccessedAt: Long?,
     history: List<CredentialHistoryEntry>,
     binEnabled: Boolean,
     isInRecycleBin: Boolean,
@@ -342,7 +347,7 @@ private fun CredentialViewContent(
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
 
-            MetadataSection(credential = credential)
+            MetadataSection(credential = credential, displayAccessedAt = displayAccessedAt)
 
             if (history.isNotEmpty()) {
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
@@ -409,7 +414,7 @@ private fun RecycleBinBanner(onRestore: () -> Unit) {
 }
 
 @Composable
-private fun MetadataSection(credential: Credential) {
+private fun MetadataSection(credential: Credential, displayAccessedAt: Long?) {
     // Cache the formatted strings so SimpleDateFormat-style work doesn't re-run on every
     // recomposition (e.g. on every reveal-toggle and history-expand).
     val createdText = remember(credential.createdAt) {
@@ -418,11 +423,13 @@ private fun MetadataSection(credential: Credential) {
     val updatedText = remember(credential.updatedAt) {
         if (credential.updatedAt > 0L) "Modified: ${credential.updatedAt.toFormattedDateTime()}" else null
     }
-    // Only present when the source export carried a "last used" timestamp
-    // (Firefox `timeLastUsed` and friends). Hidden for entries that have
-    // never been imported with one — currently most rows in the vault.
-    val accessedText = remember(credential.accessedAt) {
-        credential.accessedAt
+    // displayAccessedAt is the snapshot the ViewModel froze at screen-open, so
+    // the user sees the *previous* access (their last visit) rather than "now"
+    // — we don't read credential.accessedAt here on purpose, that field is the
+    // live DB value the bump just advanced to. Hidden when null (new
+    // unsaved credential, or extreme edge case where the snapshot read failed).
+    val accessedText = remember(displayAccessedAt) {
+        displayAccessedAt
             ?.takeIf { it > 0L }
             ?.let { "Last accessed: ${it.toFormattedDateTime()}" }
     }

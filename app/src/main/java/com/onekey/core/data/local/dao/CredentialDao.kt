@@ -145,6 +145,17 @@ interface CredentialDao {
     @Query("UPDATE credentials SET is_favorite = :isFavorite WHERE id = :id")
     suspend fun setFavorite(id: String, isFavorite: Boolean)
 
+    /**
+     * Bumps `accessed_at` to the supplied timestamp. Deliberately scoped to
+     * active rows (`deleted_at IS NULL`) so a stray bump on a soft-deleted
+     * credential is a silent no-op rather than reviving its "last used"
+     * marker — a defence-in-depth gate for callers that don't filter
+     * upstream. Does NOT touch `updated_at`: "accessed" and "modified" are
+     * separate concepts (matching KeePassXC, 1Password).
+     */
+    @Query("UPDATE credentials SET accessed_at = :now WHERE id = :id AND deleted_at IS NULL")
+    suspend fun touchAccessedAt(id: String, now: Long)
+
     @RawQuery(observedEntities = [CredentialEntity::class])
     fun pagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity>
 

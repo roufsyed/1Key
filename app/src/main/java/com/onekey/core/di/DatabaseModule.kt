@@ -15,6 +15,7 @@ import com.onekey.core.data.local.database.MIGRATION_6_7
 import com.onekey.core.data.local.database.MIGRATION_7_8
 import com.onekey.core.data.local.database.MIGRATION_8_9
 import com.onekey.core.data.local.database.MIGRATION_9_10
+import com.onekey.core.data.local.database.MIGRATION_10_11
 import com.onekey.core.data.local.database.OneKeyDatabase
 import dagger.Module
 import dagger.Provides
@@ -48,6 +49,7 @@ object DatabaseModule {
                 MIGRATION_7_8,
                 MIGRATION_8_9,
                 MIGRATION_9_10,
+                MIGRATION_10_11,
             )
             .addCallback(DATABASE_CALLBACK)
             // Deliberately NOT calling fallbackToDestructiveMigration(): for a password

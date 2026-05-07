@@ -132,6 +132,18 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
     }
 }
 
+// `accessed_at` is now a first-class, always-present field used for display
+// and (in future) sort. Backfill any null rows with their `updated_at` so
+// existing entries have a sensible "last used" value immediately after
+// upgrade — same heuristic Firefox / Bitwarden / 1Password use when
+// migrating older entries that pre-date their last-used tracking. New
+// manually-created rows default to `now` via toEntity().
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("UPDATE credentials SET accessed_at = updated_at WHERE accessed_at IS NULL")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -148,7 +160,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
