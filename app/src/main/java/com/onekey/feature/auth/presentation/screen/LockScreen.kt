@@ -201,129 +201,145 @@ fun LockScreen(
                         MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                     ),
                 )
-            )
-            .imePadding(),
+            ),
     ) {
         val density = LocalDensity.current
         val horizontalPadding = if (maxWidth < 400.dp) 24.dp else 32.dp
         val topSpacing = (maxHeight * 0.13f).coerceIn(44.dp, 120.dp)
-        val heroToFormSpacing = (maxHeight * 0.20f).coerceIn(56.dp, 220.dp)
         val exitTravelPx = remember(maxHeight, density) { with(density) { maxHeight.toPx() * 1.08f } }
         val exitProgress = lockScreenExitProgress.value
 
+        // Two-section split so the keyboard never hides the unlock button:
+        //   - Hero (logo / title / subtitle): scrollable, takes remaining height.
+        //   - Form (banner / unlock controls / error / biometric fallback): pinned
+        //     to the bottom with `.imePadding()`, so it stays above the keyboard
+        //     when shown and above the navigation bar otherwise. The previous
+        //     layout had the whole screen in one verticalScroll with imePadding
+        //     on the outer Box; bringing the focused TextField into view scrolled
+        //     the unlock button below the visible viewport.
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     translationY = -exitTravelPx * exitProgress
                     alpha = 1f - (0.24f * exitProgress)
-                }
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = horizontalPadding, vertical = 16.dp),
-            horizontalAlignment = Alignment.Start,
+                },
         ) {
-            Spacer(Modifier.height(topSpacing))
-            LogoSection(
-                state = state,
+            Column(
                 modifier = Modifier
-                    .align(Alignment.Start)
-                    .padding(start = 16.dp),
-            )
-            Spacer(Modifier.height(28.dp))
-            Text(
-                titleText,
-                style = MaterialTheme.typography.displayMedium,
-                fontWeight = FontWeight.ExtraBold,
-                lineHeight = MaterialTheme.typography.displayMedium.lineHeight,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                subtitleText,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                textAlign = TextAlign.Start,
-            )
+                    .weight(1f, fill = true)
+                    .statusBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = horizontalPadding),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                Spacer(Modifier.height(topSpacing))
+                LogoSection(
+                    state = state,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(start = 16.dp),
+                )
+                Spacer(Modifier.height(28.dp))
+                Text(
+                    titleText,
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = MaterialTheme.typography.displayMedium.lineHeight,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    subtitleText,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    textAlign = TextAlign.Start,
+                )
+            }
 
-            Spacer(Modifier.height(heroToFormSpacing))
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = horizontalPadding, vertical = 16.dp),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                if (mustUsePassword) {
+                    if (requiresMasterPasswordRecheck) MasterPasswordRecheckBanner()
+                    Spacer(Modifier.height(14.dp))
+                    PasswordUnlockSection(
+                        state = state,
+                        onPasswordSubmit = { viewModel.unlockWithPassword(it) },
+                    )
+                } else if (isPinSetup && !forcePasswordFallback) {
+                    PinUnlockSection(
+                        state = state,
+                        onPinSubmit = { pin -> viewModel.unlockWithPin(pin.toCharArray()) },
+                        onFallbackToPassword = {
+                            forcePasswordFallback = true
+                            viewModel.clearError()
+                        },
+                    )
+                } else {
+                    PasswordUnlockSection(
+                        state = state,
+                        onPasswordSubmit = { viewModel.unlockWithPassword(it) },
+                    )
+                    if (isPinSetup && forcePasswordFallback && !mustUsePassword) {
+                        Spacer(Modifier.height(4.dp))
+                        TextButton(
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                            onClick = {
+                                forcePasswordFallback = false
+                                viewModel.clearError()
+                            },
+                        ) {
+                            Text("Use PIN instead")
+                        }
+                    }
+                }
 
-            if (mustUsePassword) {
-                if (requiresMasterPasswordRecheck) MasterPasswordRecheckBanner()
-                Spacer(Modifier.height(14.dp))
-                PasswordUnlockSection(
-                    state = state,
-                    onPasswordSubmit = { viewModel.unlockWithPassword(it) },
-                )
-            } else if (isPinSetup && !forcePasswordFallback) {
-                PinUnlockSection(
-                    state = state,
-                    onPinSubmit = { pin -> viewModel.unlockWithPin(pin.toCharArray()) },
-                    onFallbackToPassword = {
-                        forcePasswordFallback = true
-                        viewModel.clearError()
-                    },
-                )
-            } else {
-                PasswordUnlockSection(
-                    state = state,
-                    onPasswordSubmit = { viewModel.unlockWithPassword(it) },
-                )
-                if (isPinSetup && forcePasswordFallback && !mustUsePassword) {
-                    Spacer(Modifier.height(4.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 20.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (errorMessage != null) {
+                        Text(
+                            errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                if (isBiometricEnabled && canUseBiometric && !mustUsePassword) {
                     TextButton(
                         modifier = Modifier.align(Alignment.CenterHorizontally),
                         onClick = {
-                            forcePasswordFallback = false
-                            viewModel.clearError()
+                            activeBiometricPrompt = showBiometricPrompt(
+                                context = context,
+                                onSuccess = { viewModel.unlockWithBiometric() },
+                                onError = { msg -> viewModel.setBiometricError(msg) },
+                                onAuthFailed = { viewModel.recordBiometricFailure() },
+                            )
                         },
+                        enabled = state !is AuthUiState.Loading,
                     ) {
-                        Text("Use PIN instead")
+                        Spacer(Modifier.width(8.dp))
+                        Text("Use biometric", style = MaterialTheme.typography.titleSmall)
+                        Icon(
+                            Icons.Default.Fingerprint,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
+                Spacer(Modifier.height(10.dp))
             }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 20.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (errorMessage != null) {
-                    Text(
-                        errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-
-            if (isBiometricEnabled && canUseBiometric && !mustUsePassword) {
-                TextButton(
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                    onClick = {
-                        activeBiometricPrompt = showBiometricPrompt(
-                            context = context,
-                            onSuccess = { viewModel.unlockWithBiometric() },
-                            onError = { msg -> viewModel.setBiometricError(msg) },
-                            onAuthFailed = { viewModel.recordBiometricFailure() },
-                        )
-                    },
-                    enabled = state !is AuthUiState.Loading,
-                ) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("Use biometric", style = MaterialTheme.typography.titleSmall)
-                    Icon(
-                        Icons.Default.Fingerprint,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
         }
     }
 
