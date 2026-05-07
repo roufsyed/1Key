@@ -59,76 +59,91 @@ fun ChangePasswordScreen(
             )
         }
     ) { padding ->
+        // Hero/form split: scrollable explainer + 3 password fields above, sticky
+        // submit (and any state-level error) below with `.imePadding()`. With a
+        // single verticalScroll and a button at the end, focusing any field would
+        // scroll the submit out of the visible area when the keyboard opens.
         Column(
             modifier = Modifier
                 .padding(padding)
                 .imePadding()
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxSize(),
         ) {
-            Text(
-                "Only your password verification is updated on this device. Your vault key is unchanged — all existing credentials remain accessible immediately.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            PasswordField(
-                value = currentPassword,
-                onValueChange = { currentPassword = it; viewModel.clearError() },
-                label = "Current Password",
-                showPassword = showCurrent,
-                onToggleVisibility = { showCurrent = !showCurrent },
-                imeAction = ImeAction.Next,
-            )
-
-            PasswordField(
-                value = newPassword,
-                onValueChange = { newPassword = it },
-                label = "New Password",
-                showPassword = showNew,
-                onToggleVisibility = { showNew = !showNew },
-                imeAction = ImeAction.Next,
-                isError = newTooShort,
-                supportingText = if (newTooShort) "Minimum 8 characters" else null,
-            )
-
-            PasswordField(
-                value = confirmPassword,
-                onValueChange = { confirmPassword = it },
-                label = "Confirm New Password",
-                showPassword = showConfirm,
-                onToggleVisibility = { showConfirm = !showConfirm },
-                imeAction = ImeAction.Done,
-                isError = confirmMismatch,
-                supportingText = if (confirmMismatch) "Passwords do not match" else null,
-            )
-
-            if (state is ChangePasswordUiState.Error) {
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = true)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
                 Text(
-                    (state as ChangePasswordUiState.Error).message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    "Only your password verification is updated on this device. Your vault key is unchanged — all existing credentials remain accessible immediately.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                PasswordField(
+                    value = currentPassword,
+                    onValueChange = { currentPassword = it; viewModel.clearError() },
+                    label = "Current Password",
+                    showPassword = showCurrent,
+                    onToggleVisibility = { showCurrent = !showCurrent },
+                    imeAction = ImeAction.Next,
+                )
+
+                PasswordField(
+                    value = newPassword,
+                    onValueChange = { newPassword = it },
+                    label = "New Password",
+                    showPassword = showNew,
+                    onToggleVisibility = { showNew = !showNew },
+                    imeAction = ImeAction.Next,
+                    isError = newTooShort,
+                    supportingText = if (newTooShort) "Minimum 8 characters" else null,
+                )
+
+                PasswordField(
+                    value = confirmPassword,
+                    onValueChange = { confirmPassword = it },
+                    label = "Confirm New Password",
+                    showPassword = showConfirm,
+                    onToggleVisibility = { showConfirm = !showConfirm },
+                    imeAction = ImeAction.Done,
+                    isError = confirmMismatch,
+                    supportingText = if (confirmMismatch) "Passwords do not match" else null,
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            Button(
-                onClick = {
-                    viewModel.changePassword(
-                        currentPassword.toCharArray(),
-                        newPassword.toCharArray(),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = canSubmit,
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 24.dp)
+                    .padding(top = 16.dp, bottom = 24.dp),
             ) {
-                if (state is ChangePasswordUiState.Loading) {
-                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Change Password")
+                if (state is ChangePasswordUiState.Error) {
+                    Text(
+                        (state as ChangePasswordUiState.Error).message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                Button(
+                    onClick = {
+                        viewModel.changePassword(
+                            currentPassword.toCharArray(),
+                            newPassword.toCharArray(),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = canSubmit,
+                ) {
+                    if (state is ChangePasswordUiState.Loading) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Change Password")
+                    }
                 }
             }
         }

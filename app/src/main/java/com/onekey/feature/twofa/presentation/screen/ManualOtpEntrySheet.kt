@@ -185,74 +185,87 @@ fun ManualOtpEntrySheet(
         },
         sheetState = sheetState,
     ) {
+        // Hero/form split inside the sheet so the Save row stays anchored above
+        // the keyboard. The sheet's contentWindowInsets defaults to systemBars
+        // only (no IME), so without `.imePadding()` here the focused field's
+        // bringIntoView would scroll the Save button below the visible viewport.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .imePadding(),
         ) {
-            Text(
-                text = "Add 2FA Manually",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = "Enter the setup key from your account's 2FA setup page.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            LockAwareOutlinedTextField(
-                value = issuer,
-                onValueChange = { issuer = it },
-                label = { Text("Service") },
-                placeholder = { Text("e.g. GitHub") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            LockAwareOutlinedTextField(
-                value = account,
-                onValueChange = { account = it },
-                label = { Text("Account") },
-                placeholder = { Text("e.g. user@example.com") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            SecretField(
-                value = secret,
-                onValueChange = { secret = it },
-                validation = secretValidation,
-            )
-
-            AdvancedSection(
-                expanded = advancedExpanded,
-                onToggle = { advancedExpanded = !advancedExpanded },
-                type = parsedType,
-                onTypeChange = { type = it.name },
-                algorithm = parsedAlgorithm,
-                onAlgorithmChange = { algorithm = it.name },
-                digits = digits,
-                onDigitsChange = { digits = it },
-                period = period,
-                onPeriodChange = { period = it.filter { ch -> ch.isDigit() } },
-                counter = counter,
-                onCounterChange = { counter = it.filter { ch -> ch.isDigit() } },
-            )
-
-            (state as? ManualOtpEntryViewModel.State.Error)?.let { error ->
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text(
-                    text = error.message,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Add 2FA Manually",
+                    style = MaterialTheme.typography.titleMedium,
                 )
+                Text(
+                    text = "Enter the setup key from your account's 2FA setup page.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                LockAwareOutlinedTextField(
+                    value = issuer,
+                    onValueChange = { issuer = it },
+                    label = { Text("Service") },
+                    placeholder = { Text("e.g. GitHub") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                LockAwareOutlinedTextField(
+                    value = account,
+                    onValueChange = { account = it },
+                    label = { Text("Account") },
+                    placeholder = { Text("e.g. user@example.com") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                SecretField(
+                    value = secret,
+                    onValueChange = { secret = it },
+                    validation = secretValidation,
+                )
+
+                AdvancedSection(
+                    expanded = advancedExpanded,
+                    onToggle = { advancedExpanded = !advancedExpanded },
+                    type = parsedType,
+                    onTypeChange = { type = it.name },
+                    algorithm = parsedAlgorithm,
+                    onAlgorithmChange = { algorithm = it.name },
+                    digits = digits,
+                    onDigitsChange = { digits = it },
+                    period = period,
+                    onPeriodChange = { period = it.filter { ch -> ch.isDigit() } },
+                    counter = counter,
+                    onCounterChange = { counter = it.filter { ch -> ch.isDigit() } },
+                )
+
+                (state as? ManualOtpEntryViewModel.State.Error)?.let { error ->
+                    Text(
+                        text = error.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 12.dp, bottom = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 OutlinedButton(
@@ -293,8 +306,6 @@ fun ManualOtpEntrySheet(
                     }
                 }
             }
-
-            Spacer(Modifier.height(16.dp))
         }
     }
 

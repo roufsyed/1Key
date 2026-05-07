@@ -324,164 +324,162 @@ private fun CreateVaultPage(
     val passwordTooShort = password.isNotEmpty() && password.length < 8
     val canSubmit = password.length >= 8 && !passwordMismatch && privacyAccepted && state !is AuthUiState.Loading
 
+    // Hero (intro copy) is the only thing that scrolls; the form (fields, privacy
+    // controls, primary + secondary actions) is a non-scrolling sibling pinned to
+    // the bottom. The outer OnboardingScreen Column already applies `.imePadding()`,
+    // so the form here doesn't need its own — it sits above the keyboard naturally.
+    // The single-scroll original lost the "Create Vault" button below the viewport
+    // when a password field was focused.
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp),
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(56.dp))
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = true)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(Modifier.height(56.dp))
 
-//        Surface(
-//            shape = CircleShape,
-//            color = MaterialTheme.colorScheme.primaryContainer,
-//            modifier = Modifier.size(120.dp),
-//        ) {
-//            Box(contentAlignment = Alignment.Center) {
-//                Icon(
-//                    Icons.Default.VpnKey,
-//                    contentDescription = null,
-//                    modifier = Modifier.size(60.dp),
-//                    tint = MaterialTheme.colorScheme.primary,
-//                )
-//            }
-//        }
-//
-//        Spacer(Modifier.height(16.dp))
-
-        Text(
-            "Create your master password",
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "This is the only password you need to remember. If you lose it, your data cannot be recovered.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Your password is never stored. We derive an encryption key from it using PBKDF2 (310,000 iterations). Forget the password — lose access forever.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
-
-        Spacer(Modifier.height(32.dp))
-
-        LockAwareOutlinedTextField(
-            value = password,
-            onValueChange = onPasswordChange,
-            label = { Text("Master Password") },
-            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { showPassword = !showPassword }) {
-                    Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            isError = passwordTooShort,
-            supportingText = {
-                if (passwordTooShort) Text("At least 8 characters required")
-            },
-            singleLine = true,
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        LockAwareOutlinedTextField(
-            value = confirmPassword,
-            onValueChange = onConfirmPasswordChange,
-            label = { Text("Confirm Password") },
-            visualTransformation = if (showConfirm) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                IconButton(onClick = { showConfirm = !showConfirm }) {
-                    Icon(if (showConfirm) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            isError = passwordMismatch,
-            supportingText = { if (passwordMismatch) Text("Passwords do not match") },
-            singleLine = true,
-        )
-
-        if (state is AuthUiState.Error) {
+            Text(
+                "Create your master password",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                textAlign = TextAlign.Center,
+            )
             Spacer(Modifier.height(8.dp))
             Text(
-                (state as AuthUiState.Error).message,
-                color = MaterialTheme.colorScheme.error,
+                "This is the only password you need to remember. If you lose it, your data cannot be recovered.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Your password is never stored. We derive an encryption key from it using PBKDF2 (310,000 iterations). Forget the password — lose access forever.",
                 style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
         }
 
-        Spacer(Modifier.height(20.dp))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(MaterialTheme.shapes.small)
-                .clickable(enabled = state !is AuthUiState.Loading) { onPrivacyAcceptedChange(!privacyAccepted) },
+                .padding(horizontal = 32.dp)
+                .padding(top = 24.dp, bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Checkbox(
-                checked = privacyAccepted,
-                onCheckedChange = onPrivacyAcceptedChange,
+            LockAwareOutlinedTextField(
+                value = password,
+                onValueChange = onPasswordChange,
+                label = { Text("Master Password") },
+                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    IconButton(onClick = { showPassword = !showPassword }) {
+                        Icon(if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                isError = passwordTooShort,
+                supportingText = {
+                    if (passwordTooShort) Text("At least 8 characters required")
+                },
+                singleLine = true,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            LockAwareOutlinedTextField(
+                value = confirmPassword,
+                onValueChange = onConfirmPasswordChange,
+                label = { Text("Confirm Password") },
+                visualTransformation = if (showConfirm) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    IconButton(onClick = { showConfirm = !showConfirm }) {
+                        Icon(if (showConfirm) Icons.Default.VisibilityOff else Icons.Default.Visibility, null)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                isError = passwordMismatch,
+                supportingText = { if (passwordMismatch) Text("Passwords do not match") },
+                singleLine = true,
+            )
+
+            if (state is AuthUiState.Error) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    (state as AuthUiState.Error).message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.small)
+                    .clickable(enabled = state !is AuthUiState.Loading) { onPrivacyAcceptedChange(!privacyAccepted) },
+            ) {
+                Checkbox(
+                    checked = privacyAccepted,
+                    onCheckedChange = onPrivacyAcceptedChange,
+                    enabled = state !is AuthUiState.Loading,
+                )
+                Text(
+                    "I've read and agree to the Privacy Policy",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            TextButton(
+                onClick = { showPolicyDialog = true },
+                modifier = Modifier.align(Alignment.Start).padding(start = 4.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+            ) {
+                Icon(Icons.Default.PrivacyTip, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Read the Privacy Policy", style = MaterialTheme.typography.bodySmall)
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            Button(
+                onClick = onSubmit,
+                enabled = canSubmit,
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                if (state is AuthUiState.Loading) {
+                    CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
+                } else {
+                    Text("Create Vault", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+            VaultSetupStatusLine(isLoading = state is AuthUiState.Loading)
+
+            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text("Back")
+            }
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            TextButton(
+                onClick = onRestoreFromBackup,
+                modifier = Modifier.fillMaxWidth(),
                 enabled = state !is AuthUiState.Loading,
-            )
-            Text(
-                "I've read and agree to the Privacy Policy",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        TextButton(
-            onClick = { showPolicyDialog = true },
-            modifier = Modifier.align(Alignment.Start).padding(start = 4.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-        ) {
-            Icon(Icons.Default.PrivacyTip, contentDescription = null, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Read the Privacy Policy", style = MaterialTheme.typography.bodySmall)
-        }
-
-        Spacer(Modifier.height(16.dp))
-
-        Button(
-            onClick = onSubmit,
-            enabled = canSubmit,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-        ) {
-            if (state is AuthUiState.Loading) {
-                CircularProgressIndicator(Modifier.size(20.dp), color = MaterialTheme.colorScheme.onPrimary)
-            } else {
-                Text("Create Vault", style = MaterialTheme.typography.titleMedium)
+            ) {
+                Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Restore from encrypted 1Key backup")
             }
         }
-
-        Spacer(Modifier.height(12.dp))
-        VaultSetupStatusLine(isLoading = state is AuthUiState.Loading)
-
-        TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back")
-        }
-        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-        TextButton(
-            onClick = onRestoreFromBackup,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = state !is AuthUiState.Loading,
-        ) {
-            Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Restore from encrypted 1Key backup")
-        }
-
-        Spacer(Modifier.height(24.dp))
     }
 
     if (showPolicyDialog) {
