@@ -13,6 +13,7 @@ import com.onekey.feature.importexport.domain.MergePair
 import com.onekey.feature.importexport.domain.ParsedImport
 import com.onekey.feature.importexport.domain.SkipReason
 import com.onekey.feature.importexport.domain.SkippedCredential
+import com.onekey.feature.importexport.domain.UrlTitleExtractor
 import com.onekey.feature.importexport.domain.VaultImporter
 import javax.inject.Inject
 
@@ -166,16 +167,25 @@ class ImportVaultUseCase @Inject constructor(
 
     private data class MatchedExisting(val credential: Credential, val fromBin: Boolean)
 
-    private fun Credential.applyFieldOptions(opts: ImportFieldOptions): Credential = copy(
-        username = if (opts.username) username else "",
-        password = if (opts.password) password else "",
-        url = if (opts.url) url else "",
-        notes = if (opts.notes) notes else "",
-        otpParams = if (opts.totp) otpParams else null,
-        tags = if (opts.tags) tags else emptyList(),
-        customFields = customFields.filter { it.key in opts.customFieldKeys },
-        isFavorite = if (opts.isFavorite) isFavorite else false,
-    )
+    private fun Credential.applyFieldOptions(opts: ImportFieldOptions): Credential {
+        // Derive against the source `url` (this.url) before the url toggle below
+        // potentially blanks it — the rescue must run on the parsed value, not
+        // the post-filter one.
+        val derivedTitle = if (opts.deriveTitleFromUrl && title.isBlank()) {
+            UrlTitleExtractor.extractTitle(url) ?: title
+        } else title
+        return copy(
+            title = derivedTitle,
+            username = if (opts.username) username else "",
+            password = if (opts.password) password else "",
+            url = if (opts.url) url else "",
+            notes = if (opts.notes) notes else "",
+            otpParams = if (opts.totp) otpParams else null,
+            tags = if (opts.tags) tags else emptyList(),
+            customFields = customFields.filter { it.key in opts.customFieldKeys },
+            isFavorite = if (opts.isFavorite) isFavorite else false,
+        )
+    }
 
     /**
      * Returns the names of fields that contain non-empty differing values between

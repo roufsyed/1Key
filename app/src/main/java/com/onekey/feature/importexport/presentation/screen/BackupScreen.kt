@@ -63,6 +63,7 @@ import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.SkipReason
+import com.onekey.feature.importexport.domain.UrlTitleExtractor
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportEvent
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
@@ -1175,6 +1176,14 @@ private fun PreviewPhaseBody(
                     FieldToggleRow("Website URL", Icons.Default.Language, opts.url) {
                         onOptsChange(opts.copy(url = it))
                     }
+                    FieldToggleRow(
+                        label = "Auto-fill missing titles from URL",
+                        icon = Icons.Default.AutoFixHigh,
+                        checked = opts.deriveTitleFromUrl,
+                        indent = true,
+                    ) {
+                        onOptsChange(opts.copy(deriveTitleFromUrl = it))
+                    }
                     FieldToggleRow("Notes", Icons.Default.StickyNote2, opts.notes) {
                         onOptsChange(opts.copy(notes = it))
                     }
@@ -1812,14 +1821,24 @@ private fun PreviewCredentialCard(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(16.dp),
                 )
+                val derivedTitle = if (opts.deriveTitleFromUrl && credential.title.isBlank())
+                    UrlTitleExtractor.extractTitle(credential.url) else null
+                val displayTitle = credential.title.ifBlank { derivedTitle.orEmpty() }
                 Text(
-                    credential.title.ifBlank { "(no title)" },
+                    displayTitle.ifBlank { "(no title)" },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                if (credential.title.isBlank() && derivedTitle != null) {
+                    Text(
+                        "from URL",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 if (opts.isFavorite && credential.isFavorite) {
                     Icon(
                         Icons.Default.Favorite,
