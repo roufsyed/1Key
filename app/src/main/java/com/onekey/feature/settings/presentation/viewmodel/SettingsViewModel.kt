@@ -17,6 +17,7 @@ import com.onekey.core.domain.usecase.SeedDataUseCase
 import com.onekey.core.security.AuthAttemptsStore
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
+import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -45,7 +46,11 @@ class SettingsViewModel @Inject constructor(
     private val seedDataUseCase: SeedDataUseCase,
     private val lockReasonStore: LockReasonStore,
     private val authAttemptsStore: AuthAttemptsStore,
+    private val highlightStore: SettingsHighlightStore,
 ) : ViewModel() {
+
+    val highlightKey: StateFlow<String?> = highlightStore.pendingKey
+    fun clearHighlight() = highlightStore.clear()
 
     private val _isSeedingData = MutableStateFlow(false)
     val isSeedingData: StateFlow<Boolean> = _isSeedingData.asStateFlow()

@@ -15,7 +15,9 @@ import javax.inject.Inject
 
 @OptIn(FlowPreview::class)
 @HiltViewModel
-class SettingsSearchViewModel @Inject constructor() : ViewModel() {
+class SettingsSearchViewModel @Inject constructor(
+    private val highlightStore: SettingsHighlightStore,
+) : ViewModel() {
 
     private val index: List<SettingsEntry> = buildSettingsIndex()
 
@@ -45,5 +47,9 @@ class SettingsSearchViewModel @Inject constructor() : ViewModel() {
     fun setSearchActive(active: Boolean) {
         _searchActive.value = active
         if (!active) _query.value = ""
+    }
+
+    fun setPendingHighlight(key: String?) {
+        highlightStore.set(key)
     }
 }

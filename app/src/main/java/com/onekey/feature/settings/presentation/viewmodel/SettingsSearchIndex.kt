@@ -6,6 +6,7 @@ data class SettingsEntry(
     val sectionLabel: String,
     val keywords: List<String> = emptyList(),
     val action: SettingsAction,
+    val highlightKey: String? = null,
 )
 
 sealed class SettingsAction {
@@ -28,6 +29,22 @@ enum class SettingsDirectToggle {
 // by navigating to their sub-screen — lifting them here would require invasive API changes.
 enum class SettingsDialogId { DeleteVault }
 
+// Stable string keys used by sub-screens to identify which row to scroll-to and highlight
+// when the user arrives via a search result. Defined here so the index and the sub-screens
+// share the same constants without magic strings.
+object SettingsHighlightKeys {
+    const val RECYCLE_BIN = "recycle_bin"
+    const val RECYCLE_BIN_RETENTION = "recycle_bin_retention"
+    const val MANAGE_CATEGORIES = "manage_categories"
+    const val PIN_SETUP = "pin_setup"
+    const val BIOMETRIC_UNLOCK = "biometric_unlock"
+    const val REMOVE_PIN = "remove_pin"
+    const val BACKGROUND_LOCK = "background_lock"
+    const val INACTIVITY_LOCK = "inactivity_lock"
+    const val RESTORE_LAST_SCREEN = "restore_last_screen"
+    const val ALLOW_SCREENSHOTS = "allow_screenshots"
+}
+
 internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
     // ── General ──────────────────────────────────────────────────────────────
     SettingsEntry(
@@ -36,6 +53,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "General",
         keywords = listOf("appearance", "display", "layout"),
         action = SettingsAction.Navigate(SettingsDestination.General),
+        // No highlightKey — navigates to the screen overview, no specific row.
     ),
     SettingsEntry(
         title = "Dark theme",
@@ -43,6 +61,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "General",
         keywords = listOf("night", "appearance", "colour", "color", "dark mode"),
         action = SettingsAction.DirectToggle(SettingsDirectToggle.DarkTheme),
+        // No highlightKey — DirectToggle fires in place, no navigation.
     ),
     SettingsEntry(
         title = "Show Favourites tab",
@@ -71,6 +90,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "General",
         keywords = listOf("trash", "delete", "restore", "recovery", "undo"),
         action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.RECYCLE_BIN,
     ),
     SettingsEntry(
         title = "Auto-clear recycle bin",
@@ -78,6 +98,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "General",
         keywords = listOf("trash", "retention", "purge", "30 days"),
         action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.RECYCLE_BIN_RETENTION,
     ),
     SettingsEntry(
         title = "Manage categories",
@@ -85,6 +106,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "General",
         keywords = listOf("tags", "labels", "organize", "folder"),
         action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.MANAGE_CATEGORIES,
     ),
 
     // ── Security ─────────────────────────────────────────────────────────────
@@ -94,6 +116,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("password", "pin", "biometric", "lock", "fingerprint"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        // No highlightKey — navigates to the screen overview, no specific row.
     ),
     SettingsEntry(
         title = "Setup / Change PIN",
@@ -101,6 +124,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("pin", "code", "passcode", "six digit"),
         action = SettingsAction.Navigate(SettingsDestination.SetupPin),
+        highlightKey = SettingsHighlightKeys.PIN_SETUP,
     ),
     SettingsEntry(
         title = "Biometric Unlock",
@@ -108,6 +132,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("fingerprint", "face", "touch id", "face id", "biometrics"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.BIOMETRIC_UNLOCK,
     ),
     SettingsEntry(
         title = "Remove PIN",
@@ -115,6 +140,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("delete pin", "disable pin", "unset pin"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.REMOVE_PIN,
     ),
     SettingsEntry(
         title = "Change Master Password",
@@ -122,6 +148,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("update password", "reset password", "new password"),
         action = SettingsAction.Navigate(SettingsDestination.ChangePassword),
+        // No highlightKey — navigates to a standalone screen, not a row in Security.
     ),
     SettingsEntry(
         title = "Lock when app in background",
@@ -129,6 +156,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("auto lock", "background", "timeout", "timer"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.BACKGROUND_LOCK,
     ),
     SettingsEntry(
         title = "Lock after inactivity",
@@ -136,6 +164,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("idle", "inactivity", "timeout", "auto lock", "timer"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.INACTIVITY_LOCK,
     ),
     SettingsEntry(
         title = "Pick up where you left off",
@@ -143,6 +172,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("restore screen", "resume", "navigation", "last screen"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.RESTORE_LAST_SCREEN,
     ),
     SettingsEntry(
         title = "Periodic master password check",
@@ -150,6 +180,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("recheck", "re-enter", "interval", "biometric interval", "pin interval"),
         action = SettingsAction.DirectToggle(SettingsDirectToggle.MasterPasswordRecheck),
+        // No highlightKey — DirectToggle fires in place, no navigation.
     ),
     SettingsEntry(
         title = "Allow Screenshots",
@@ -157,6 +188,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("screenshot", "screen record", "recent apps", "capture"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.ALLOW_SCREENSHOTS,
     ),
 
     // ── Backup ───────────────────────────────────────────────────────────────
