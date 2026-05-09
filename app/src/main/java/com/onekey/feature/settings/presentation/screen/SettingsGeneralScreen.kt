@@ -16,6 +16,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightKeys
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,8 +32,13 @@ fun SettingsGeneralScreen(
     val isVaultFooterVisible by settingsVm.isVaultFooterVisible.collectAsStateWithLifecycle()
     val recycleBinRetention by settingsVm.recycleBinRetention.collectAsStateWithLifecycle()
     val isRecycleBinEnabled by settingsVm.isRecycleBinEnabled.collectAsStateWithLifecycle()
+    val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
     var showRetentionPicker by rememberSaveable { mutableStateOf(false) }
     var showDisableBinDialog by rememberSaveable { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose { settingsVm.clearHighlight() }
+    }
 
     Scaffold(
         topBar = {
@@ -135,47 +141,57 @@ fun SettingsGeneralScreen(
             SectionHeader("Recycle bin")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    ListItem(
-                        headlineContent = { Text("Use recycle bin") },
-                        supportingContent = {
-                            Text(
-                                if (isRecycleBinEnabled)
-                                    "Deleted credentials wait in the bin so you can restore them if you change your mind."
-                                else
-                                    "Off — every delete is permanent the moment you confirm it. There's no undo.",
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isRecycleBinEnabled,
-                                onCheckedChange = { newValue ->
-                                    if (!newValue) {
-                                        showDisableBinDialog = true
-                                    } else {
-                                        settingsVm.setRecycleBinEnabled(true)
-                                    }
-                                },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.RECYCLE_BIN,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Use recycle bin") },
+                            supportingContent = {
+                                Text(
+                                    if (isRecycleBinEnabled)
+                                        "Deleted credentials wait in the bin so you can restore them if you change your mind."
+                                    else
+                                        "Off — every delete is permanent the moment you confirm it. There's no undo.",
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isRecycleBinEnabled,
+                                    onCheckedChange = { newValue ->
+                                        if (!newValue) {
+                                            showDisableBinDialog = true
+                                        } else {
+                                            settingsVm.setRecycleBinEnabled(true)
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                    }
 
                     if (isRecycleBinEnabled) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Auto-clear after") },
-                            supportingContent = {
-                                Text(
-                                    if (recycleBinRetention == RecycleBinRetention.NEVER)
-                                        "Items stay in the bin until you remove them"
-                                    else
-                                        "Deleted items are removed for good after ${recycleBinRetention.label.lowercase()}",
-                                )
-                            },
-                            leadingContent = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                            trailingContent = { Text(recycleBinRetention.label) },
-                            modifier = Modifier.clickable { showRetentionPicker = true },
-                        )
+                        HighlightableRow(
+                            isHighlighted = highlightKey == SettingsHighlightKeys.RECYCLE_BIN_RETENTION,
+                            onHighlightConsumed = settingsVm::clearHighlight,
+                        ) {
+                            ListItem(
+                                headlineContent = { Text("Auto-clear after") },
+                                supportingContent = {
+                                    Text(
+                                        if (recycleBinRetention == RecycleBinRetention.NEVER)
+                                            "Items stay in the bin until you remove them"
+                                        else
+                                            "Deleted items are removed for good after ${recycleBinRetention.label.lowercase()}",
+                                    )
+                                },
+                                leadingContent = { Icon(Icons.Default.Schedule, contentDescription = null) },
+                                trailingContent = { Text(recycleBinRetention.label) },
+                                modifier = Modifier.clickable { showRetentionPicker = true },
+                            )
+                        }
                     }
                 }
             }
@@ -183,13 +199,18 @@ fun SettingsGeneralScreen(
             Spacer(Modifier.height(8.dp))
             SectionHeader("Categories")
             Card(modifier = Modifier.fillMaxWidth()) {
-                ListItem(
-                    headlineContent = { Text("Manage categories") },
-                    supportingContent = { Text("Add or remove credential categories") },
-                    leadingContent = { Icon(Icons.Default.LocalOffer, contentDescription = null) },
-                    trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                    modifier = Modifier.clickable(onClick = onManageCategories),
-                )
+                HighlightableRow(
+                    isHighlighted = highlightKey == SettingsHighlightKeys.MANAGE_CATEGORIES,
+                    onHighlightConsumed = settingsVm::clearHighlight,
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Manage categories") },
+                        supportingContent = { Text("Add or remove credential categories") },
+                        leadingContent = { Icon(Icons.Default.LocalOffer, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = onManageCategories),
+                    )
+                }
             }
         }
     }

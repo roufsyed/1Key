@@ -24,6 +24,7 @@ import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
+import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightKeys
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -44,6 +45,11 @@ fun SettingsSecurityScreen(
     val isRestoreLastScreenOnUnlock by settingsVm.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
 
     val canUseBiometric = rememberCanUseBiometric()
+    val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
+
+    DisposableEffect(Unit) {
+        onDispose { settingsVm.clearHighlight() }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showBiometricConfirmDialog by remember { mutableStateOf(false) }
@@ -132,50 +138,65 @@ fun SettingsSecurityScreen(
             SectionHeader("Unlock methods")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    ListItem(
-                        headlineContent = { Text("Setup / Change PIN") },
-                        supportingContent = { Text("Faster unlock with a 6-digit PIN") },
-                        leadingContent = { Icon(Icons.Default.Lock, null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable(onClick = onSetupPin),
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.PIN_SETUP,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Setup / Change PIN") },
+                            supportingContent = { Text("Faster unlock with a 6-digit PIN") },
+                            leadingContent = { Icon(Icons.Default.Lock, null) },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable(onClick = onSetupPin),
+                        )
+                    }
                     if (canUseBiometric) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Biometric Unlock") },
-                            supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
-                            leadingContent = {
-                                Icon(Icons.Default.Fingerprint, contentDescription = null)
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = isBiometricEnabled,
-                                    onCheckedChange = { enabled ->
-                                        if (enabled) {
-                                            biometricPasswordError = false
-                                            showBiometricConfirmDialog = true
-                                        } else {
-                                            settingsVm.setBiometricEnabled(false)
-                                        }
-                                    },
-                                )
-                            },
-                        )
+                        HighlightableRow(
+                            isHighlighted = highlightKey == SettingsHighlightKeys.BIOMETRIC_UNLOCK,
+                            onHighlightConsumed = settingsVm::clearHighlight,
+                        ) {
+                            ListItem(
+                                headlineContent = { Text("Biometric Unlock") },
+                                supportingContent = { Text("Biometric data never leaves the device's secure hardware. 1Key only receives a yes/no result.") },
+                                leadingContent = {
+                                    Icon(Icons.Default.Fingerprint, contentDescription = null)
+                                },
+                                trailingContent = {
+                                    Switch(
+                                        checked = isBiometricEnabled,
+                                        onCheckedChange = { enabled ->
+                                            if (enabled) {
+                                                biometricPasswordError = false
+                                                showBiometricConfirmDialog = true
+                                            } else {
+                                                settingsVm.setBiometricEnabled(false)
+                                            }
+                                        },
+                                    )
+                                },
+                            )
+                        }
                     }
                     if (isPinSetup) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        ListItem(
-                            headlineContent = { Text("Remove PIN") },
-                            supportingContent = { Text("Stop using a PIN — only your master password will unlock 1Key") },
-                            leadingContent = { Icon(Icons.Default.LockReset, null) },
-                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                            modifier = Modifier.clickable {
-                                removePinPasswordInput = ""
-                                removePinPasswordVisible = false
-                                removePinPasswordError = false
-                                showRemovePinDialog = true
-                            },
-                        )
+                        HighlightableRow(
+                            isHighlighted = highlightKey == SettingsHighlightKeys.REMOVE_PIN,
+                            onHighlightConsumed = settingsVm::clearHighlight,
+                        ) {
+                            ListItem(
+                                headlineContent = { Text("Remove PIN") },
+                                supportingContent = { Text("Stop using a PIN — only your master password will unlock 1Key") },
+                                leadingContent = { Icon(Icons.Default.LockReset, null) },
+                                trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                                modifier = Modifier.clickable {
+                                    removePinPasswordInput = ""
+                                    removePinPasswordVisible = false
+                                    removePinPasswordError = false
+                                    showRemovePinDialog = true
+                                },
+                            )
+                        }
                     }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     ListItem(
@@ -192,47 +213,62 @@ fun SettingsSecurityScreen(
             SectionHeader("Auto-lock")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    ListItem(
-                        headlineContent = { Text("Lock when app in background") },
-                        supportingContent = { Text(backgroundLockTimeout.displayName) },
-                        leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showBackgroundLockDialog = true },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.BACKGROUND_LOCK,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Lock when app in background") },
+                            supportingContent = { Text(backgroundLockTimeout.displayName) },
+                            leadingContent = { Icon(Icons.Default.Timer, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable { showBackgroundLockDialog = true },
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Lock after inactivity") },
-                        supportingContent = { Text(inactivityLockTimeout.displayName) },
-                        leadingContent = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
-                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-                        modifier = Modifier.clickable { showInactivityLockDialog = true },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.INACTIVITY_LOCK,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Lock after inactivity") },
+                            supportingContent = { Text(inactivityLockTimeout.displayName) },
+                            leadingContent = { Icon(Icons.Default.HourglassEmpty, contentDescription = null) },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                            modifier = Modifier.clickable { showInactivityLockDialog = true },
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Pick up where you left off") },
-                        supportingContent = {
-                            Text(
-                                if (isRestoreLastScreenOnUnlock)
-                                    "After auto-lock, unlocking takes you back to the screen you were on."
-                                else
-                                    "After auto-lock, unlocking always takes you to the home screen."
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Restore, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isRestoreLastScreenOnUnlock,
-                                onCheckedChange = { newValue ->
-                                    if (newValue) {
-                                        // Confirm before turning on — surface the trade-off.
-                                        showRestoreLastScreenDialog = true
-                                    } else {
-                                        settingsVm.setRestoreLastScreenOnUnlock(false)
-                                    }
-                                },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.RESTORE_LAST_SCREEN,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Pick up where you left off") },
+                            supportingContent = {
+                                Text(
+                                    if (isRestoreLastScreenOnUnlock)
+                                        "After auto-lock, unlocking takes you back to the screen you were on."
+                                    else
+                                        "After auto-lock, unlocking always takes you to the home screen."
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Restore, contentDescription = null) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isRestoreLastScreenOnUnlock,
+                                    onCheckedChange = { newValue ->
+                                        if (newValue) {
+                                            // Confirm before turning on — surface the trade-off.
+                                            showRestoreLastScreenDialog = true
+                                        } else {
+                                            settingsVm.setRestoreLastScreenOnUnlock(false)
+                                        }
+                                    },
+                                )
+                            },
+                        )
+                    }
                 }
             }
 
@@ -306,25 +342,30 @@ fun SettingsSecurityScreen(
             Spacer(Modifier.height(8.dp))
             SectionHeader("Screen capture")
             Card(modifier = Modifier.fillMaxWidth()) {
-                ListItem(
-                    headlineContent = { Text("Allow Screenshots") },
-                    supportingContent = {
-                        Text(
-                            if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
-                            else "Blocks screenshots, screen recordings, and Recent Apps preview"
-                        )
-                    },
-                    leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
-                    trailingContent = {
-                        Switch(
-                            checked = isScreenshotsEnabled,
-                            onCheckedChange = { newValue ->
-                                pendingScreenshotsEnabled = newValue
-                                showScreenshotDialog = true
-                            },
-                        )
-                    },
-                )
+                HighlightableRow(
+                    isHighlighted = highlightKey == SettingsHighlightKeys.ALLOW_SCREENSHOTS,
+                    onHighlightConsumed = settingsVm::clearHighlight,
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Allow Screenshots") },
+                        supportingContent = {
+                            Text(
+                                if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
+                                else "Blocks screenshots, screen recordings, and Recent Apps preview"
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.Screenshot, contentDescription = null) },
+                        trailingContent = {
+                            Switch(
+                                checked = isScreenshotsEnabled,
+                                onCheckedChange = { newValue ->
+                                    pendingScreenshotsEnabled = newValue
+                                    showScreenshotDialog = true
+                                },
+                            )
+                        },
+                    )
+                }
             }
         }
     }

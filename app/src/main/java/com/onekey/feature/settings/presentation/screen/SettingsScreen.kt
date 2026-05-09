@@ -122,6 +122,7 @@ fun SettingsScreen(
 
     fun handleResultTap(entry: SettingsEntry) {
         focusManager.clearFocus()
+        if (entry.highlightKey != null) searchVm.setPendingHighlight(entry.highlightKey)
         searchVm.setSearchActive(false)
         when (val action = entry.action) {
             is SettingsAction.Navigate -> when (action.destination) {

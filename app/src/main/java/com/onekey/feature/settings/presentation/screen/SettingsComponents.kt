@@ -1,7 +1,13 @@
 package com.onekey.feature.settings.presentation.screen
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -20,6 +26,40 @@ internal fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.primary,
     )
     Spacer(Modifier.height(4.dp))
+}
+
+// Wraps a settings row so that when [isHighlighted] becomes true the nearest scrollable
+// ancestor scrolls the row into view and a brief colour pulse draws the user's eye to it.
+// When [isHighlighted] is false this composable is a zero-overhead passthrough.
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun HighlightableRow(
+    isHighlighted: Boolean,
+    onHighlightConsumed: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val highlightAlpha = remember { Animatable(0f) }
+    val highlightColor = MaterialTheme.colorScheme.primaryContainer
+
+    LaunchedEffect(isHighlighted) {
+        if (isHighlighted) {
+            bringIntoViewRequester.bringIntoView()
+            highlightAlpha.snapTo(1f)
+            kotlinx.coroutines.delay(800)
+            highlightAlpha.animateTo(0f, tween(durationMillis = 1200))
+            onHighlightConsumed()
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .bringIntoViewRequester(bringIntoViewRequester)
+            .background(highlightColor.copy(alpha = highlightAlpha.value)),
+    ) {
+        content()
+    }
 }
 
 @Composable
