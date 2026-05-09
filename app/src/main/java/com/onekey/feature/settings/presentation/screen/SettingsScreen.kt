@@ -34,7 +34,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.onekey.feature.settings.presentation.viewmodel.SettingsAction
 import com.onekey.feature.settings.presentation.viewmodel.SettingsDestination
 import com.onekey.feature.settings.presentation.viewmodel.SettingsDialogId
-import com.onekey.feature.settings.presentation.viewmodel.SettingsDirectToggle
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEntry
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsSearchViewModel
@@ -133,13 +132,6 @@ fun SettingsScreen(
                 SettingsDestination.PrivacyPolicy -> onPrivacyPolicy()
                 SettingsDestination.SetupPin -> onSetupPin()
                 SettingsDestination.ChangePassword -> onChangePassword()
-            }
-            is SettingsAction.DirectToggle -> when (action.toggle) {
-                SettingsDirectToggle.DarkTheme -> settingsVm.toggleTheme()
-                SettingsDirectToggle.ShowFavourites -> settingsVm.setShowFavourites(!settingsVm.isShowFavourites.value)
-                SettingsDirectToggle.HideTopBarOnScroll -> settingsVm.setHideTopBarOnScroll(!settingsVm.isHideTopBarOnScroll.value)
-                SettingsDirectToggle.VaultFooter -> settingsVm.setVaultFooterVisible(!settingsVm.isVaultFooterVisible.value)
-                SettingsDirectToggle.MasterPasswordRecheck -> settingsVm.setMasterPasswordRecheckEnabled(!settingsVm.isMasterPasswordRecheckEnabled.value)
             }
             is SettingsAction.OpenDialogOn -> when (action.dialogId) {
                 SettingsDialogId.DeleteVault -> showDeleteVaultDialog = true

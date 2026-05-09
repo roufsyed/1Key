@@ -11,17 +11,11 @@ data class SettingsEntry(
 
 sealed class SettingsAction {
     data class Navigate(val destination: SettingsDestination) : SettingsAction()
-    data class DirectToggle(val toggle: SettingsDirectToggle) : SettingsAction()
     data class OpenDialogOn(val dialogId: SettingsDialogId) : SettingsAction()
 }
 
 enum class SettingsDestination {
     General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword
-}
-
-// Only toggles with no confirm dialog — safe to fire directly from search results.
-enum class SettingsDirectToggle {
-    DarkTheme, ShowFavourites, HideTopBarOnScroll, VaultFooter, MasterPasswordRecheck
 }
 
 // Only dialogs whose state lives in SettingsScreen itself.
@@ -32,7 +26,16 @@ enum class SettingsDialogId { DeleteVault }
 // Stable string keys used by sub-screens to identify which row to scroll-to and highlight
 // when the user arrives via a search result. Defined here so the index and the sub-screens
 // share the same constants without magic strings.
+//
+// Why every search entry navigates (no in-place toggle): tapping a search result for
+// "dark mode" should open the General screen with that row pulsed, not silently flip the
+// theme. The latter is surprising — users expect search to reveal where a setting lives,
+// not to actuate it. So all toggles now go through Navigate + a highlight key.
 object SettingsHighlightKeys {
+    const val DARK_THEME = "dark_theme"
+    const val SHOW_FAVOURITES = "show_favourites"
+    const val HIDE_TOP_BAR_ON_SCROLL = "hide_top_bar_on_scroll"
+    const val VAULT_FOOTER = "vault_footer"
     const val RECYCLE_BIN = "recycle_bin"
     const val RECYCLE_BIN_RETENTION = "recycle_bin_retention"
     const val MANAGE_CATEGORIES = "manage_categories"
@@ -42,6 +45,7 @@ object SettingsHighlightKeys {
     const val BACKGROUND_LOCK = "background_lock"
     const val INACTIVITY_LOCK = "inactivity_lock"
     const val RESTORE_LAST_SCREEN = "restore_last_screen"
+    const val MASTER_PASSWORD_RECHECK = "master_password_recheck"
     const val ALLOW_SCREENSHOTS = "allow_screenshots"
 }
 
@@ -60,29 +64,32 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         subtitle = "Toggle between light and dark mode",
         sectionLabel = "General",
         keywords = listOf("night", "appearance", "colour", "color", "dark mode"),
-        action = SettingsAction.DirectToggle(SettingsDirectToggle.DarkTheme),
-        // No highlightKey — DirectToggle fires in place, no navigation.
+        action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.DARK_THEME,
     ),
     SettingsEntry(
         title = "Show Favourites tab",
         subtitle = "Show or hide Favourites in bottom navigation",
         sectionLabel = "General",
         keywords = listOf("favorites", "nav", "bottom bar", "starred"),
-        action = SettingsAction.DirectToggle(SettingsDirectToggle.ShowFavourites),
+        action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.SHOW_FAVOURITES,
     ),
     SettingsEntry(
         title = "Hide top bar on scroll",
         subtitle = "Collapse the top bar as you scroll lists",
         sectionLabel = "General",
         keywords = listOf("toolbar", "appbar", "collapse", "scroll"),
-        action = SettingsAction.DirectToggle(SettingsDirectToggle.HideTopBarOnScroll),
+        action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.HIDE_TOP_BAR_ON_SCROLL,
     ),
     SettingsEntry(
         title = "Show privacy footer",
         subtitle = "Show the encrypted-on-device footer in the vault list",
         sectionLabel = "General",
         keywords = listOf("footer", "encryption notice", "vault"),
-        action = SettingsAction.DirectToggle(SettingsDirectToggle.VaultFooter),
+        action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.VAULT_FOOTER,
     ),
     SettingsEntry(
         title = "Recycle bin",
@@ -179,8 +186,8 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         subtitle = "Require master password at a set interval even when using PIN or biometric",
         sectionLabel = "Security",
         keywords = listOf("recheck", "re-enter", "interval", "biometric interval", "pin interval"),
-        action = SettingsAction.DirectToggle(SettingsDirectToggle.MasterPasswordRecheck),
-        // No highlightKey — DirectToggle fires in place, no navigation.
+        action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.MASTER_PASSWORD_RECHECK,
     ),
     SettingsEntry(
         title = "Allow Screenshots",

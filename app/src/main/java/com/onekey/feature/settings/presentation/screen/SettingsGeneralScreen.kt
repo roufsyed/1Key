@@ -62,79 +62,99 @@ fun SettingsGeneralScreen(
             SectionHeader("Appearance")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    ListItem(
-                        headlineContent = { Text("Dark theme") },
-                        supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
-                        leadingContent = {
-                            Icon(
-                                if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                contentDescription = null,
-                            )
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isDarkTheme,
-                                onCheckedChange = { settingsVm.toggleTheme() },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.DARK_THEME,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Dark theme") },
+                            supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
+                            leadingContent = {
+                                Icon(
+                                    if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                                    contentDescription = null,
+                                )
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isDarkTheme,
+                                    onCheckedChange = { settingsVm.toggleTheme() },
+                                )
+                            },
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Show Favourites tab") },
-                        supportingContent = {
-                            Text(
-                                if (isShowFavourites) "Favourites visible in bottom navigation"
-                                else "Favourites hidden from bottom navigation"
-                            )
-                        },
-                        leadingContent = {
-                            Icon(Icons.Default.Favorite, contentDescription = null)
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isShowFavourites,
-                                onCheckedChange = { settingsVm.setShowFavourites(it) },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.SHOW_FAVOURITES,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Show Favourites tab") },
+                            supportingContent = {
+                                Text(
+                                    if (isShowFavourites) "Favourites visible in bottom navigation"
+                                    else "Favourites hidden from bottom navigation"
+                                )
+                            },
+                            leadingContent = {
+                                Icon(Icons.Default.Favorite, contentDescription = null)
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isShowFavourites,
+                                    onCheckedChange = { settingsVm.setShowFavourites(it) },
+                                )
+                            },
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Hide top bar on scroll") },
-                        supportingContent = {
-                            Text(
-                                if (isHideTopBarOnScroll) "Top bar collapses as you scroll lists"
-                                else "Top bar stays pinned while scrolling"
-                            )
-                        },
-                        leadingContent = {
-                            Icon(Icons.Default.UnfoldLess, contentDescription = null)
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = isHideTopBarOnScroll,
-                                onCheckedChange = { settingsVm.setHideTopBarOnScroll(it) },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.HIDE_TOP_BAR_ON_SCROLL,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Hide top bar on scroll") },
+                            supportingContent = {
+                                Text(
+                                    if (isHideTopBarOnScroll) "Top bar collapses as you scroll lists"
+                                    else "Top bar stays pinned while scrolling"
+                                )
+                            },
+                            leadingContent = {
+                                Icon(Icons.Default.UnfoldLess, contentDescription = null)
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isHideTopBarOnScroll,
+                                    onCheckedChange = { settingsVm.setHideTopBarOnScroll(it) },
+                                )
+                            },
+                        )
+                    }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                    ListItem(
-                        headlineContent = { Text("Show privacy footer") },
-                        supportingContent = {
-                            Text(
-                                if (isVaultFooterVisible)
-                                    "\"Your vault is encrypted and stored only on this device.\" appears below the vault list"
-                                else
-                                    "Footer hidden from the vault list",
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Shield, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isVaultFooterVisible,
-                                onCheckedChange = { settingsVm.setVaultFooterVisible(it) },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.VAULT_FOOTER,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Show privacy footer") },
+                            supportingContent = {
+                                Text(
+                                    if (isVaultFooterVisible)
+                                        "\"Your vault is encrypted and stored only on this device.\" appears below the vault list"
+                                    else
+                                        "Footer hidden from the vault list",
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Shield, contentDescription = null) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isVaultFooterVisible,
+                                    onCheckedChange = { settingsVm.setVaultFooterVisible(it) },
+                                )
+                            },
+                        )
+                    }
                 }
             }
 

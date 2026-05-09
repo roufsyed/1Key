@@ -275,24 +275,29 @@ fun SettingsSecurityScreen(
             SectionHeader("Periodic master password check")
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column {
-                    ListItem(
-                        headlineContent = { Text("Periodic master password check") },
-                        supportingContent = {
-                            Text(
-                                if (isMasterPasswordRecheckEnabled)
-                                    "Master password required every ${masterPasswordRecheckInterval.label}"
-                                else
-                                    "Biometric and PIN can be used indefinitely"
-                            )
-                        },
-                        leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
-                        trailingContent = {
-                            Switch(
-                                checked = isMasterPasswordRecheckEnabled,
-                                onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
-                            )
-                        },
-                    )
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.MASTER_PASSWORD_RECHECK,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Periodic master password check") },
+                            supportingContent = {
+                                Text(
+                                    if (isMasterPasswordRecheckEnabled)
+                                        "Master password required every ${masterPasswordRecheckInterval.label}"
+                                    else
+                                        "Biometric and PIN can be used indefinitely"
+                                )
+                            },
+                            leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                            trailingContent = {
+                                Switch(
+                                    checked = isMasterPasswordRecheckEnabled,
+                                    onCheckedChange = { settingsVm.setMasterPasswordRecheckEnabled(it) },
+                                )
+                            },
+                        )
+                    }
                     if (isMasterPasswordRecheckEnabled) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                         Column(
