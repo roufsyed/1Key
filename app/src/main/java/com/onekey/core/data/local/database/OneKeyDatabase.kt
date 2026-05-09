@@ -154,6 +154,18 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
     }
 }
 
+// Adds `title_encrypted` + `iv_title` for H1 (title encryption). Plaintext
+// `title` stays in place for v0/v1 rows; it gets cleared as each row migrates
+// to cipher_version=2 via CredentialCipherMigrator on the next unlock. SQL
+// queries that ORDER BY / LIKE on title are moved to in-memory work in the
+// repository so they keep working across mixed v1/v2 row states.
+val MIGRATION_12_13 = object : Migration(12, 13) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN title_encrypted BLOB")
+        db.execSQL("ALTER TABLE credentials ADD COLUMN iv_title BLOB")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -170,7 +182,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

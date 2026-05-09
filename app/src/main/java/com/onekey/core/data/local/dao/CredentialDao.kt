@@ -61,15 +61,17 @@ interface CredentialDao {
     @Query("SELECT * FROM credentials WHERE deleted_at IS NULL")
     suspend fun getAll(): List<CredentialEntity>
 
-    // Used by CredentialCipherMigrator to walk pre-DB-v12 rows in batches and
-    // re-encrypt them with the HKDF field-subkey + per-field AAD. Includes
-    // soft-deleted rows so the bin migrates too — otherwise restoring a v0 row
-    // post-migration would fail to decrypt under the v1 read path. Newest rows
-    // first so the visible vault converts before the long tail of bin entries.
-    @Query("SELECT * FROM credentials WHERE cipher_version = 0 ORDER BY updated_at DESC LIMIT :limit")
+    // Used by CredentialCipherMigrator to walk pre-current-cipher rows in batches.
+    // CURRENT_CIPHER_VERSION lives in CredentialCipherMigrator.kt — the value
+    // is duplicated as a literal here because @Query doesn't accept Kotlin consts.
+    // Includes soft-deleted rows so the bin migrates too — otherwise restoring a
+    // v0/v1 row post-migration would fail to decrypt under the current read
+    // path. Newest rows first so the visible vault converts before the long
+    // tail of bin entries.
+    @Query("SELECT * FROM credentials WHERE cipher_version < 2 ORDER BY updated_at DESC LIMIT :limit")
     suspend fun getLegacyCipherBatch(limit: Int): List<CredentialEntity>
 
-    @Query("SELECT COUNT(*) FROM credentials WHERE cipher_version = 0")
+    @Query("SELECT COUNT(*) FROM credentials WHERE cipher_version < 2")
     suspend fun countLegacyCipher(): Int
 
     // Used by import dedup to detect (title, username) matches that live in the recycle bin.
@@ -98,12 +100,14 @@ interface CredentialDao {
      * them in the recompute loop would silently regenerate codes every second
      * without persisting the counter, desyncing the user from the issuer.
      */
+    // ORDER BY title removed in DB v13 — titles are encrypted on v2+ rows so the
+    // SQL collation can't compare them. The repository sorts by decrypted title
+    // in memory after toDomain().
     @Query(
         """SELECT * FROM credentials
            WHERE deleted_at IS NULL
              AND totp_secret_encrypted IS NOT NULL
-             AND otp_type IN ('TOTP', 'STEAM')
-           ORDER BY title ASC"""
+             AND otp_type IN ('TOTP', 'STEAM')"""
     )
     fun observeRotatingOtp(): Flow<List<CredentialEntity>>
 
@@ -113,12 +117,12 @@ interface CredentialDao {
      * list combines this with [observeRotatingOtp] for display, with HOTP rows
      * showing a "Generate next code" button instead of a countdown ring.
      */
+    // Same title-encryption note as observeRotatingOtp.
     @Query(
         """SELECT * FROM credentials
            WHERE deleted_at IS NULL
              AND totp_secret_encrypted IS NOT NULL
-             AND otp_type = 'HOTP'
-           ORDER BY title ASC"""
+             AND otp_type = 'HOTP'"""
     )
     fun observeHotpEntries(): Flow<List<CredentialEntity>>
 
@@ -176,14 +180,18 @@ interface CredentialDao {
     @RawQuery(observedEntities = [CredentialEntity::class])
     fun observeListRaw(query: SupportSQLiteQuery): Flow<List<CredentialEntity>>
 
+    // Full-row variants of the title observers. The plaintext-title SQL projection
+    // they replaced stopped working when DB v13 encrypted titles for v2+ rows;
+    // CredentialRepositoryImpl decrypts and sorts in memory. We observe full rows
+    // (rather than just title columns) because Room invalidation needs the
+    // entity-tracking signal that an `entity SELECT *` carries.
     @Query("""
-        SELECT title FROM credentials
+        SELECT * FROM credentials
         WHERE deleted_at IS NULL
         AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
-        ORDER BY lower(title) ASC
     """)
-    fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
+    fun observeAllForAlphabet(tag: String): Flow<List<CredentialEntity>>
 
-    @Query("SELECT title FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY lower(title) ASC")
-    fun observeFavoriteTitlesAlphabetical(): Flow<List<String>>
+    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1")
+    fun observeFavoritesForAlphabet(): Flow<List<CredentialEntity>>
 }

@@ -9,6 +9,7 @@ import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.HKDF_FIELD_KEY_INFO
+import com.onekey.core.security.HKDF_TITLE_KEY_INFO
 import com.onekey.core.security.VaultKeyHolder
 import javax.crypto.SecretKey
 import androidx.sqlite.db.SimpleSQLiteQuery
@@ -47,19 +48,36 @@ class CredentialRepositoryImpl @Inject constructor(
     override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(PagingData.empty())
-            else {
+            else if (query.isEmpty() && sortOrder != CredentialSortOrder.ALPHABETICAL) {
+                // Fast path — SQL filter + date-only ordering, real paging.
+                // Title is never read in SQL, so encrypted v2+ titles don't matter here.
                 // tags column is a JSON array; matching on the quoted token (`"foo"`)
                 // avoids tag "foo" spuriously matching credentials tagged "foobar".
                 val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%\"' || ? || '\"%') ORDER BY ${sortOrder.toOrderBy()}",
-                    arrayOf(query, query, tag, tag),
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR tags LIKE '%\"' || ? || '\"%') ORDER BY ${sortOrder.dateOrderBy()}",
+                    arrayOf(tag, tag),
                 )
                 Pager(
                     config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false, prefetchDistance = 10),
                     pagingSourceFactory = { dao.pagingSourceRaw(sql) },
                 ).flow.map { pagingData -> pagingData.toDomainPaging() }
+            } else {
+                // Slow path — title is involved. SQL filters by tag + deleted_at only;
+                // we decrypt, filter by title query, and sort in memory. PagingData.from
+                // wraps the materialised list so the public Flow<PagingData<Credential>>
+                // contract stays intact.
+                val sql = SimpleSQLiteQuery(
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR tags LIKE '%\"' || ? || '\"%')",
+                    arrayOf(tag, tag),
+                )
+                dao.observeListRaw(sql).map { entities ->
+                    val list = entities.toDomainListSafe()
+                        .let { if (query.isEmpty()) it else it.filter { c -> c.title.contains(query, ignoreCase = true) } }
+                        .sortedWith(sortOrder.comparator())
+                    PagingData.from(list)
+                }
             }
-        }
+        }.flowOn(Dispatchers.Default)
 
     override fun observeCredential(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
@@ -155,70 +173,98 @@ class CredentialRepositoryImpl @Inject constructor(
     override fun observeFavoritesPaged(sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(PagingData.empty())
-            else {
+            else if (sortOrder != CredentialSortOrder.ALPHABETICAL) {
                 val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY ${sortOrder.dateOrderBy()}",
                 )
                 Pager(
                     config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
                     pagingSourceFactory = { dao.favoritesPagingSourceRaw(sql) },
                 ).flow.map { pagingData -> pagingData.toDomainPaging() }
+            } else {
+                // Alphabetical favourites — decrypt and sort by title in memory.
+                dao.observeFavorites().map { entities ->
+                    PagingData.from(entities.toDomainListSafe().sortedWith(sortOrder.comparator()))
+                }
             }
-        }
-
-    override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> {
-        val sql = SimpleSQLiteQuery(
-            "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR title LIKE '%' || ? || '%') AND (? = '' OR tags LIKE '%\"' || ? || '\"%') ORDER BY ${sortOrder.toOrderBy()}",
-            arrayOf(query, query, tag, tag),
-        )
-        return keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(emptyList())
-            else dao.observeListRaw(sql).map { list -> list.toDomainListSafe() }
         }.flowOn(Dispatchers.Default)
-    }
 
-    override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> {
-        val sql = SimpleSQLiteQuery(
-            "SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY ${sortOrder.toOrderBy()}",
-        )
-        return keyHolder.isUnlocked.flatMapLatest { unlocked ->
+    override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeListRaw(sql).map { list -> list.toDomainListSafe() }
+            else {
+                val sql = SimpleSQLiteQuery(
+                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR tags LIKE '%\"' || ? || '\"%')",
+                    arrayOf(tag, tag),
+                )
+                dao.observeListRaw(sql).map { entities ->
+                    entities.toDomainListSafe()
+                        .let { if (query.isEmpty()) it else it.filter { c -> c.title.contains(query, ignoreCase = true) } }
+                        .sortedWith(sortOrder.comparator())
+                }
+            }
         }.flowOn(Dispatchers.Default)
-    }
 
-    // Titles are stored unencrypted by schema (used for the alphabet index), so emitting
-    // them while locked isn't a leak per se. Gating anyway for consistency with the rest
-    // of the repo — every other observer drops out on lock, and downstream UI is allowed
-    // to assume that contract.
+    override fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeFavorites().map { list ->
+                list.toDomainListSafe().sortedWith(sortOrder.comparator())
+            }
+        }.flowOn(Dispatchers.Default)
+
+    // The alphabet observers used to project the plaintext `title` column directly
+    // from SQL. After H1 (DB v13), v2+ rows have an empty plaintext title, so the
+    // path now decrypts the full row and projects to titles in memory. Cost is
+    // bounded by vault size — the alphabet scrollbar already shows every row.
     override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeAllTitlesAlphabetical(tag)
-        }
+            else dao.observeAllForAlphabet(tag).map { entities ->
+                entities.toDomainListSafe()
+                    .map { it.title }
+                    .sortedBy { it.lowercase() }
+            }
+        }.flowOn(Dispatchers.Default)
 
     override fun observeFavoriteTitlesAlphabetical(): Flow<List<String>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeFavoriteTitlesAlphabetical()
-        }
+            else dao.observeFavoritesForAlphabet().map { entities ->
+                entities.toDomainListSafe()
+                    .map { it.title }
+                    .sortedBy { it.lowercase() }
+            }
+        }.flowOn(Dispatchers.Default)
 
-    private fun CredentialSortOrder.toOrderBy() = when (this) {
+    /** Date-only SQL ordering. Caller must ensure sortOrder != ALPHABETICAL — that path uses [comparator]. */
+    private fun CredentialSortOrder.dateOrderBy() = when (this) {
         CredentialSortOrder.NEWEST_FIRST -> "created_at DESC"
         CredentialSortOrder.LAST_MODIFIED -> "updated_at DESC"
-        CredentialSortOrder.ALPHABETICAL -> "lower(title) ASC"
+        CredentialSortOrder.ALPHABETICAL -> error("ALPHABETICAL sort takes the in-memory path; do not use SQL ordering")
+    }
+
+    /** In-memory comparator used whenever title sorting is needed (titles are encrypted on v2+ rows). */
+    private fun CredentialSortOrder.comparator(): Comparator<Credential> = when (this) {
+        CredentialSortOrder.NEWEST_FIRST -> compareByDescending { it.createdAt }
+        CredentialSortOrder.LAST_MODIFIED -> compareByDescending { it.updatedAt }
+        CredentialSortOrder.ALPHABETICAL -> compareBy { it.title.lowercase() }
     }
 
     override fun observeRotatingOtp(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeRotatingOtp().map { list -> list.toDomainListSafe() }
+            else dao.observeRotatingOtp().map { list ->
+                list.toDomainListSafe().sortedBy { it.title.lowercase() }
+            }
         }.flowOn(Dispatchers.Default)
 
     override fun observeHotpEntries(): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
-            else dao.observeHotpEntries().map { list -> list.toDomainListSafe() }
+            else dao.observeHotpEntries().map { list ->
+                list.toDomainListSafe().sortedBy { it.title.lowercase() }
+            }
         }.flowOn(Dispatchers.Default)
 
     override suspend fun incrementHotpCounter(credentialId: String): AppResult<Long?> =
@@ -265,7 +311,9 @@ class CredentialRepositoryImpl @Inject constructor(
 
     private fun placeholderCredential(entity: CredentialEntity): Credential = Credential(
         id = entity.id,
-        title = entity.title,
+        // For v2+ rows, the plaintext column is empty; we can't decrypt the title without the key.
+        // Show a neutral marker so the row is visible in the list rather than mysteriously blank.
+        title = entity.title.ifEmpty { "(locked)" },
         username = "",
         password = "",
         url = "",
@@ -285,8 +333,9 @@ class CredentialRepositoryImpl @Inject constructor(
         val vaultKey = keyHolder.requireKey()
         // v0 rows: encrypted with the raw vault key, no AAD (legacy, pre-DB-v12).
         // v1 rows: encrypted with the HKDF-derived field subkey, AAD = ("1k:v1|<id>|<field>"),
-        // which binds the ciphertext to this specific row + column. Mismatched
-        // ciphertexts (e.g., DB-edited swap of password into username) fail GCM auth.
+        //          title still plaintext.
+        // v2 rows: as v1, plus title encrypted under the title subkey with AAD
+        //          "1k:v2|<id>|title". Plaintext `title` column is empty.
         val cipherKey = if (cipherVersion >= 1) crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO) else vaultKey
 
         fun decryptField(ct: ByteArray, iv: ByteArray, fieldName: String): String {
@@ -294,9 +343,17 @@ class CredentialRepositoryImpl @Inject constructor(
             return crypto.decrypt(EncryptedData(ct, iv), cipherKey, aad).toString(Charsets.UTF_8)
         }
 
+        val resolvedTitle = if (cipherVersion >= 2 && titleEncrypted != null && ivTitle != null) {
+            val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
+            crypto.decrypt(EncryptedData(titleEncrypted, ivTitle), titleKey, titleAad(id))
+                .toString(Charsets.UTF_8)
+        } else {
+            title
+        }
+
         return Credential(
             id = id,
-            title = title,
+            title = resolvedTitle,
             username = decryptField(usernameEncrypted, ivUsername, "username"),
             password = decryptField(passwordEncrypted, ivPassword, "password"),
             url = if (urlEncrypted != null && ivUrl != null)
@@ -359,6 +416,7 @@ class CredentialRepositoryImpl @Inject constructor(
     private fun Credential.toEntity(): CredentialEntity {
         val vaultKey = keyHolder.requireKey()
         val fieldKey = crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO)
+        val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
         val now = System.currentTimeMillis()
         val resolvedId = if (id.isBlank()) UUID.randomUUID().toString() else id
 
@@ -370,10 +428,14 @@ class CredentialRepositoryImpl @Inject constructor(
         val encNotes    = encryptField(notes, "notes")
         val encTotp     = otpParams?.let { encryptField(it.secret, "totp") }
         val encUrl      = encryptField(url, "url")
+        val encTitle    = crypto.encrypt(title.toByteArray(Charsets.UTF_8), titleKey, titleAad(resolvedId))
 
         return CredentialEntity(
             id = resolvedId,
-            title = title,
+            // Plaintext title cleared on v2+ rows — the encrypted column is the source of truth.
+            title = "",
+            titleEncrypted = encTitle.ciphertext,
+            ivTitle = encTitle.iv,
             usernameEncrypted = encUsername.ciphertext,
             ivUsername = encUsername.iv,
             passwordEncrypted = encPassword.ciphertext,
@@ -416,10 +478,13 @@ class CredentialRepositoryImpl @Inject constructor(
             totpDigits = otpParams?.digits ?: OtpParams.DEFAULT_DIGITS,
             totpPeriod = otpParams?.period ?: OtpParams.DEFAULT_PERIOD_SECONDS,
             hotpCounter = if (otpParams?.type == OtpType.HOTP) otpParams.counter else null,
-            cipherVersion = 1,
+            cipherVersion = 2,
         )
     }
 
     private fun fieldAad(credentialId: String, field: String): ByteArray =
         "1k:v1|$credentialId|$field".toByteArray(Charsets.UTF_8)
+
+    private fun titleAad(credentialId: String): ByteArray =
+        "1k:v2|$credentialId|title".toByteArray(Charsets.UTF_8)
 }

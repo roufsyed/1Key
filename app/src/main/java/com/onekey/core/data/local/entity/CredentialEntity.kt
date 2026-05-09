@@ -14,7 +14,15 @@ import com.onekey.core.data.local.database.Converters
 @TypeConverters(Converters::class)
 data class CredentialEntity(
     @PrimaryKey val id: String,
+    // Plaintext title (legacy). Read for v0/v1 rows; cleared and ignored on
+    // v2+ rows in favour of `titleEncrypted`. Kept as a non-null column for
+    // schema compat — empty string for v2 rows. See `cipherVersion` doc.
     @ColumnInfo(name = "title") val title: String,
+    // Title ciphertext + IV. Populated on cipher_version >= 2; null otherwise.
+    // Encrypted under the HKDF title-subkey ("1key-title-enc-v1") with
+    // AAD = "1k:v2|<id>|title", binding the row to its own title.
+    @ColumnInfo(name = "title_encrypted") val titleEncrypted: ByteArray? = null,
+    @ColumnInfo(name = "iv_title") val ivTitle: ByteArray? = null,
     @ColumnInfo(name = "username_encrypted") val usernameEncrypted: ByteArray,
     @ColumnInfo(name = "password_encrypted") val passwordEncrypted: ByteArray,
     // url stored plaintext pre-v4; encrypted going forward. Legacy column kept for schema compat.
@@ -64,12 +72,14 @@ data class CredentialEntity(
     @ColumnInfo(name = "hotp_counter") val hotpCounter: Long? = null,
     // ── Cipher version (added in DB v12) ─────────────────────────────────────
     // 0 = legacy: AES-GCM with the raw vault key, no AAD on credential fields.
-    // 1 = HKDF field-subkey + per-field AAD ("1k:v1|<id>|<field>"). Per-field
-    //     AAD prevents an attacker with DB write access from swapping a
-    //     ciphertext between rows or columns without invalidating the GCM tag.
+    //     Title is plaintext.
+    // 1 = HKDF field-subkey + per-field AAD ("1k:v1|<id>|<field>"). Title still
+    //     plaintext.
+    // 2 = adds: title encrypted under the HKDF title-subkey with AAD
+    //     "1k:v2|<id>|title". Plaintext `title` column is cleared.
     //
-    // Read path dispatches on this value; write path always emits v1. Existing
-    // rows are silently re-encrypted to v1 on the next unlock by
+    // Read path dispatches on this value; write path always emits v2. Existing
+    // rows are silently re-encrypted to v2 on the next unlock by
     // CredentialCipherMigrator — without bumping `updated_at`.
     @ColumnInfo(name = "cipher_version", defaultValue = "0") val cipherVersion: Int = 0,
 ) {
