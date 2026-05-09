@@ -21,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,6 +48,8 @@ fun OnboardingScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
     // rememberSaveable so a rotation doesn't dump the user back to the welcome page
     // mid-flow. Plain `remember` only survives recomposition, not activity recreation.
     var step by rememberSaveable { mutableStateOf(0) }
@@ -74,6 +78,12 @@ fun OnboardingScreen(
 
     LaunchedEffect(state) {
         if (state is AuthUiState.SetupComplete) {
+            // Hide the IME only on a successful setup — a wrong restore-backup password
+            // or any in-flight error should leave the keyboard up so the user can retype
+            // immediately without re-tapping the field. `clearFocus(force = true)` covers
+            // hardware-keyboard / stuck-IME edge cases where `hide()` alone isn't enough.
+            keyboardController?.hide()
+            focusManager.clearFocus(force = true)
             // Dismiss the restore dialog (if open) so the "vault ready" page is visible underneath.
             showRestoreDialog = false
             pendingRestoreUri = null

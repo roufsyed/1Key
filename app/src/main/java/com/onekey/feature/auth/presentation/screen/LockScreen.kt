@@ -36,6 +36,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -532,6 +534,8 @@ private fun PinUnlockSection(
 ) {
     var pin by remember { mutableStateOf("") }
     val isLoading = state is AuthUiState.Loading
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     // Same ticking-countdown pattern as PasswordUnlockSection. PinAttemptTracker emits
     // an absolute epoch-ms; we poll every 200ms so the "Xs" label updates smoothly
@@ -591,6 +595,11 @@ private fun PinUnlockSection(
                 pin = ""  // Clear only after the shake so dots stay visible while shaking
             }
             is AuthUiState.Unlocked -> {
+                // Hide the IME only on a successful unlock, not at submission time —
+                // a wrong PIN should leave the keypad up so the user can retype
+                // immediately. `clearFocus(force = true)` covers stuck-IME edge cases.
+                keyboardController?.hide()
+                focusManager.clearFocus(force = true)
                 // Success pulse: quick scale up then back to normal (completes in ~260 ms)
                 dotScale.animateTo(1.18f, tween(130))
                 dotScale.animateTo(1.00f, tween(130))
@@ -709,6 +718,8 @@ private fun PasswordUnlockSection(
 ) {
     val passwordState = rememberSecurePasswordFieldState()
     var showPassword by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     val density = LocalDensity.current
     val shakePx = remember(density) { with(density) { 16.dp.toPx() } }
@@ -733,22 +744,33 @@ private fun PasswordUnlockSection(
     val isLockedOut = lockoutSecondsRemaining > 0
 
     LaunchedEffect(state) {
-        if (state is AuthUiState.Error) {
-            passwordState.clear()
-            shakeOffset.animateTo(
-                targetValue = 0f,
-                animationSpec = keyframes {
-                    durationMillis = 460
-                    0f              at 0
-                    -shakePx        at 65
-                    shakePx         at 130
-                    (-shakePx * .70f) at 195
-                    ( shakePx * .70f) at 260
-                    (-shakePx * .40f) at 325
-                    ( shakePx * .40f) at 390
-                    0f              at 460
-                }
-            )
+        when (state) {
+            is AuthUiState.Error -> {
+                passwordState.clear()
+                shakeOffset.animateTo(
+                    targetValue = 0f,
+                    animationSpec = keyframes {
+                        durationMillis = 460
+                        0f              at 0
+                        -shakePx        at 65
+                        shakePx         at 130
+                        (-shakePx * .70f) at 195
+                        ( shakePx * .70f) at 260
+                        (-shakePx * .40f) at 325
+                        ( shakePx * .40f) at 390
+                        0f              at 460
+                    }
+                )
+            }
+            is AuthUiState.Unlocked -> {
+                // Hide the IME only on a successful unlock, not at submission time —
+                // a wrong password should leave the keyboard up so the user can retype
+                // immediately. `clearFocus(force = true)` handles cases where a
+                // hardware keyboard or a stuck IME doesn't respond to `hide()` alone.
+                keyboardController?.hide()
+                focusManager.clearFocus(force = true)
+            }
+            else -> Unit
         }
     }
 
@@ -825,7 +847,9 @@ private fun PasswordUnlockSection(
         )
         Spacer(Modifier.height(16.dp))
         Button(
-            onClick = { if (!passwordState.isEmpty && !isLockedOut) onPasswordSubmit(passwordState.consume()) },
+            onClick = {
+                if (!passwordState.isEmpty && !isLockedOut) onPasswordSubmit(passwordState.consume())
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
