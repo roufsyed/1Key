@@ -119,13 +119,22 @@ class AuthRepositoryImpl @Inject constructor(
             old[DS_WRAPPED_KEY_IV_V2] != null
         if (!hasLegacyKeys) return
 
-        // Phase 1 — copy. Skip if already done (the encrypted store has the marker).
+        // Phase 1 — copy. Skip when there's nothing valid to copy (no setup-complete
+        // marker in DataStore) OR when the encrypted store already has the data.
         // SharedPreferences.commit() is synchronous and atomic at the file-system
         // rename level: either the entire batch lands or none of it does.
-        if (!authPrefs.contains(SP_SETUP_COMPLETE)) {
-            val setupComplete = old[DS_SETUP_COMPLETE] ?: return  // half-state with no marker — skip
+        //
+        // Important: the half-state "marker missing but other keys present" is a
+        // corruption case (e.g. a partial reset). Skipping the copy in that state is
+        // correct — there's no valid auth state to migrate — but we MUST NOT skip the
+        // cleanup phase below. An earlier version of this fix used `?: return` here,
+        // which exited the whole function and left the orphan plaintext keys in
+        // DataStore forever (re-audit Finding R1).
+        val setupComplete = old[DS_SETUP_COMPLETE]
+        val needsCopy = setupComplete != null && !authPrefs.contains(SP_SETUP_COMPLETE)
+        if (needsCopy) {
             authPrefs.edit().apply {
-                putBoolean(SP_SETUP_COMPLETE, setupComplete)
+                putBoolean(SP_SETUP_COMPLETE, setupComplete!!)
                 old[DS_SALT]?.let              { putString(SP_SALT, it) }
                 old[DS_WRAPPED_KEY_CT]?.let    { putString(SP_WRAPPED_KEY_CT, it) }
                 old[DS_WRAPPED_KEY_IV]?.let    { putString(SP_WRAPPED_KEY_IV, it) }
@@ -141,6 +150,9 @@ class AuthRepositoryImpl @Inject constructor(
         }
 
         // Phase 2 — clear. ALWAYS run when legacy keys exist; do NOT swallow errors.
+        // Idempotent: removing a key that's already absent is a no-op, so this is safe
+        // to run even when phase 1 was skipped (half-state cleanup) or when phase 1
+        // already wrote to the encrypted store on a previous launch (cleanup retry).
         // If this throws (transient I/O, disk full), the failure surfaces in logcat,
         // migrationComplete still completes via the init block's `finally`, and the
         // migration retries on the next launch (when hasLegacyKeys re-evaluates true).

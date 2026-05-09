@@ -18,6 +18,7 @@ import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import com.onekey.core.security.PasswordAttemptTracker
 import com.onekey.core.security.PinAttemptTracker
+import com.onekey.core.security.PinAttemptTracker.Companion.lockoutDurationMs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -223,14 +224,14 @@ class AuthViewModel @Inject constructor(
                         lockReasonStore.set(LockReason.TooManyFailedPinAttempts)
                         authRepository.lock()
                         _events.emit(AuthEvent.PinAttemptsExhausted)
-                        // The lockout window from PinAttemptTracker is what stops a fresh
-                        // process from immediately resuming attempts; the message reflects
-                        // that. (Once LockReason is set, the UI hides PIN entry anyway and
-                        // requires master password — clearing both on success.)
-                        val lockoutAt = pinLockoutUntilMs.value
-                        val remainingSecs = if (lockoutAt != null) {
-                            ((lockoutAt - System.currentTimeMillis()) / 1000).coerceAtLeast(1L)
-                        } else 0L
+                        // Compute the lockout duration directly from the just-returned
+                        // cumulative count rather than reading pinLockoutUntilMs.value —
+                        // the StateFlow may briefly lag the DataStore commit, which would
+                        // make the message say "please use your master password" without
+                        // a countdown even when one is in effect. Using `cumulative`
+                        // gives a deterministic, race-free message.
+                        val lockoutMs = lockoutDurationMs(cumulative)
+                        val remainingSecs = if (lockoutMs != null) (lockoutMs / 1000L).coerceAtLeast(1L) else 0L
                         _state.value = AuthUiState.Error(
                             if (remainingSecs > 0) "Too many wrong PINs. Try again in ${remainingSecs}s, or use your master password."
                             else "Too many wrong PINs — please use your master password."
