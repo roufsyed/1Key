@@ -302,8 +302,15 @@ class AuthRepositoryImpl @Inject constructor(
         migrationComplete.await()
 
         val pinCopy = pin.copyOf()
-        verifyPin(pin)
-        // pin is zeroed inside verifyPin.
+        // CRITICAL: must call the THROWING verifyPinInternal here, NOT the public
+        // verifyPin which returns AppResult<Unit>. The public overload exists for
+        // the in-vault Settings → Change PIN flow that legitimately consumes the
+        // result. Calling it here discards the result, and runCatchingResult only
+        // catches exceptions — so any wrong PIN would silently flow through to
+        // unwrapStoredKey() and unlock the vault. Regression introduced by M4 (1aeb4cb)
+        // and fixed in b? — keep this comment to prevent the same swap recurring.
+        verifyPinInternal(pin)
+        // pin is zeroed inside verifyPinInternal.
 
         keyHolder.setKey(unwrapStoredKey())
 
