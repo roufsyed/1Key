@@ -166,6 +166,20 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
     }
 }
 
+// Extends L4+H3+H1 to the credential_history snapshots. Pre-v14 history rows
+// stored plaintext titles and used the raw vault key for username/password/url
+// — defeating the credentials table's protections any time a row got snapshotted.
+// Adds the same three columns that DB v12+v13 added to `credentials`; new
+// snapshots write v2 directly; existing rows migrate v0 -> v2 in-place via
+// CredentialCipherMigrator on the next unlock.
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credential_history ADD COLUMN title_encrypted BLOB")
+        db.execSQL("ALTER TABLE credential_history ADD COLUMN iv_title BLOB")
+        db.execSQL("ALTER TABLE credential_history ADD COLUMN cipher_version INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -182,7 +196,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

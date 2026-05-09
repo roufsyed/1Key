@@ -1,7 +1,9 @@
 package com.onekey.core.security
 
 import com.onekey.core.data.local.dao.CredentialDao
+import com.onekey.core.data.local.dao.CredentialHistoryDao
 import com.onekey.core.data.local.entity.CredentialEntity
+import com.onekey.core.data.local.entity.CredentialHistoryEntity
 import com.onekey.core.data.local.entity.CustomFieldEntity
 import com.onekey.core.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
@@ -41,6 +43,7 @@ import javax.inject.Singleton
 @Singleton
 class CredentialCipherMigrator @Inject constructor(
     private val dao: CredentialDao,
+    private val historyDao: CredentialHistoryDao,
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
     @ApplicationScope private val appScope: CoroutineScope,
@@ -65,16 +68,29 @@ class CredentialCipherMigrator @Inject constructor(
         val fieldKey = crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO)
         val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
 
+        // Pass 1 — credentials table.
         while (true) {
             val batch = runCatching { dao.getLegacyCipherBatch(BATCH_SIZE) }.getOrNull()
-                ?: return
-            if (batch.isEmpty()) return
+                ?: break
+            if (batch.isEmpty()) break
             for (entity in batch) {
                 yield()  // give cancellation a chance between rows
                 runCatching { migrateRow(entity, vaultKey, fieldKey, titleKey) }
                     // A single corrupt row mustn't stall the rest of the migration.
                     // The row stays at its prior cipher_version and remains readable
                     // via the legacy path; the migrator simply skips it on subsequent passes.
+            }
+        }
+
+        // Pass 2 — credential_history table. Same legacy AES-GCM/raw-vault-key
+        // shape as v0 credentials, but no notes/totp/custom fields to deal with.
+        while (true) {
+            val batch = runCatching { historyDao.getLegacyCipherBatch(BATCH_SIZE) }.getOrNull()
+                ?: return
+            if (batch.isEmpty()) return
+            for (entity in batch) {
+                yield()
+                runCatching { migrateHistoryRow(entity, vaultKey, fieldKey, titleKey) }
             }
         }
     }
@@ -157,11 +173,55 @@ class CredentialCipherMigrator @Inject constructor(
         dao.upsert(migrated)
     }
 
+    private suspend fun migrateHistoryRow(
+        entity: CredentialHistoryEntity,
+        vaultKey: SecretKey,
+        fieldKey: SecretKey,
+        titleKey: SecretKey,
+    ) {
+        // Decrypt v0 fields under the raw vault key (no AAD).
+        val username = crypto.decrypt(EncryptedData(entity.usernameEncrypted, entity.ivUsername), vaultKey)
+        val password = crypto.decrypt(EncryptedData(entity.passwordEncrypted, entity.ivPassword), vaultKey)
+        val urlBytes = if (entity.urlEncrypted != null && entity.ivUrl != null) {
+            crypto.decrypt(EncryptedData(entity.urlEncrypted, entity.ivUrl), vaultKey)
+        } else null
+
+        // Re-encrypt under v2: HKDF subkeys + per-field AAD ("h:" prefix on the id
+        // namespaces history rows separately from credential rows). AAD shape must
+        // match the read path in CredentialHistoryRepositoryImpl — keep in lock-step.
+        val encUsername = crypto.encrypt(username, fieldKey, historyFieldAad(entity.id, "username"))
+        val encPassword = crypto.encrypt(password, fieldKey, historyFieldAad(entity.id, "password"))
+        val encUrl      = urlBytes?.let { crypto.encrypt(it, fieldKey, historyFieldAad(entity.id, "url")) }
+        username.fill(0); password.fill(0); urlBytes?.fill(0)
+
+        val titleBytes = entity.title.toByteArray(Charsets.UTF_8)
+        val encTitle = crypto.encrypt(titleBytes, titleKey, historyTitleAad(entity.id))
+        titleBytes.fill(0)
+
+        // Targeted UPDATE rather than @Update on the entity so columns we don't
+        // touch (modified_at, credential_id) keep their values without us having
+        // to re-supply them from the loaded entity.
+        historyDao.upgradeRowToV2(
+            id = entity.id,
+            title = "",
+            titleCt = encTitle.ciphertext, titleIv = encTitle.iv,
+            uCt = encUsername.ciphertext, uIv = encUsername.iv,
+            pCt = encPassword.ciphertext, pIv = encPassword.iv,
+            urlCt = encUrl?.ciphertext, urlIv = encUrl?.iv,
+        )
+    }
+
     private fun fieldAad(credentialId: String, field: String): ByteArray =
         "1k:v1|$credentialId|$field".toByteArray(Charsets.UTF_8)
 
     private fun titleAad(credentialId: String): ByteArray =
         "1k:v2|$credentialId|title".toByteArray(Charsets.UTF_8)
+
+    private fun historyFieldAad(historyId: String, field: String): ByteArray =
+        "1k:v1|h:$historyId|$field".toByteArray(Charsets.UTF_8)
+
+    private fun historyTitleAad(historyId: String): ByteArray =
+        "1k:v2|h:$historyId|title".toByteArray(Charsets.UTF_8)
 
     private companion object {
         // Small enough that a long migration doesn't hold the DB lock for too long

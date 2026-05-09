@@ -9,6 +9,8 @@ import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
+import com.onekey.core.security.HKDF_FIELD_KEY_INFO
+import com.onekey.core.security.HKDF_TITLE_KEY_INFO
 import com.onekey.core.security.VaultKeyHolder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,17 +35,25 @@ class CredentialHistoryRepositoryImpl @Inject constructor(
 
     override suspend fun snapshotCredential(credential: Credential): AppResult<Unit> =
         runCatchingResult {
-            val key = keyHolder.requireKey()
-            val encUsername = crypto.encryptString(credential.username, key)
-            val encPassword = crypto.encryptString(credential.password, key)
+            val vaultKey = keyHolder.requireKey()
+            val fieldKey = crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO)
+            val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
+            val historyId = UUID.randomUUID().toString()
+
+            val encTitle    = crypto.encrypt(credential.title.toByteArray(Charsets.UTF_8), titleKey, titleAad(historyId))
+            val encUsername = crypto.encrypt(credential.username.toByteArray(Charsets.UTF_8), fieldKey, fieldAad(historyId, "username"))
+            val encPassword = crypto.encrypt(credential.password.toByteArray(Charsets.UTF_8), fieldKey, fieldAad(historyId, "password"))
             val encUrl = if (credential.url.isNotEmpty()) {
-                crypto.encryptString(credential.url, key)
+                crypto.encrypt(credential.url.toByteArray(Charsets.UTF_8), fieldKey, fieldAad(historyId, "url"))
             } else null
 
             val entity = CredentialHistoryEntity(
-                id = UUID.randomUUID().toString(),
+                id = historyId,
                 credentialId = credential.id,
-                title = credential.title,
+                // v2: plaintext title cleared; the encrypted column is the source of truth.
+                title = "",
+                titleEncrypted = encTitle.ciphertext,
+                ivTitle = encTitle.iv,
                 usernameEncrypted = encUsername.ciphertext,
                 ivUsername = encUsername.iv,
                 passwordEncrypted = encPassword.ciphertext,
@@ -51,6 +61,7 @@ class CredentialHistoryRepositoryImpl @Inject constructor(
                 urlEncrypted = encUrl?.ciphertext,
                 ivUrl = encUrl?.iv,
                 modifiedAt = if (credential.updatedAt > 0L) credential.updatedAt else System.currentTimeMillis(),
+                cipherVersion = 2,
             )
             dao.insert(entity)
             dao.trimHistory(credential.id, MAX_HISTORY_ENTRIES)
@@ -75,17 +86,45 @@ class CredentialHistoryRepositoryImpl @Inject constructor(
         runCatchingResult { dao.deleteAll() }
 
     private fun CredentialHistoryEntity.toDomain(): CredentialHistoryEntry {
-        val key = keyHolder.requireKey()
+        val vaultKey = keyHolder.requireKey()
+        // v0 rows: raw vault key, no AAD, plaintext title (legacy, pre-DB-v14).
+        // v2 rows: HKDF subkeys + per-field AAD on fields, encrypted title.
+        // v1 is unused for this table; the column space is shared with the
+        // credentials table for documentation alignment, not strict semantics.
+        val cipherKey = if (cipherVersion >= 2) crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO) else vaultKey
+
+        fun decryptField(ct: ByteArray, iv: ByteArray, fieldName: String): String {
+            val aad = if (cipherVersion >= 2) fieldAad(id, fieldName) else null
+            return crypto.decrypt(EncryptedData(ct, iv), cipherKey, aad).toString(Charsets.UTF_8)
+        }
+
+        val resolvedTitle = if (cipherVersion >= 2 && titleEncrypted != null && ivTitle != null) {
+            val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
+            crypto.decrypt(EncryptedData(titleEncrypted, ivTitle), titleKey, titleAad(id))
+                .toString(Charsets.UTF_8)
+        } else {
+            title
+        }
+
         return CredentialHistoryEntry(
             id = id,
             credentialId = credentialId,
-            title = title,
-            username = crypto.decryptString(EncryptedData(usernameEncrypted, ivUsername), key),
-            password = crypto.decryptString(EncryptedData(passwordEncrypted, ivPassword), key),
-            url = if (urlEncrypted != null && ivUrl != null)
-                crypto.decryptString(EncryptedData(urlEncrypted, ivUrl), key)
-            else "",
+            title = resolvedTitle,
+            username = decryptField(usernameEncrypted, ivUsername, "username"),
+            password = decryptField(passwordEncrypted, ivPassword, "password"),
+            url = if (urlEncrypted != null && ivUrl != null) decryptField(urlEncrypted, ivUrl, "url") else "",
             modifiedAt = modifiedAt,
         )
     }
+
+    // AAD shapes are namespaced with `h:` so a history row with the same UUID as
+    // a credentials row could not have its ciphertext swapped in across tables
+    // without invalidating the GCM tag. Format mirrors CredentialRepositoryImpl
+    // for consistency: "1k:v1|" prefix for fields (introduced in cipher v1),
+    // "1k:v2|" prefix for titles (introduced in cipher v2).
+    private fun fieldAad(historyId: String, field: String): ByteArray =
+        "1k:v1|h:$historyId|$field".toByteArray(Charsets.UTF_8)
+
+    private fun titleAad(historyId: String): ByteArray =
+        "1k:v2|h:$historyId|title".toByteArray(Charsets.UTF_8)
 }
