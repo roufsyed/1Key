@@ -663,11 +663,13 @@ private fun PinUnlockSection(
         LockAwareOutlinedTextField(
             value = pin,
             onValueChange = { new ->
-                // Refuse new input while locked out — the auto-submit on length 6 would
-                // otherwise immediately call onPinSubmit, which the ViewModel would also
-                // refuse (defense in depth) but the UX is cleaner if the field doesn't
-                // accept characters at all during the cooldown.
-                if (isLockedOut) return@LockAwareOutlinedTextField
+                // Refuse new input while locked out OR while a submission is in flight.
+                // We deliberately do NOT disable the field during Loading: a disabled
+                // field loses focus and the IME dismisses, so on a wrong PIN the user
+                // would have to tap the field again to bring the keypad back. Gating
+                // here keeps focus + IME alive across the Loading -> Error flip while
+                // still preventing a re-submit during Argon2id verification.
+                if (isLockedOut || isLoading) return@LockAwareOutlinedTextField
                 if (new.length <= 6 && new.all { it.isDigit() }) {
                     pin = new
                     if (new.length == 6) onPinSubmit(new)
@@ -679,11 +681,12 @@ private fun PinUnlockSection(
                 imeAction = ImeAction.Done,
             ),
             keyboardActions = KeyboardActions(onDone = {
-                if (pin.isNotEmpty() && !isLockedOut) onPinSubmit(pin)
+                if (pin.isNotEmpty() && !isLockedOut && !isLoading) onPinSubmit(pin)
             }),
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading && !isLockedOut,
+            // enabled gated only on lockout, NOT on isLoading — see onValueChange comment.
+            enabled = !isLockedOut,
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(
