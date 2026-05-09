@@ -82,6 +82,7 @@ fun LockScreen(
     val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
     val lockReason by viewModel.lockReason.collectAsStateWithLifecycle()
     val passwordLockoutUntilMs by viewModel.passwordLockoutUntilMs.collectAsStateWithLifecycle()
+    val pinLockoutUntilMs by viewModel.pinLockoutUntilMs.collectAsStateWithLifecycle()
     // Atomic snapshot of (biometric enabled, lock reason set) — read together from the same
     // DataStore Preferences object so the auto-trigger never fires in the brief cold-start
     // window where one of the two flat flows has updated and the other hasn't.
@@ -280,6 +281,7 @@ fun LockScreen(
                 } else if (isPinSetup && !forcePasswordFallback) {
                     PinUnlockSection(
                         state = state,
+                        lockoutUntilMs = pinLockoutUntilMs,
                         onPinSubmit = { pin -> viewModel.unlockWithPin(pin.toCharArray()) },
                         onFallbackToPassword = {
                             forcePasswordFallback = true
@@ -524,11 +526,32 @@ private fun MasterPasswordRecheckBanner() {
 @Composable
 private fun PinUnlockSection(
     state: AuthUiState,
+    lockoutUntilMs: Long?,
     onPinSubmit: (String) -> Unit,
     onFallbackToPassword: () -> Unit,
 ) {
     var pin by remember { mutableStateOf("") }
     val isLoading = state is AuthUiState.Loading
+
+    // Same ticking-countdown pattern as PasswordUnlockSection. PinAttemptTracker emits
+    // an absolute epoch-ms; we poll every 200ms so the "Xs" label updates smoothly
+    // without busy-looping. Field and submit are gated on isLockedOut so neither the
+    // user nor a programmatic caller can submit during the cooldown window.
+    var lockoutSecondsRemaining by remember { mutableIntStateOf(0) }
+    LaunchedEffect(lockoutUntilMs) {
+        if (lockoutUntilMs == null) {
+            lockoutSecondsRemaining = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            val remaining = ((lockoutUntilMs - System.currentTimeMillis()) / 1000)
+                .toInt().coerceAtLeast(0)
+            lockoutSecondsRemaining = remaining
+            if (remaining <= 0) break
+            delay(200L)
+        }
+    }
+    val isLockedOut = lockoutSecondsRemaining > 0
 
     val density = LocalDensity.current
     val shakePx = remember(density) { with(density) { 16.dp.toPx() } }
@@ -577,6 +600,39 @@ private fun PinUnlockSection(
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (isLockedOut) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column {
+                        Text(
+                            "Too many wrong PINs",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            "Try again in ${lockoutSecondsRemaining}s, or use your master password.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.graphicsLayer {
@@ -598,6 +654,11 @@ private fun PinUnlockSection(
         LockAwareOutlinedTextField(
             value = pin,
             onValueChange = { new ->
+                // Refuse new input while locked out — the auto-submit on length 6 would
+                // otherwise immediately call onPinSubmit, which the ViewModel would also
+                // refuse (defense in depth) but the UX is cleaner if the field doesn't
+                // accept characters at all during the cooldown.
+                if (isLockedOut) return@LockAwareOutlinedTextField
                 if (new.length <= 6 && new.all { it.isDigit() }) {
                     pin = new
                     if (new.length == 6) onPinSubmit(new)
@@ -608,10 +669,12 @@ private fun PinUnlockSection(
                 keyboardType = KeyboardType.NumberPassword,
                 imeAction = ImeAction.Done,
             ),
-            keyboardActions = KeyboardActions(onDone = { if (pin.isNotEmpty()) onPinSubmit(pin) }),
+            keyboardActions = KeyboardActions(onDone = {
+                if (pin.isNotEmpty() && !isLockedOut) onPinSubmit(pin)
+            }),
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading,
+            enabled = !isLoading && !isLockedOut,
             singleLine = true,
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(

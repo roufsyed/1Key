@@ -17,6 +17,7 @@ import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import com.onekey.core.security.PasswordAttemptTracker
+import com.onekey.core.security.PinAttemptTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -65,6 +66,7 @@ class AuthViewModel @Inject constructor(
     private val autoLockManager: AutoLockManager,
     private val authAttemptsStore: AuthAttemptsStore,
     private val passwordAttemptTracker: PasswordAttemptTracker,
+    private val pinAttemptTracker: PinAttemptTracker,
 ) : ViewModel() {
 
     fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
@@ -89,17 +91,26 @@ class AuthViewModel @Inject constructor(
     val passwordLockoutUntilMs: StateFlow<Long?> = passwordAttemptTracker.lockoutUntilMs
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /**
+     * Same shape as [passwordLockoutUntilMs] but for the PIN. Persisted across process
+     * death via [PinAttemptTracker], so a swipe-from-recents between attempts cannot
+     * reset the counter. The LockScreen consumes this to disable the PIN field and
+     * surface a countdown while the lockout window is active.
+     */
+    val pinLockoutUntilMs: StateFlow<Long?> = pinAttemptTracker.lockoutUntilMs
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     private val _state = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
 
     private val _events = MutableSharedFlow<AuthEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<AuthEvent> = _events.asSharedFlow()
 
-    private var pinAttemptsRemaining = MAX_PIN_ATTEMPTS
     private var biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
     // Local counter for the in-vault Settings→Change PIN current-PIN verification.
-    // Distinct from pinAttemptsRemaining (which gates LockScreen unlocks) because the
-    // user is already authenticated when this is in play — different threat shape.
+    // The vault is already unlocked here so the threat shape is different from
+    // LockScreen PIN entry — a session-scoped counter is sufficient. (LockScreen
+    // PIN attempts are tracked persistently via PinAttemptTracker.)
     private var currentPinAttemptsRemaining = MAX_CURRENT_PIN_ATTEMPTS
 
     val isSetupComplete: StateFlow<Boolean> = authRepository.isSetupComplete()
@@ -159,6 +170,10 @@ class AuthViewModel @Inject constructor(
             when (result) {
                 is AppResult.Success -> {
                     passwordAttemptTracker.reset()
+                    // Master password is the canonical "user has proved identity" signal.
+                    // Reset the PIN tracker too so the user isn't carrying lockout state
+                    // forward into the next session.
+                    pinAttemptTracker.reset()
                     appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
                     // Successful master-password proof: release the biometric block set
                     // by a prior too-many-failures auto-lock.
@@ -177,35 +192,54 @@ class AuthViewModel @Inject constructor(
 
     fun unlockWithPin(pin: CharArray) {
         viewModelScope.launch {
+            // Defense-in-depth lockout check. The LockScreen UI also disables the PIN
+            // field while the lockout window is active, but the repository must refuse
+            // independently — otherwise an automated caller (or a future code path that
+            // bypasses the UI) could brute-force at full Argon2id throughput.
+            val lockoutUntil = pinLockoutUntilMs.value
+            if (lockoutUntil != null && System.currentTimeMillis() < lockoutUntil) {
+                pin.fill(' ')
+                val remainingSecs = ((lockoutUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(1L)
+                _state.value = AuthUiState.Error("Too many wrong PINs. Try again in ${remainingSecs}s.")
+                return@launch
+            }
+
             _state.value = AuthUiState.Loading
-            // PBKDF2 derivation runs on Default; state mutation resumes on Main.
             val result = withContext(Dispatchers.Default) { unlockVault.withPin(pin) }
             when (result) {
                 is AppResult.Success -> {
-                    pinAttemptsRemaining = MAX_PIN_ATTEMPTS
+                    pinAttemptTracker.reset()
                     _state.value = AuthUiState.Unlocked
                 }
                 is AppResult.Error -> {
-                    pinAttemptsRemaining--
-                    if (pinAttemptsRemaining <= 0) {
-                        pinAttemptsRemaining = MAX_PIN_ATTEMPTS
-                        // Same lockout shape as the biometric-setup and vault-deletion flows
-                        // in SettingsViewModel: reset the counter, persist a lock reason
-                        // (DataStore-backed so it survives force-stop / swipe-from-recents
-                        // and blocks biometric on next entry), then re-lock as a defensive
-                        // no-op (vault is already locked here, but keeps the pattern uniform).
+                    val cumulative = pinAttemptTracker.recordFailure()
+                    if (cumulative >= MAX_PIN_ATTEMPTS) {
+                        // Persistent across process death (via PinAttemptTracker) AND
+                        // forces the master-password fallback for the rest of the session
+                        // (via LockReason). The two layers compose: the tracker ensures
+                        // brute-force can't bypass the limit by killing the app; the lock
+                        // reason ensures the user is bounced to master password until they
+                        // prove identity that way (which clears both).
                         lockReasonStore.set(LockReason.TooManyFailedPinAttempts)
                         authRepository.lock()
                         _events.emit(AuthEvent.PinAttemptsExhausted)
+                        // The lockout window from PinAttemptTracker is what stops a fresh
+                        // process from immediately resuming attempts; the message reflects
+                        // that. (Once LockReason is set, the UI hides PIN entry anyway and
+                        // requires master password — clearing both on success.)
+                        val lockoutAt = pinLockoutUntilMs.value
+                        val remainingSecs = if (lockoutAt != null) {
+                            ((lockoutAt - System.currentTimeMillis()) / 1000).coerceAtLeast(1L)
+                        } else 0L
                         _state.value = AuthUiState.Error(
-                            "Too many wrong PINs — please use your master password."
+                            if (remainingSecs > 0) "Too many wrong PINs. Try again in ${remainingSecs}s, or use your master password."
+                            else "Too many wrong PINs — please use your master password."
                         )
                     } else {
+                        val remaining = MAX_PIN_ATTEMPTS - cumulative
                         _state.value = AuthUiState.Error(
-                            if (pinAttemptsRemaining == 1)
-                                "Wrong PIN — 1 attempt remaining."
-                            else
-                                "Wrong PIN — $pinAttemptsRemaining attempts remaining."
+                            if (remaining == 1) "Wrong PIN — 1 attempt remaining."
+                            else "Wrong PIN — $remaining attempts remaining."
                         )
                     }
                 }
