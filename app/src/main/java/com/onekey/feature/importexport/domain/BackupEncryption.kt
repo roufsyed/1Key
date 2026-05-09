@@ -58,6 +58,11 @@ internal object BackupEncryption {
         filledFully && header.contentEquals(MAGIC)
     } catch (_: Exception) { false }
 
+    /**
+     * Encrypts [plaintext] under a key derived from [password] and writes a V4 backup
+     * envelope. **Consumes [password]:** the caller's [CharArray] is zeroed in place
+     * after key derivation. Callers that need the password again must pass a copy.
+     */
     fun encrypt(
         plaintext: ByteArray,
         password: CharArray,
@@ -91,6 +96,15 @@ internal object BackupEncryption {
 
     data class Decrypted(val plaintext: ByteArray, val format: ExportFormat)
 
+    /**
+     * Decrypts an encrypted-backup file body and returns the inner plaintext + format.
+     *
+     * **Consumes [password]:** this function zeros the caller's [CharArray] in place
+     * after deriving the KDF key, regardless of whether the GCM tag verifies.
+     * Callers that need the password again afterwards must pass [password.copyOf()].
+     * This contract is shared with [encrypt] and intentionally enforced here so the
+     * password material has the shortest possible lifetime in memory.
+     */
     fun decrypt(fileBytes: ByteArray, password: CharArray, crypto: CryptoManager): Decrypted {
         var off = 0
 
