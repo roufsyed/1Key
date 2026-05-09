@@ -24,6 +24,7 @@ junit = "4.13.2"
 robolectric = "4.13"
 lint = "31.7.2"
 argon2kt = "1.6.0"
+securityCrypto = "1.0.0"
 
 [libraries]
 # Core
@@ -81,6 +82,8 @@ lint-checks = { group = "com.android.tools.lint", name = "lint-checks", version.
 lint-tests = { group = "com.android.tools.lint", name = "lint-tests", version.ref = "lint" }
 # Argon2id
 argon2kt = { group = "com.lambdapioneer.argon2kt", name = "argon2kt", version.ref = "argon2kt" }
+# Encrypted SharedPreferences
+security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

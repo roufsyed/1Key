@@ -129,6 +129,9 @@ dependencies {
     // Argon2id — Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
     implementation(libs.argon2kt)
 
+    // EncryptedSharedPreferences — Keystore-backed encryption for auth data at rest.
+    implementation(libs.security.crypto)
+
     // Testing — JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).

@@ -1,5 +1,6 @@
 package com.onekey.core.data.repository
 
+import android.content.SharedPreferences
 import android.os.Build
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
@@ -13,86 +14,154 @@ import com.onekey.core.security.KEYSTORE_ALIAS_V1
 import com.onekey.core.security.KEYSTORE_ALIAS_V2
 import com.onekey.core.security.VaultKeyHolder
 import com.onekey.core.security.VaultVersionTracker
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import javax.crypto.BadPaddingException
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
-// ── Vault auth metadata ───────────────────────────────────────────────────────
+// ── EncryptedSharedPreferences key names (must match legacy DataStore names for migration) ──
 
-private val KEY_SETUP_COMPLETE = booleanPreferencesKey("setup_complete")
-private val KEY_SALT = stringPreferencesKey("vault_salt")
-private val KEY_WRAPPED_KEY_CT = stringPreferencesKey("wrapped_key_ct")
-private val KEY_WRAPPED_KEY_IV = stringPreferencesKey("wrapped_key_iv")
-private val KEY_PASSWORD_VERIFIER = stringPreferencesKey("password_verifier")
+private const val SP_SETUP_COMPLETE    = "setup_complete"
+private const val SP_SALT              = "vault_salt"
+private const val SP_WRAPPED_KEY_CT    = "wrapped_key_ct"
+private const val SP_WRAPPED_KEY_IV    = "wrapped_key_iv"
+private const val SP_PASSWORD_VERIFIER = "password_verifier"
+private const val SP_KDF_VERSION       = "kdf_version"
+private const val SP_PIN_HASH          = "pin_hash"
+private const val SP_PIN_SALT          = "pin_salt"
+private const val SP_PIN_KDF_VERSION   = "pin_kdf_version"
+private const val SP_KEYSTORE_UPGRADED = "ks_upgraded"
+private const val SP_WRAPPED_KEY_CT_V2 = "wrapped_key_ct_v2"
+private const val SP_WRAPPED_KEY_IV_V2 = "wrapped_key_iv_v2"
 
-// KDF version for the master-password verifier.
-// 0 = PBKDF2-HMAC-SHA256 @ 310k iterations (existing installs)
-// 1 = Argon2id (m=64MB, t=3, p=1) — written on new installs and on first successful
-//     unlock after the app update (silent migration).
-private val KEY_KDF_VERSION = intPreferencesKey("kdf_version")
+// ── Legacy DataStore keys — read-only, used only during the one-time migration ──
 
-// ── PIN metadata ─────────────────────────────────────────────────────────────
+private val DS_SETUP_COMPLETE    = booleanPreferencesKey(SP_SETUP_COMPLETE)
+private val DS_SALT              = stringPreferencesKey(SP_SALT)
+private val DS_WRAPPED_KEY_CT    = stringPreferencesKey(SP_WRAPPED_KEY_CT)
+private val DS_WRAPPED_KEY_IV    = stringPreferencesKey(SP_WRAPPED_KEY_IV)
+private val DS_PASSWORD_VERIFIER = stringPreferencesKey(SP_PASSWORD_VERIFIER)
+private val DS_KDF_VERSION       = intPreferencesKey(SP_KDF_VERSION)
+private val DS_PIN_HASH          = stringPreferencesKey(SP_PIN_HASH)
+private val DS_PIN_SALT          = stringPreferencesKey(SP_PIN_SALT)
+private val DS_PIN_KDF_VERSION   = intPreferencesKey(SP_PIN_KDF_VERSION)
+private val DS_KEYSTORE_UPGRADED = booleanPreferencesKey(SP_KEYSTORE_UPGRADED)
+private val DS_WRAPPED_KEY_CT_V2 = stringPreferencesKey(SP_WRAPPED_KEY_CT_V2)
+private val DS_WRAPPED_KEY_IV_V2 = stringPreferencesKey(SP_WRAPPED_KEY_IV_V2)
 
-private val KEY_PIN_HASH = stringPreferencesKey("pin_hash")
-private val KEY_PIN_SALT = stringPreferencesKey("pin_salt")
-
-// KDF version for the PIN verifier (same versioning scheme as KDF_VERSION).
-private val KEY_PIN_KDF_VERSION = intPreferencesKey("pin_kdf_version")
-
-// ── Keystore upgrade ─────────────────────────────────────────────────────────
-
-// True once the vault key has been re-wrapped under the v2 alias which includes
-// setUnlockedDeviceRequired(true) on API >= 28. Before this flag is set, reads go
-// to KEY_WRAPPED_KEY_CT/IV under the v1 alias. After, reads go to the _V2 keys.
-private val KEY_KEYSTORE_UPGRADED = booleanPreferencesKey("ks_upgraded")
-private val KEY_WRAPPED_KEY_CT_V2 = stringPreferencesKey("wrapped_key_ct_v2")
-private val KEY_WRAPPED_KEY_IV_V2 = stringPreferencesKey("wrapped_key_iv_v2")
-
-private const val KDF_PBKDF2 = 0
+private const val KDF_PBKDF2   = 0
 private const val KDF_ARGON2ID = 1
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>,
+    @Named("auth") private val authPrefs: SharedPreferences,
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
     private val vaultVersionTracker: VaultVersionTracker,
     @ApplicationScope appScope: CoroutineScope,
 ) : AuthRepository {
 
-    private val prefs: StateFlow<Preferences> = dataStore.data
-        .stateIn(appScope, SharingStarted.Eagerly, emptyPreferences())
+    /**
+     * Completed once the one-time DataStore→EncryptedSharedPreferences migration has
+     * run (or was skipped because no legacy data existed). All auth reads await this
+     * before accessing [authPrefs] so they never see a partially-migrated state.
+     */
+    private val migrationComplete = CompletableDeferred<Unit>()
 
-    override fun isSetupComplete(): Flow<Boolean> =
-        prefs.map { it[KEY_SETUP_COMPLETE] ?: false }.distinctUntilChanged()
+    init {
+        appScope.launch(Dispatchers.IO) {
+            try {
+                migrateFromDataStoreIfNeeded()
+            } finally {
+                migrationComplete.complete(Unit)
+            }
+        }
+    }
+
+    /**
+     * One-time migration: copies auth keys from the legacy plaintext DataStore into
+     * [authPrefs] (EncryptedSharedPreferences), then removes them from DataStore.
+     * Safe to retry: if [authPrefs] already contains [SP_SETUP_COMPLETE] the
+     * migration is considered done and skipped.
+     */
+    private suspend fun migrateFromDataStoreIfNeeded() {
+        if (authPrefs.contains(SP_SETUP_COMPLETE)) return
+
+        val old = dataStore.data.first()
+        val setupComplete = old[DS_SETUP_COMPLETE] ?: return  // new install, nothing to migrate
+
+        authPrefs.edit().apply {
+            putBoolean(SP_SETUP_COMPLETE, setupComplete)
+            old[DS_SALT]?.let              { putString(SP_SALT, it) }
+            old[DS_WRAPPED_KEY_CT]?.let    { putString(SP_WRAPPED_KEY_CT, it) }
+            old[DS_WRAPPED_KEY_IV]?.let    { putString(SP_WRAPPED_KEY_IV, it) }
+            old[DS_PASSWORD_VERIFIER]?.let { putString(SP_PASSWORD_VERIFIER, it) }
+            old[DS_KDF_VERSION]?.let       { putInt(SP_KDF_VERSION, it) }
+            old[DS_PIN_HASH]?.let          { putString(SP_PIN_HASH, it) }
+            old[DS_PIN_SALT]?.let          { putString(SP_PIN_SALT, it) }
+            old[DS_PIN_KDF_VERSION]?.let   { putInt(SP_PIN_KDF_VERSION, it) }
+            old[DS_KEYSTORE_UPGRADED]?.let { putBoolean(SP_KEYSTORE_UPGRADED, it) }
+            old[DS_WRAPPED_KEY_CT_V2]?.let { putString(SP_WRAPPED_KEY_CT_V2, it) }
+            old[DS_WRAPPED_KEY_IV_V2]?.let { putString(SP_WRAPPED_KEY_IV_V2, it) }
+        }.commit()  // commit() = synchronous write; essential before clearing source
+
+        // Remove auth keys from DataStore now that they live in EncryptedSharedPreferences.
+        // Failure here is tolerable — the keys are orphaned in DataStore but the app
+        // always reads from authPrefs going forward.
+        runCatching {
+            dataStore.edit { p ->
+                p.remove(DS_SETUP_COMPLETE)
+                p.remove(DS_SALT)
+                p.remove(DS_WRAPPED_KEY_CT)
+                p.remove(DS_WRAPPED_KEY_IV)
+                p.remove(DS_PASSWORD_VERIFIER)
+                p.remove(DS_KDF_VERSION)
+                p.remove(DS_PIN_HASH)
+                p.remove(DS_PIN_SALT)
+                p.remove(DS_PIN_KDF_VERSION)
+                p.remove(DS_KEYSTORE_UPGRADED)
+                p.remove(DS_WRAPPED_KEY_CT_V2)
+                p.remove(DS_WRAPPED_KEY_IV_V2)
+            }
+        }
+    }
+
+    override fun isSetupComplete(): Flow<Boolean> = flow {
+        migrationComplete.await()
+        emitAll(authPrefs.watchBoolean(SP_SETUP_COMPLETE, false))
+    }.distinctUntilChanged()
 
     // ── Setup ─────────────────────────────────────────────────────────────────
 
     override suspend fun setupMasterPassword(password: CharArray): AppResult<Unit> =
         runCatchingResult {
+            migrationComplete.await()
+
             val vaultSalt = crypto.generateSalt()
-            // Derive the vault key with PBKDF2. This key is immediately wrapped by
-            // the Keystore and never derived again — its origin algorithm does not
-            // affect long-term security once it is Keystore-protected.
             val vaultKey = crypto.deriveKeyFromPassword(password, vaultSalt)
             val keystoreKey = crypto.getOrCreateLegacyKeystoreKey()
             val wrapped = crypto.wrapKey(vaultKey, keystoreKey)
 
-            // Verifier uses Argon2id on new installs.
             val verifierSalt = crypto.generateSalt()
             val verifierKey = crypto.deriveKeyFromPasswordArgon2id(password, verifierSalt)
             val verifier = crypto.encryptString("VALID", verifierKey)
 
-            dataStore.edit { p ->
-                p[KEY_SETUP_COMPLETE] = true
-                p[KEY_SALT] = vaultSalt.encodeBase64()
-                p[KEY_WRAPPED_KEY_CT] = wrapped.ciphertext.encodeBase64()
-                p[KEY_WRAPPED_KEY_IV] = wrapped.iv.encodeBase64()
-                p[KEY_PASSWORD_VERIFIER] = encodeVerifier(verifierSalt, verifier)
-                p[KEY_KDF_VERSION] = KDF_ARGON2ID
-            }
+            authPrefs.edit().apply {
+                putBoolean(SP_SETUP_COMPLETE, true)
+                putString(SP_SALT, vaultSalt.encodeBase64())
+                putString(SP_WRAPPED_KEY_CT, wrapped.ciphertext.encodeBase64())
+                putString(SP_WRAPPED_KEY_IV, wrapped.iv.encodeBase64())
+                putString(SP_PASSWORD_VERIFIER, encodeVerifier(verifierSalt, verifier))
+                putInt(SP_KDF_VERSION, KDF_ARGON2ID)
+            }.commit()
+
             password.fill(' ')
             keyHolder.setKey(vaultKey)
         }
@@ -101,111 +170,97 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun unlockWithPassword(password: CharArray): AppResult<Unit> =
         runCatchingResult {
-            val prefs = dataStore.data.first()
-            val kdfVersion = prefs[KEY_KDF_VERSION] ?: KDF_PBKDF2
+            migrationComplete.await()
 
-            // Keep a copy of the password for the silent Argon2id migration that
-            // runs after verification. The original is zeroed at the end of the
-            // verification block to match the existing contract.
+            val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
             val passwordForMigration = if (kdfVersion == KDF_PBKDF2) password.copyOf() else null
 
-            verifyMasterPassword(password, prefs, kdfVersion)
-            // password is zeroed inside verifyMasterPassword.
+            verifyMasterPassword(password, kdfVersion)
 
-            val vaultKey = unwrapStoredKey(prefs)
+            val vaultKey = unwrapStoredKey()
             keyHolder.setKey(vaultKey)
 
-            // On first unlock after the app update, transparently migrate the
-            // PBKDF2 verifier to Argon2id and upgrade the Keystore key.
             if (kdfVersion == KDF_PBKDF2 && passwordForMigration != null) {
                 try {
-                    migrateVerifierToArgon2id(passwordForMigration, prefs)
+                    migrateVerifierToArgon2id(passwordForMigration)
                 } catch (_: Exception) {
-                    // Silent failure — migration retries on the next unlock.
                 } finally {
                     passwordForMigration.fill(' ')
                 }
             }
 
-            // Keystore upgrade is independent of the KDF migration. It runs on API >= 28
-            // on the first unlock regardless of which KDF path was taken.
-            val keystoreUpgraded = prefs[KEY_KEYSTORE_UPGRADED] ?: false
+            val keystoreUpgraded = authPrefs.getBoolean(SP_KEYSTORE_UPGRADED, false)
             if (!keystoreUpgraded && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 try {
                     migrateKeystoreKey(vaultKey)
                 } catch (_: Exception) {
-                    // Silent failure — migration retries on the next unlock.
                 }
             }
         }
 
     override suspend fun unlockWithBiometric(): AppResult<Unit> = runCatchingResult {
-        val prefs = dataStore.data.first()
-        val vaultKey = unwrapStoredKey(prefs)
-        keyHolder.setKey(vaultKey)
+        migrationComplete.await()
+        keyHolder.setKey(unwrapStoredKey())
     }
 
     // ── Change password ───────────────────────────────────────────────────────
 
     override suspend fun changePassword(oldPassword: CharArray, newPassword: CharArray): AppResult<Unit> =
         runCatchingResult {
-            val prefs = dataStore.data.first()
-            val kdfVersion = prefs[KEY_KDF_VERSION] ?: KDF_PBKDF2
+            migrationComplete.await()
 
-            verifyMasterPassword(oldPassword, prefs, kdfVersion)
-            // oldPassword is zeroed inside verifyMasterPassword.
+            val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
+            verifyMasterPassword(oldPassword, kdfVersion)
 
-            // Always write an Argon2id verifier — this also upgrades users whose
-            // verifier was still PBKDF2 when they changed their password before
-            // the silent unlock migration had a chance to run.
             val newVerifierSalt = crypto.generateSalt()
             val newVerifierKey = crypto.deriveKeyFromPasswordArgon2id(newPassword, newVerifierSalt)
             val newVerifier = crypto.encryptString("VALID", newVerifierKey)
             newPassword.fill(' ')
 
-            dataStore.edit { p ->
-                p[KEY_PASSWORD_VERIFIER] = encodeVerifier(newVerifierSalt, newVerifier)
-                p[KEY_KDF_VERSION] = KDF_ARGON2ID
-            }
+            authPrefs.edit().apply {
+                putString(SP_PASSWORD_VERIFIER, encodeVerifier(newVerifierSalt, newVerifier))
+                putInt(SP_KDF_VERSION, KDF_ARGON2ID)
+            }.commit()
+
             vaultVersionTracker.increment()
-            // Vault key itself does not change — no credential re-encryption needed.
         }
 
     // ── PIN ───────────────────────────────────────────────────────────────────
 
     override suspend fun setupPin(pin: CharArray): AppResult<Unit> = runCatchingResult {
+        migrationComplete.await()
+
         require(pin.size == 6) { "PIN must be 6 digits" }
         val salt = crypto.generateSalt()
         val pinKey = crypto.deriveKeyFromPasswordArgon2id(pin, salt)
         pin.fill(' ')
         val pinHash = crypto.encryptString("PIN_VALID", pinKey)
-        dataStore.edit { p ->
-            p[KEY_PIN_SALT] = salt.encodeBase64()
-            p[KEY_PIN_HASH] = buildString {
+
+        authPrefs.edit().apply {
+            putString(SP_PIN_SALT, salt.encodeBase64())
+            putString(SP_PIN_HASH, buildString {
                 append(pinHash.ciphertext.encodeBase64())
                 append(':')
                 append(pinHash.iv.encodeBase64())
-            }
-            p[KEY_PIN_KDF_VERSION] = KDF_ARGON2ID
-        }
+            })
+            putInt(SP_PIN_KDF_VERSION, KDF_ARGON2ID)
+        }.commit()
     }
 
     override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = runCatchingResult {
-        val prefs = dataStore.data.first()
+        migrationComplete.await()
+
         val pinCopy = pin.copyOf()
-        verifyPinAgainst(prefs, pin)
-        // pin is zeroed inside verifyPinAgainst.
+        verifyPin(pin)
+        // pin is zeroed inside verifyPin.
 
-        val vaultKey = unwrapStoredKey(prefs)
-        keyHolder.setKey(vaultKey)
+        keyHolder.setKey(unwrapStoredKey())
 
-        // Silently migrate PIN verifier from PBKDF2 to Argon2id if needed.
-        val pinKdfVersion = prefs[KEY_PIN_KDF_VERSION] ?: KDF_PBKDF2
+        val pinKdfVersion = authPrefs.getInt(SP_PIN_KDF_VERSION, KDF_PBKDF2)
         if (pinKdfVersion == KDF_PBKDF2) {
             try {
                 migratePinVerifierToArgon2id(pinCopy)
             } catch (_: Exception) {
-                // Silent failure — migration retries on next PIN unlock.
             } finally {
                 pinCopy.fill(' ')
             }
@@ -215,27 +270,24 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun verifyPin(pin: CharArray): AppResult<Unit> = runCatchingResult {
-        verifyPinAgainst(dataStore.data.first(), pin)
+        migrationComplete.await()
+        verifyPinInternal(pin)
     }
 
     // ── Core verification helpers ─────────────────────────────────────────────
 
-    /**
-     * Verifies the master password against the stored verifier. Dispatches to
-     * PBKDF2 or Argon2id depending on [kdfVersion]. Always zeroes [password]
-     * before returning — callers that need the password afterward must copy it.
-     */
-    private fun verifyMasterPassword(password: CharArray, prefs: Preferences, kdfVersion: Int) {
-        val verifierStr = prefs[KEY_PASSWORD_VERIFIER] ?: error("No verifier stored")
+    private fun verifyMasterPassword(password: CharArray, kdfVersion: Int) {
+        val verifierStr = authPrefs.getString(SP_PASSWORD_VERIFIER, null)
+            ?: error("No verifier stored")
         val parts = verifierStr.split(":")
         require(parts.size == 3) { "Corrupted verifier data" }
         val verSalt = parts[0].decodeBase64()
-        val verCt = parts[1].decodeBase64()
-        val verIv = parts[2].decodeBase64()
+        val verCt   = parts[1].decodeBase64()
+        val verIv   = parts[2].decodeBase64()
 
         val verifierKey = when (kdfVersion) {
             KDF_ARGON2ID -> crypto.deriveKeyFromPasswordArgon2id(password, verSalt)
-            else -> crypto.deriveKeyFromPassword(password, verSalt)
+            else         -> crypto.deriveKeyFromPassword(password, verSalt)
         }
         password.fill(' ')
 
@@ -247,24 +299,20 @@ class AuthRepositoryImpl @Inject constructor(
         check(plainVerifier == "VALID") { "Incorrect master password. Please try again." }
     }
 
-    /**
-     * Verifies the PIN. Dispatches to PBKDF2 or Argon2id based on [KEY_PIN_KDF_VERSION].
-     * Always zeroes [pin] before returning.
-     */
-    private fun verifyPinAgainst(prefs: Preferences, pin: CharArray) {
-        val saltB64 = prefs[KEY_PIN_SALT] ?: error("PIN not set up")
-        val salt = saltB64.decodeBase64()
+    private fun verifyPinInternal(pin: CharArray) {
+        val saltB64  = authPrefs.getString(SP_PIN_SALT, null)  ?: error("PIN not set up")
+        val hashStr  = authPrefs.getString(SP_PIN_HASH, null)  ?: error("PIN hash missing")
+        val salt     = saltB64.decodeBase64()
 
-        val hashStr = prefs[KEY_PIN_HASH] ?: error("PIN hash missing")
         val parts = hashStr.split(":")
         require(parts.size == 2) { "Corrupted PIN hash data" }
         val ct = parts[0].decodeBase64()
         val iv = parts[1].decodeBase64()
 
-        val pinKdfVersion = prefs[KEY_PIN_KDF_VERSION] ?: KDF_PBKDF2
+        val pinKdfVersion = authPrefs.getInt(SP_PIN_KDF_VERSION, KDF_PBKDF2)
         val pinKey = when (pinKdfVersion) {
             KDF_ARGON2ID -> crypto.deriveKeyFromPasswordArgon2id(pin, salt)
-            else -> crypto.deriveKeyFromPassword(pin, salt)
+            else         -> crypto.deriveKeyFromPassword(pin, salt)
         }
         pin.fill(' ')
 
@@ -278,83 +326,64 @@ class AuthRepositoryImpl @Inject constructor(
 
     // ── Silent KDF migrations ─────────────────────────────────────────────────
 
-    /**
-     * Re-derives the verifier with Argon2id and writes it atomically with
-     * [KEY_KDF_VERSION] = [KDF_ARGON2ID]. [password] is zeroed in the caller's
-     * finally block — do not zero it here.
-     */
-    private suspend fun migrateVerifierToArgon2id(password: CharArray, prefs: Preferences) {
+    private suspend fun migrateVerifierToArgon2id(password: CharArray) {
         val newVerifierSalt = crypto.generateSalt()
-        val newVerifierKey = crypto.deriveKeyFromPasswordArgon2id(password, newVerifierSalt)
-        val newVerifier = crypto.encryptString("VALID", newVerifierKey)
-        dataStore.edit { p ->
-            p[KEY_PASSWORD_VERIFIER] = encodeVerifier(newVerifierSalt, newVerifier)
-            p[KEY_KDF_VERSION] = KDF_ARGON2ID
-        }
+        val newVerifierKey  = crypto.deriveKeyFromPasswordArgon2id(password, newVerifierSalt)
+        val newVerifier     = crypto.encryptString("VALID", newVerifierKey)
+        authPrefs.edit().apply {
+            putString(SP_PASSWORD_VERIFIER, encodeVerifier(newVerifierSalt, newVerifier))
+            putInt(SP_KDF_VERSION, KDF_ARGON2ID)
+        }.commit()
     }
 
-    /**
-     * Re-derives the PIN verifier with Argon2id. [pin] is zeroed in the caller's
-     * finally block — do not zero it here.
-     */
     private suspend fun migratePinVerifierToArgon2id(pin: CharArray) {
-        val newSalt = crypto.generateSalt()
+        val newSalt   = crypto.generateSalt()
         val newPinKey = crypto.deriveKeyFromPasswordArgon2id(pin, newSalt)
-        val newHash = crypto.encryptString("PIN_VALID", newPinKey)
-        dataStore.edit { p ->
-            p[KEY_PIN_SALT] = newSalt.encodeBase64()
-            p[KEY_PIN_HASH] = buildString {
+        val newHash   = crypto.encryptString("PIN_VALID", newPinKey)
+        authPrefs.edit().apply {
+            putString(SP_PIN_SALT, newSalt.encodeBase64())
+            putString(SP_PIN_HASH, buildString {
                 append(newHash.ciphertext.encodeBase64())
                 append(':')
                 append(newHash.iv.encodeBase64())
-            }
-            p[KEY_PIN_KDF_VERSION] = KDF_ARGON2ID
-        }
+            })
+            putInt(SP_PIN_KDF_VERSION, KDF_ARGON2ID)
+        }.commit()
     }
 
     // ── Silent Keystore migration (API >= 28) ─────────────────────────────────
 
-    /**
-     * Two-phase Keystore key upgrade:
-     *   1. Create "onekey_master_v2" with setUnlockedDeviceRequired(true).
-     *   2. Re-wrap the already-loaded [vaultKey] with the new key.
-     *   3. Atomically write the new wrapped blob + ks_upgraded=true to DataStore.
-     *   4. Delete the legacy key (cleanup; safe to omit if step 3 completed).
-     *
-     * If any step before step 3 fails, DataStore is untouched and the legacy key
-     * path continues. If the app dies after step 3, the legacy key is orphaned in
-     * the Keystore; it is cleaned up on the next unlock.
-     */
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.P)
     private suspend fun migrateKeystoreKey(vaultKey: javax.crypto.SecretKey) {
-        val v2Key = crypto.createUpgradedKeystoreKey()
+        val v2Key      = crypto.createUpgradedKeystoreKey()
         val newWrapped = crypto.wrapKey(vaultKey, v2Key)
 
-        dataStore.edit { p ->
-            p[KEY_WRAPPED_KEY_CT_V2] = newWrapped.ciphertext.encodeBase64()
-            p[KEY_WRAPPED_KEY_IV_V2] = newWrapped.iv.encodeBase64()
-            p[KEY_KEYSTORE_UPGRADED] = true
-        }
+        authPrefs.edit().apply {
+            putString(SP_WRAPPED_KEY_CT_V2, newWrapped.ciphertext.encodeBase64())
+            putString(SP_WRAPPED_KEY_IV_V2, newWrapped.iv.encodeBase64())
+            putBoolean(SP_KEYSTORE_UPGRADED, true)
+        }.commit()
 
-        // Legacy key is now orphaned — delete it so the Keystore is clean.
-        // Tolerate failures here: the data is safely on v2; the orphan is harmless.
         runCatching { crypto.deleteKeystoreKey(KEYSTORE_ALIAS_V1) }
     }
 
     // ── Wrapped key loading ───────────────────────────────────────────────────
 
-    private fun unwrapStoredKey(prefs: Preferences): javax.crypto.SecretKey {
-        val keystoreUpgraded = prefs[KEY_KEYSTORE_UPGRADED] ?: false
-
+    private fun unwrapStoredKey(): javax.crypto.SecretKey {
+        val keystoreUpgraded = authPrefs.getBoolean(SP_KEYSTORE_UPGRADED, false)
         return if (keystoreUpgraded) {
-            val ct = prefs[KEY_WRAPPED_KEY_CT_V2]?.decodeBase64() ?: error("V2 vault key not found")
-            val iv = prefs[KEY_WRAPPED_KEY_IV_V2]?.decodeBase64() ?: error("V2 vault key IV not found")
+            val ct   = authPrefs.getString(SP_WRAPPED_KEY_CT_V2, null)?.decodeBase64()
+                ?: error("V2 vault key not found")
+            val iv   = authPrefs.getString(SP_WRAPPED_KEY_IV_V2, null)?.decodeBase64()
+                ?: error("V2 vault key IV not found")
             val v2Key = crypto.loadKeystoreKey(KEYSTORE_ALIAS_V2)
                 ?: error("V2 Keystore key not found — vault may need repair")
             crypto.unwrapKey(EncryptedData(ct, iv), v2Key)
         } else {
-            val ct = prefs[KEY_WRAPPED_KEY_CT]?.decodeBase64() ?: error("Vault key not found")
-            val iv = prefs[KEY_WRAPPED_KEY_IV]?.decodeBase64() ?: error("Vault key IV not found")
+            val ct   = authPrefs.getString(SP_WRAPPED_KEY_CT, null)?.decodeBase64()
+                ?: error("Vault key not found")
+            val iv   = authPrefs.getString(SP_WRAPPED_KEY_IV, null)?.decodeBase64()
+                ?: error("Vault key IV not found")
             val v1Key = crypto.getOrCreateLegacyKeystoreKey()
             crypto.unwrapKey(EncryptedData(ct, iv), v1Key)
         }
@@ -363,15 +392,17 @@ class AuthRepositoryImpl @Inject constructor(
     // ── Vault management ──────────────────────────────────────────────────────
 
     override suspend fun resetPin(): AppResult<Unit> = runCatchingResult {
-        dataStore.edit { p ->
-            p.remove(KEY_PIN_HASH)
-            p.remove(KEY_PIN_SALT)
-            p.remove(KEY_PIN_KDF_VERSION)
-        }
+        migrationComplete.await()
+        authPrefs.edit().apply {
+            remove(SP_PIN_HASH)
+            remove(SP_PIN_SALT)
+            remove(SP_PIN_KDF_VERSION)
+        }.commit()
     }
 
     override suspend fun resetVault(): AppResult<Unit> = runCatchingResult {
         crypto.deleteAllVaultKeys()
+        authPrefs.edit().clear().commit()
         dataStore.edit { it.clear() }
         keyHolder.lock()
     }
@@ -380,13 +411,38 @@ class AuthRepositoryImpl @Inject constructor(
 
     override fun isUnlocked(): Flow<Boolean> = keyHolder.isUnlocked
 
-    override fun isPinSetup(): Flow<Boolean> =
-        prefs.map { it[KEY_PIN_HASH] != null }.distinctUntilChanged()
+    override fun isPinSetup(): Flow<Boolean> = flow {
+        migrationComplete.await()
+        emitAll(authPrefs.watchString(SP_PIN_HASH).map { it != null })
+    }.distinctUntilChanged()
 
     override suspend fun clearAll(): AppResult<Unit> = runCatchingResult {
+        authPrefs.edit().clear().commit()
         dataStore.edit { it.clear() }
         keyHolder.lock()
     }
+
+    // ── Flow helpers ──────────────────────────────────────────────────────────
+
+    private fun SharedPreferences.watchBoolean(key: String, default: Boolean): Flow<Boolean> =
+        callbackFlow {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+                if (k == key) trySend(getBoolean(key, default))
+            }
+            registerOnSharedPreferenceChangeListener(listener)
+            trySend(getBoolean(key, default))
+            awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
+        }
+
+    private fun SharedPreferences.watchString(key: String): Flow<String?> =
+        callbackFlow {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+                if (k == key) trySend(getString(key, null))
+            }
+            registerOnSharedPreferenceChangeListener(listener)
+            trySend(getString(key, null))
+            awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
+        }
 
     // ── Encoding helpers ──────────────────────────────────────────────────────
 
