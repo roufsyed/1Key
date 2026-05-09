@@ -3,12 +3,14 @@ package com.onekey.core.domain.usecase
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.security.VaultVersionTracker
 import com.onekey.feature.importexport.domain.VaultExporter
 import javax.inject.Inject
 
 class ExportVaultUseCase @Inject constructor(
     private val repository: CredentialRepository,
     private val exporter: VaultExporter,
+    private val vaultVersionTracker: VaultVersionTracker,
 ) {
     suspend operator fun invoke(format: ExportFormat, outputPath: String): AppResult<Unit> {
         val all = collectAll() ?: return repository.getAllCredentials() as AppResult.Error
@@ -17,7 +19,8 @@ class ExportVaultUseCase @Inject constructor(
 
     suspend fun encrypted(format: ExportFormat, password: CharArray, outputPath: String): AppResult<Unit> {
         val all = collectAll() ?: return repository.getAllCredentials() as AppResult.Error
-        return exporter.exportEncrypted(all, password, format, outputPath)
+        val vaultVersion = vaultVersionTracker.getVersion()
+        return exporter.exportEncrypted(all, password, format, outputPath, vaultVersion = vaultVersion)
     }
 
     /**

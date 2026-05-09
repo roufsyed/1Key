@@ -35,12 +35,14 @@ class VaultExporterImpl @Inject constructor(
         password: CharArray,
         format: ExportFormat,
         path: String,
+        createdAtMs: Long,
+        vaultVersion: Int,
     ): AppResult<Unit> = runCatchingResult {
         val plaintext = when (format) {
             ExportFormat.JSON -> buildJsonString(credentials).toByteArray(Charsets.UTF_8)
             ExportFormat.CSV -> buildCsvString(credentials).toByteArray(Charsets.UTF_8)
         }
-        File(path).writeBytes(BackupEncryption.encrypt(plaintext, password, format, crypto))
+        File(path).writeBytes(BackupEncryption.encrypt(plaintext, password, format, crypto, createdAtMs, vaultVersion))
     }
 
     // ── Serialisation helpers ─────────────────────────────────────────────────

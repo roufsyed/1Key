@@ -5,20 +5,26 @@ import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.nio.ByteBuffer
 
 /**
  * Binary format for encrypted backups:
- *   MAGIC   8 B   "1KEYBKP\n"
- *   VERSION 1 B   0x01 (legacy, no AAD) | 0x02 (header AAD, PBKDF2) | 0x03 (header AAD, Argon2id)
- *   FORMAT  1 B   0x00=JSON  0x01=CSV
- *   SALT   32 B   KDF salt (random per export)
- *   IV     12 B   AES-GCM nonce
- *   BODY    N B   AES-256-GCM ciphertext + 16-byte auth tag
+ *   MAGIC      8 B   "1KEYBKP\n"
+ *   VERSION    1 B   0x01 (legacy, no AAD) | 0x02 (header AAD, PBKDF2)
+ *                  | 0x03 (header AAD, Argon2id) | 0x04 (timestamp + vault version in AAD)
+ *   FORMAT     1 B   0x00=JSON  0x01=CSV
+ *   TIMESTAMP  8 B   export epoch-ms, big-endian [V4+ only]
+ *   VAULT_VER  4 B   vault version counter, big-endian [V4+ only]
+ *   SALT      32 B   KDF salt (random per export)
+ *   IV        12 B   AES-GCM nonce
+ *   BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag
  *
  * V2 binds (MAGIC || VERSION || FORMAT) into the GCM auth tag via AAD.
- * V3 is identical in layout to V2 but derives the key with Argon2id (m=64 MB, t=3, p=1)
- * instead of PBKDF2-HMAC-SHA256. New exports always use V3.
- * V1/V2 backups still decrypt for backward compatibility.
+ * V3 is identical in layout to V2 but derives the key with Argon2id (m=64 MB, t=3, p=1).
+ * V4 extends the AAD to (MAGIC || VERSION || FORMAT || TIMESTAMP || VAULT_VER), binding
+ * the ciphertext to the exact export time and vault version so neither can be swapped
+ * without invalidating the auth tag.
+ * New exports always use V4. V1/V2/V3 backups still decrypt for backward compatibility.
  */
 internal object BackupEncryption {
 
@@ -26,11 +32,14 @@ internal object BackupEncryption {
     private const val VERSION_LEGACY: Byte = 0x01
     private const val VERSION_AAD: Byte = 0x02
     private const val VERSION_ARGON2ID: Byte = 0x03
-    private const val CURRENT_VERSION: Byte = VERSION_ARGON2ID
+    private const val VERSION_V4: Byte = 0x04
+    private const val CURRENT_VERSION: Byte = VERSION_V4
     private const val FORMAT_JSON: Byte = 0x00
     private const val FORMAT_CSV: Byte = 0x01
     private const val SALT_LEN = 32
     private const val IV_LEN = 12  // AES-GCM nonce is always 96 bits
+    private const val TIMESTAMP_LEN = 8
+    private const val VAULT_VER_LEN = 4
 
     fun isEncrypted(path: String): Boolean = try {
         val header = ByteArray(MAGIC.size)
@@ -54,20 +63,26 @@ internal object BackupEncryption {
         password: CharArray,
         format: ExportFormat,
         crypto: CryptoManager,
+        createdAtMs: Long = System.currentTimeMillis(),
+        vaultVersion: Int = 0,
     ): ByteArray {
         val salt = crypto.generateSalt(SALT_LEN)
-        // V3: Argon2id (m=64 MB, t=3, p=1) — ~100× harder to brute-force than PBKDF2.
+        // V4: Argon2id (m=64 MB, t=3, p=1) — ~100× harder to brute-force than PBKDF2.
         val key = crypto.deriveKeyFromPasswordArgon2id(password, salt)
         password.fill(' ')
         val formatByte = if (format == ExportFormat.JSON) FORMAT_JSON else FORMAT_CSV
-        val aad = buildHeaderAad(CURRENT_VERSION, formatByte)
+        val aad = buildHeaderAad(CURRENT_VERSION, formatByte, createdAtMs, vaultVersion)
         val enc = crypto.encrypt(plaintext, key, aad)
         check(enc.iv.size == IV_LEN) { "Unexpected IV length: ${enc.iv.size}" }
 
-        return ByteArrayOutputStream(MAGIC.size + 2 + SALT_LEN + IV_LEN + enc.ciphertext.size).apply {
+        return ByteArrayOutputStream(
+            MAGIC.size + 2 + TIMESTAMP_LEN + VAULT_VER_LEN + SALT_LEN + IV_LEN + enc.ciphertext.size
+        ).apply {
             write(MAGIC)
             write(CURRENT_VERSION.toInt())
             write(formatByte.toInt())
+            write(ByteBuffer.allocate(TIMESTAMP_LEN).putLong(createdAtMs).array())
+            write(ByteBuffer.allocate(VAULT_VER_LEN).putInt(vaultVersion).array())
             write(salt)
             write(enc.iv)
             write(enc.ciphertext)
@@ -83,29 +98,46 @@ internal object BackupEncryption {
         require(magic.contentEquals(MAGIC)) { "Not a 1Key encrypted backup" }
 
         val version = fileBytes[off++]
-        require(version == VERSION_LEGACY || version == VERSION_AAD || version == VERSION_ARGON2ID) {
+        require(
+            version == VERSION_LEGACY || version == VERSION_AAD ||
+            version == VERSION_ARGON2ID || version == VERSION_V4
+        ) {
             "Unsupported backup version: 0x${version.toInt().and(0xFF).toString(16)}"
         }
 
         val fmtByte = fileBytes[off++]
         val format = if (fmtByte == FORMAT_JSON) ExportFormat.JSON else ExportFormat.CSV
 
+        // V4 embeds timestamp and vault version between FORMAT and SALT.
+        val createdAtMs: Long
+        val vaultVersion: Int
+        if (version == VERSION_V4) {
+            createdAtMs = ByteBuffer.wrap(fileBytes, off, TIMESTAMP_LEN).long; off += TIMESTAMP_LEN
+            vaultVersion = ByteBuffer.wrap(fileBytes, off, VAULT_VER_LEN).int; off += VAULT_VER_LEN
+        } else {
+            createdAtMs = 0L
+            vaultVersion = 0
+        }
+
         val salt = fileBytes.sliceArray(off until off + SALT_LEN); off += SALT_LEN
         val iv = fileBytes.sliceArray(off until off + IV_LEN); off += IV_LEN
         val ciphertext = fileBytes.sliceArray(off until fileBytes.size)
 
-        // Dispatch KDF by version: V3 = Argon2id; V1/V2 = PBKDF2 (backward compat).
+        // Dispatch KDF: V3/V4 = Argon2id; V1/V2 = PBKDF2 (backward compat).
         val key = when (version) {
-            VERSION_ARGON2ID -> crypto.deriveKeyFromPasswordArgon2id(password, salt)
+            VERSION_ARGON2ID, VERSION_V4 -> crypto.deriveKeyFromPasswordArgon2id(password, salt)
             else -> crypto.deriveKeyFromPassword(password, salt)
         }
         password.fill(' ')
 
-        // V2 and V3 authenticate (MAGIC || VERSION || FORMAT) in the GCM tag via AAD.
-        // V1 has no AAD — legacy backups decrypt without header authentication.
-        val aad = if (version == VERSION_AAD || version == VERSION_ARGON2ID) {
-            buildHeaderAad(version, fmtByte)
-        } else null
+        // V2/V3: AAD = (MAGIC || VERSION || FORMAT)
+        // V4:    AAD = (MAGIC || VERSION || FORMAT || TIMESTAMP || VAULT_VER)
+        // V1: no AAD — legacy backups decrypt without header authentication.
+        val aad = when (version) {
+            VERSION_V4 -> buildHeaderAad(version, fmtByte, createdAtMs, vaultVersion)
+            VERSION_AAD, VERSION_ARGON2ID -> buildHeaderAad(version, fmtByte)
+            else -> null
+        }
         val plaintext = crypto.decrypt(EncryptedData(ciphertext, iv), key, aad)
         return Decrypted(plaintext, format)
     }
@@ -115,6 +147,16 @@ internal object BackupEncryption {
         System.arraycopy(MAGIC, 0, aad, 0, MAGIC.size)
         aad[MAGIC.size] = version
         aad[MAGIC.size + 1] = format
+        return aad
+    }
+
+    private fun buildHeaderAad(version: Byte, format: Byte, createdAtMs: Long, vaultVersion: Int): ByteArray {
+        val aad = ByteArray(MAGIC.size + 2 + TIMESTAMP_LEN + VAULT_VER_LEN)
+        System.arraycopy(MAGIC, 0, aad, 0, MAGIC.size)
+        aad[MAGIC.size] = version
+        aad[MAGIC.size + 1] = format
+        ByteBuffer.wrap(aad, MAGIC.size + 2, TIMESTAMP_LEN).putLong(createdAtMs)
+        ByteBuffer.wrap(aad, MAGIC.size + 2 + TIMESTAMP_LEN, VAULT_VER_LEN).putInt(vaultVersion)
         return aad
     }
 }

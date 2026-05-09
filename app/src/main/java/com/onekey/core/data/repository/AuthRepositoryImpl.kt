@@ -12,6 +12,7 @@ import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.KEYSTORE_ALIAS_V1
 import com.onekey.core.security.KEYSTORE_ALIAS_V2
 import com.onekey.core.security.VaultKeyHolder
+import com.onekey.core.security.VaultVersionTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.*
 import javax.crypto.BadPaddingException
@@ -57,6 +58,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>,
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
+    private val vaultVersionTracker: VaultVersionTracker,
     @ApplicationScope appScope: CoroutineScope,
 ) : AuthRepository {
 
@@ -165,6 +167,7 @@ class AuthRepositoryImpl @Inject constructor(
                 p[KEY_PASSWORD_VERIFIER] = encodeVerifier(newVerifierSalt, newVerifier)
                 p[KEY_KDF_VERSION] = KDF_ARGON2ID
             }
+            vaultVersionTracker.increment()
             // Vault key itself does not change — no credential re-encryption needed.
         }
 
