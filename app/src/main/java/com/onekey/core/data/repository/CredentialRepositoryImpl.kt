@@ -41,9 +41,21 @@ class CredentialRepositoryImpl @Inject constructor(
         dao.observeFavoriteCount().stateIn(appScope, SharingStarted.Eagerly, 0)
 
     // Gate every flow that calls toDomain() on the vault unlock state.
-    // When the vault locks the inner flow is cancelled and an empty/null value
-    // is emitted immediately, preventing requireKey() from being called on a
-    // locked vault and crashing with IllegalStateException.
+    //
+    // For LIST-shaped flows we emit `emptyList()` on lock — the list screen
+    // visibly empties for a frame and the user is then routed to LockScreen,
+    // so the empty state isn't confusing.
+    //
+    // For SINGLE-credential flows (observeCredential, observeCredentialIncludingDeleted)
+    // we emit nothing on lock — `emptyFlow()`, not `flowOf(null)`. The reason:
+    // `Credential?` consumers read `null` as "this credential doesn't exist",
+    // but on lock the credential is fine — the vault just can't read it. Emitting
+    // `flowOf(null)` would conflate "vault locked" with "credential missing" and
+    // cause the detail screen's ViewModel to flip to Error("Credential not found")
+    // every time the vault locks. With `emptyFlow()` the inner flow simply pauses;
+    // the DAO subscription is cancelled (so requireKey() can't fire on a locked
+    // vault); the consumer's last-known state survives the lock; on unlock the
+    // real credential re-emits and the consumer continues normally.
 
     override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
@@ -81,7 +93,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     override fun observeCredential(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(null)
+            if (!unlocked) emptyFlow()
             else dao.observeById(id).map { it?.toDomainOrNull() }
         }
             .flowOn(Dispatchers.Default)
@@ -89,7 +101,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(null)
+            if (!unlocked) emptyFlow()
             else dao.observeByIdIncludingDeleted(id).map { it?.toDomainOrNull() }
         }
             .flowOn(Dispatchers.Default)
