@@ -88,48 +88,77 @@ class AuthRepositoryImpl @Inject constructor(
     /**
      * One-time migration: copies auth keys from the legacy plaintext DataStore into
      * [authPrefs] (EncryptedSharedPreferences), then removes them from DataStore.
-     * Safe to retry: if [authPrefs] already contains [SP_SETUP_COMPLETE] the
-     * migration is considered done and skipped.
+     *
+     * The idempotency invariant is "no plaintext auth keys remain in DataStore" — i.e.
+     * the goal state, not an intermediate state. Older versions of this code keyed the
+     * skip on `authPrefs.contains(SP_SETUP_COMPLETE)`, which meant a failure of the
+     * cleanup step (after the encrypted-store write succeeded) would leave the legacy
+     * blobs in DataStore *forever*: every subsequent run would short-circuit on the
+     * encrypted-store check and never retry the cleanup. The plaintext blobs the M4
+     * hardening is built to remove would silently persist.
+     *
+     * The fix: drive the skip off the source state. If any DataStore auth key is
+     * present, run the migration. The two phases — copy and clear — are each
+     * individually idempotent, so re-running on a partially-migrated state finishes
+     * the job. Cleanup failures throw and surface in logcat (rather than being
+     * swallowed by `runCatching`); the next launch retries.
      */
     private suspend fun migrateFromDataStoreIfNeeded() {
-        if (authPrefs.contains(SP_SETUP_COMPLETE)) return
-
         val old = dataStore.data.first()
-        val setupComplete = old[DS_SETUP_COMPLETE] ?: return  // new install, nothing to migrate
+        val hasLegacyKeys = old[DS_SETUP_COMPLETE] != null ||
+            old[DS_SALT] != null ||
+            old[DS_WRAPPED_KEY_CT] != null ||
+            old[DS_WRAPPED_KEY_IV] != null ||
+            old[DS_PASSWORD_VERIFIER] != null ||
+            old[DS_KDF_VERSION] != null ||
+            old[DS_PIN_HASH] != null ||
+            old[DS_PIN_SALT] != null ||
+            old[DS_PIN_KDF_VERSION] != null ||
+            old[DS_KEYSTORE_UPGRADED] != null ||
+            old[DS_WRAPPED_KEY_CT_V2] != null ||
+            old[DS_WRAPPED_KEY_IV_V2] != null
+        if (!hasLegacyKeys) return
 
-        authPrefs.edit().apply {
-            putBoolean(SP_SETUP_COMPLETE, setupComplete)
-            old[DS_SALT]?.let              { putString(SP_SALT, it) }
-            old[DS_WRAPPED_KEY_CT]?.let    { putString(SP_WRAPPED_KEY_CT, it) }
-            old[DS_WRAPPED_KEY_IV]?.let    { putString(SP_WRAPPED_KEY_IV, it) }
-            old[DS_PASSWORD_VERIFIER]?.let { putString(SP_PASSWORD_VERIFIER, it) }
-            old[DS_KDF_VERSION]?.let       { putInt(SP_KDF_VERSION, it) }
-            old[DS_PIN_HASH]?.let          { putString(SP_PIN_HASH, it) }
-            old[DS_PIN_SALT]?.let          { putString(SP_PIN_SALT, it) }
-            old[DS_PIN_KDF_VERSION]?.let   { putInt(SP_PIN_KDF_VERSION, it) }
-            old[DS_KEYSTORE_UPGRADED]?.let { putBoolean(SP_KEYSTORE_UPGRADED, it) }
-            old[DS_WRAPPED_KEY_CT_V2]?.let { putString(SP_WRAPPED_KEY_CT_V2, it) }
-            old[DS_WRAPPED_KEY_IV_V2]?.let { putString(SP_WRAPPED_KEY_IV_V2, it) }
-        }.commit()  // commit() = synchronous write; essential before clearing source
+        // Phase 1 — copy. Skip if already done (the encrypted store has the marker).
+        // SharedPreferences.commit() is synchronous and atomic at the file-system
+        // rename level: either the entire batch lands or none of it does.
+        if (!authPrefs.contains(SP_SETUP_COMPLETE)) {
+            val setupComplete = old[DS_SETUP_COMPLETE] ?: return  // half-state with no marker — skip
+            authPrefs.edit().apply {
+                putBoolean(SP_SETUP_COMPLETE, setupComplete)
+                old[DS_SALT]?.let              { putString(SP_SALT, it) }
+                old[DS_WRAPPED_KEY_CT]?.let    { putString(SP_WRAPPED_KEY_CT, it) }
+                old[DS_WRAPPED_KEY_IV]?.let    { putString(SP_WRAPPED_KEY_IV, it) }
+                old[DS_PASSWORD_VERIFIER]?.let { putString(SP_PASSWORD_VERIFIER, it) }
+                old[DS_KDF_VERSION]?.let       { putInt(SP_KDF_VERSION, it) }
+                old[DS_PIN_HASH]?.let          { putString(SP_PIN_HASH, it) }
+                old[DS_PIN_SALT]?.let          { putString(SP_PIN_SALT, it) }
+                old[DS_PIN_KDF_VERSION]?.let   { putInt(SP_PIN_KDF_VERSION, it) }
+                old[DS_KEYSTORE_UPGRADED]?.let { putBoolean(SP_KEYSTORE_UPGRADED, it) }
+                old[DS_WRAPPED_KEY_CT_V2]?.let { putString(SP_WRAPPED_KEY_CT_V2, it) }
+                old[DS_WRAPPED_KEY_IV_V2]?.let { putString(SP_WRAPPED_KEY_IV_V2, it) }
+            }.commit()
+        }
 
-        // Remove auth keys from DataStore now that they live in EncryptedSharedPreferences.
-        // Failure here is tolerable — the keys are orphaned in DataStore but the app
-        // always reads from authPrefs going forward.
-        runCatching {
-            dataStore.edit { p ->
-                p.remove(DS_SETUP_COMPLETE)
-                p.remove(DS_SALT)
-                p.remove(DS_WRAPPED_KEY_CT)
-                p.remove(DS_WRAPPED_KEY_IV)
-                p.remove(DS_PASSWORD_VERIFIER)
-                p.remove(DS_KDF_VERSION)
-                p.remove(DS_PIN_HASH)
-                p.remove(DS_PIN_SALT)
-                p.remove(DS_PIN_KDF_VERSION)
-                p.remove(DS_KEYSTORE_UPGRADED)
-                p.remove(DS_WRAPPED_KEY_CT_V2)
-                p.remove(DS_WRAPPED_KEY_IV_V2)
-            }
+        // Phase 2 — clear. ALWAYS run when legacy keys exist; do NOT swallow errors.
+        // If this throws (transient I/O, disk full), the failure surfaces in logcat,
+        // migrationComplete still completes via the init block's `finally`, and the
+        // migration retries on the next launch (when hasLegacyKeys re-evaluates true).
+        // This is what makes the goal-state idempotency work: we don't trust an
+        // intermediate flag to tell us we're done, we look at the actual data.
+        dataStore.edit { p ->
+            p.remove(DS_SETUP_COMPLETE)
+            p.remove(DS_SALT)
+            p.remove(DS_WRAPPED_KEY_CT)
+            p.remove(DS_WRAPPED_KEY_IV)
+            p.remove(DS_PASSWORD_VERIFIER)
+            p.remove(DS_KDF_VERSION)
+            p.remove(DS_PIN_HASH)
+            p.remove(DS_PIN_SALT)
+            p.remove(DS_PIN_KDF_VERSION)
+            p.remove(DS_KEYSTORE_UPGRADED)
+            p.remove(DS_WRAPPED_KEY_CT_V2)
+            p.remove(DS_WRAPPED_KEY_IV_V2)
         }
     }
 
