@@ -61,6 +61,17 @@ interface CredentialDao {
     @Query("SELECT * FROM credentials WHERE deleted_at IS NULL")
     suspend fun getAll(): List<CredentialEntity>
 
+    // Used by CredentialCipherMigrator to walk pre-DB-v12 rows in batches and
+    // re-encrypt them with the HKDF field-subkey + per-field AAD. Includes
+    // soft-deleted rows so the bin migrates too — otherwise restoring a v0 row
+    // post-migration would fail to decrypt under the v1 read path. Newest rows
+    // first so the visible vault converts before the long tail of bin entries.
+    @Query("SELECT * FROM credentials WHERE cipher_version = 0 ORDER BY updated_at DESC LIMIT :limit")
+    suspend fun getLegacyCipherBatch(limit: Int): List<CredentialEntity>
+
+    @Query("SELECT COUNT(*) FROM credentials WHERE cipher_version = 0")
+    suspend fun countLegacyCipher(): Int
+
     // Used by import dedup to detect (title, username) matches that live in the recycle bin.
     @Query("SELECT * FROM credentials WHERE deleted_at IS NOT NULL")
     suspend fun getAllInRecycleBin(): List<CredentialEntity>

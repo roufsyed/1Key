@@ -9,6 +9,7 @@ import com.lambdapioneer.argon2kt.Argon2Mode
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
+import javax.crypto.Mac
 import javax.crypto.SecretKey
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
@@ -199,4 +200,33 @@ class CryptoManager @Inject constructor() {
 
     fun decryptString(data: EncryptedData, key: SecretKey): String =
         decrypt(data, key).toString(Charsets.UTF_8)
+
+    // ── HKDF-SHA256 subkey derivation ────────────────────────────────────────
+    //
+    // Domain-separated subkeys derived from the vault master key. Using one
+    // master key for multiple purposes (field encryption, title encryption,
+    // ...) is a known anti-pattern; HKDF gives each purpose its own key.
+    //
+    // The vault key is already a uniformly random 256-bit AES key, so the
+    // HKDF-Extract step (HMAC(salt, IKM)) is unnecessary — RFC 5869 §3.3
+    // explicitly allows skipping it when the input is already uniform.
+    // We emit a single 32-byte block via T(1) = HMAC(masterKey, info || 0x01).
+
+    fun deriveSubkey(masterKey: SecretKey, info: String): SecretKey {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(masterKey.encoded, "HmacSHA256"))
+        val infoBytes = info.toByteArray(Charsets.UTF_8)
+        val data = ByteArray(infoBytes.size + 1)
+        System.arraycopy(infoBytes, 0, data, 0, infoBytes.size)
+        data[infoBytes.size] = 0x01
+        val raw = mac.doFinal(data)
+        val key = SecretKeySpec(raw, "AES")
+        raw.fill(0)
+        return key
+    }
 }
+
+// Domain-separation labels for HKDF-derived subkeys. Append a version suffix
+// when the encryption scheme changes so old and new subkeys don't collide.
+internal const val HKDF_FIELD_KEY_INFO = "1key-field-enc-v1"
+internal const val HKDF_TITLE_KEY_INFO = "1key-title-enc-v1"

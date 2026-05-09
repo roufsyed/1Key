@@ -62,6 +62,16 @@ data class CredentialEntity(
     // Null for non-HOTP entries; persisted counter for HOTP. Increment is a transactional
     // DAO write (CredentialDao.atomicIncrementHotpCounter) — never mutated in memory.
     @ColumnInfo(name = "hotp_counter") val hotpCounter: Long? = null,
+    // ── Cipher version (added in DB v12) ─────────────────────────────────────
+    // 0 = legacy: AES-GCM with the raw vault key, no AAD on credential fields.
+    // 1 = HKDF field-subkey + per-field AAD ("1k:v1|<id>|<field>"). Per-field
+    //     AAD prevents an attacker with DB write access from swapping a
+    //     ciphertext between rows or columns without invalidating the GCM tag.
+    //
+    // Read path dispatches on this value; write path always emits v1. Existing
+    // rows are silently re-encrypted to v1 on the next unlock by
+    // CredentialCipherMigrator — without bumping `updated_at`.
+    @ColumnInfo(name = "cipher_version", defaultValue = "0") val cipherVersion: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

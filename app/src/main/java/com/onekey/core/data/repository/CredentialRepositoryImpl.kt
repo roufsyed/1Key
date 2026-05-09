@@ -8,7 +8,9 @@ import com.onekey.core.domain.model.*
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
+import com.onekey.core.security.HKDF_FIELD_KEY_INFO
 import com.onekey.core.security.VaultKeyHolder
+import javax.crypto.SecretKey
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.onekey.core.di.ApplicationScope
 import com.onekey.core.domain.model.CredentialSortOrder
@@ -280,24 +282,35 @@ class CredentialRepositoryImpl @Inject constructor(
     )
 
     private fun CredentialEntity.toDomain(): Credential {
-        val key = keyHolder.requireKey()
+        val vaultKey = keyHolder.requireKey()
+        // v0 rows: encrypted with the raw vault key, no AAD (legacy, pre-DB-v12).
+        // v1 rows: encrypted with the HKDF-derived field subkey, AAD = ("1k:v1|<id>|<field>"),
+        // which binds the ciphertext to this specific row + column. Mismatched
+        // ciphertexts (e.g., DB-edited swap of password into username) fail GCM auth.
+        val cipherKey = if (cipherVersion >= 1) crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO) else vaultKey
+
+        fun decryptField(ct: ByteArray, iv: ByteArray, fieldName: String): String {
+            val aad = if (cipherVersion >= 1) fieldAad(id, fieldName) else null
+            return crypto.decrypt(EncryptedData(ct, iv), cipherKey, aad).toString(Charsets.UTF_8)
+        }
+
         return Credential(
             id = id,
             title = title,
-            username = crypto.decryptString(EncryptedData(usernameEncrypted, ivUsername), key),
-            password = crypto.decryptString(EncryptedData(passwordEncrypted, ivPassword), key),
+            username = decryptField(usernameEncrypted, ivUsername, "username"),
+            password = decryptField(passwordEncrypted, ivPassword, "password"),
             url = if (urlEncrypted != null && ivUrl != null)
-                crypto.decryptString(EncryptedData(urlEncrypted, ivUrl), key)
+                decryptField(urlEncrypted, ivUrl, "url")
             else url,
-            notes = crypto.decryptString(EncryptedData(notesEncrypted, ivNotes), key),
-            otpParams = decryptOtpParams(key),
+            notes = decryptField(notesEncrypted, ivNotes, "notes"),
+            otpParams = decryptOtpParams(cipherKey),
             tags = tags,
-            customFields = customFields.map { cf ->
+            customFields = customFields.mapIndexed { idx, cf ->
                 CustomField(
                     key = if (cf.keyEncrypted != null && cf.keyIv != null)
-                        crypto.decryptString(EncryptedData(cf.keyEncrypted, cf.keyIv), key)
+                        decryptField(cf.keyEncrypted, cf.keyIv, "cf|$idx|k")
                     else cf.key,
-                    value = crypto.decryptString(EncryptedData(cf.valueEncrypted, cf.iv), key),
+                    value = decryptField(cf.valueEncrypted, cf.iv, "cf|$idx|v"),
                     isSensitive = cf.isSensitive,
                 )
             },
@@ -324,9 +337,11 @@ class CredentialRepositoryImpl @Inject constructor(
      * fall back to defaults rather than failing OtpParams.init's `require()` and
      * killing the entire flow emission.
      */
-    private fun CredentialEntity.decryptOtpParams(key: javax.crypto.SecretKey): OtpParams? {
+    private fun CredentialEntity.decryptOtpParams(cipherKey: SecretKey): OtpParams? {
         if (totpSecretEncrypted == null || ivTotp == null) return null
-        val secret = crypto.decryptString(EncryptedData(totpSecretEncrypted, ivTotp), key)
+        val aad = if (cipherVersion >= 1) fieldAad(id, "totp") else null
+        val secret = crypto.decrypt(EncryptedData(totpSecretEncrypted, ivTotp), cipherKey, aad)
+            .toString(Charsets.UTF_8)
         val safeDigits = totpDigits.takeIf { it in OtpParams.MIN_DIGITS..OtpParams.MAX_DIGITS }
             ?: OtpParams.DEFAULT_DIGITS
         val safePeriod = totpPeriod.takeIf { it > 0L } ?: OtpParams.DEFAULT_PERIOD_SECONDS
@@ -342,16 +357,22 @@ class CredentialRepositoryImpl @Inject constructor(
     }
 
     private fun Credential.toEntity(): CredentialEntity {
-        val key = keyHolder.requireKey()
+        val vaultKey = keyHolder.requireKey()
+        val fieldKey = crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO)
         val now = System.currentTimeMillis()
-        val encUsername = crypto.encryptString(username, key)
-        val encPassword = crypto.encryptString(password, key)
-        val encNotes = crypto.encryptString(notes, key)
-        val encTotp = otpParams?.let { crypto.encryptString(it.secret, key) }
-        val encUrl = crypto.encryptString(url, key)
+        val resolvedId = if (id.isBlank()) UUID.randomUUID().toString() else id
+
+        fun encryptField(value: String, fieldName: String): EncryptedData =
+            crypto.encrypt(value.toByteArray(Charsets.UTF_8), fieldKey, fieldAad(resolvedId, fieldName))
+
+        val encUsername = encryptField(username, "username")
+        val encPassword = encryptField(password, "password")
+        val encNotes    = encryptField(notes, "notes")
+        val encTotp     = otpParams?.let { encryptField(it.secret, "totp") }
+        val encUrl      = encryptField(url, "url")
 
         return CredentialEntity(
-            id = if (id.isBlank()) UUID.randomUUID().toString() else id,
+            id = resolvedId,
             title = title,
             usernameEncrypted = encUsername.ciphertext,
             ivUsername = encUsername.iv,
@@ -365,9 +386,9 @@ class CredentialRepositoryImpl @Inject constructor(
             urlEncrypted = encUrl.ciphertext,
             ivUrl = encUrl.iv,
             tags = tags,
-            customFields = customFields.map { cf ->
-                val encVal = crypto.encryptString(cf.value, key)
-                val encKey = crypto.encryptString(cf.key, key)
+            customFields = customFields.mapIndexed { idx, cf ->
+                val encVal = encryptField(cf.value, "cf|$idx|v")
+                val encKey = encryptField(cf.key, "cf|$idx|k")
                 CustomFieldEntity(
                     key = "",
                     keyEncrypted = encKey.ciphertext,
@@ -395,6 +416,10 @@ class CredentialRepositoryImpl @Inject constructor(
             totpDigits = otpParams?.digits ?: OtpParams.DEFAULT_DIGITS,
             totpPeriod = otpParams?.period ?: OtpParams.DEFAULT_PERIOD_SECONDS,
             hotpCounter = if (otpParams?.type == OtpType.HOTP) otpParams.counter else null,
+            cipherVersion = 1,
         )
     }
+
+    private fun fieldAad(credentialId: String, field: String): ByteArray =
+        "1k:v1|$credentialId|$field".toByteArray(Charsets.UTF_8)
 }

@@ -144,6 +144,16 @@ val MIGRATION_10_11 = object : Migration(10, 11) {
     }
 }
 
+// Adds `cipher_version` for L4 (HKDF subkey derivation) + H3 (per-field AAD).
+// Existing rows default to 0 (legacy AES-GCM with raw vault key, no AAD); the
+// CredentialCipherMigrator transparently re-encrypts them to v1 on the next
+// unlock. New writes always go straight to v1.
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN cipher_version INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -160,7 +170,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

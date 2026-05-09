@@ -5,6 +5,7 @@ import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.repository.TagRepository
+import com.onekey.core.security.CredentialCipherMigrator
 import com.onekey.core.security.ScreenOffLockReceiver
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -25,8 +26,15 @@ class OneKeyApp : Application() {
      */
     @Inject lateinit var screenOffLockReceiver: ScreenOffLockReceiver
 
+    /**
+     * Re-encrypts pre-DB-v12 credential rows to the new HKDF-subkey + per-field-AAD
+     * scheme after every unlock. Idle until the vault unlocks; cancellable on lock.
+     */
+    @Inject lateinit var credentialCipherMigrator: CredentialCipherMigrator
+
     override fun onCreate() {
         super.onCreate()
         screenOffLockReceiver.register()
+        credentialCipherMigrator.start()
     }
 }
