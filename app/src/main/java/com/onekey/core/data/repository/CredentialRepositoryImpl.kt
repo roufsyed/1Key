@@ -241,6 +241,9 @@ class CredentialRepositoryImpl @Inject constructor(
     private fun CredentialSortOrder.dateOrderBy() = when (this) {
         CredentialSortOrder.NEWEST_FIRST -> "created_at DESC"
         CredentialSortOrder.LAST_MODIFIED -> "updated_at DESC"
+        // SQLite sorts NULL as smaller than any value, so DESC puts never-accessed rows
+        // at the bottom — exactly the desired UX (recent activity at the top).
+        CredentialSortOrder.RECENTLY_ACCESSED -> "accessed_at DESC"
         CredentialSortOrder.ALPHABETICAL -> error("ALPHABETICAL sort takes the in-memory path; do not use SQL ordering")
     }
 
@@ -248,6 +251,11 @@ class CredentialRepositoryImpl @Inject constructor(
     private fun CredentialSortOrder.comparator(): Comparator<Credential> = when (this) {
         CredentialSortOrder.NEWEST_FIRST -> compareByDescending { it.createdAt }
         CredentialSortOrder.LAST_MODIFIED -> compareByDescending { it.updatedAt }
+        // toDomain() falls back to updatedAt when accessedAt is null, so this comparator
+        // sees a non-null Long in practice. compareByDescending also handles raw nulls
+        // correctly (Kotlin's stdlib treats null as smallest, so DESC = nulls last) —
+        // matching the SQL fast path's behaviour for legacy rows.
+        CredentialSortOrder.RECENTLY_ACCESSED -> compareByDescending { it.accessedAt }
         CredentialSortOrder.ALPHABETICAL -> compareBy { it.title.lowercase() }
     }
 
