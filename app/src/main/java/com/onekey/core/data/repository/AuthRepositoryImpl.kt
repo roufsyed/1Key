@@ -250,6 +250,16 @@ class AuthRepositoryImpl @Inject constructor(
         runCatchingResult {
             migrationComplete.await()
 
+            // Refuse a no-op change before doing any KDF work. The UI also blocks
+            // submitting when current and new match, but defense in depth keeps any
+            // future entry point that bypasses the UI honest. Zero both arrays before
+            // throwing so the password material has the shortest possible lifetime.
+            if (oldPassword.contentEquals(newPassword)) {
+                oldPassword.fill(' ')
+                newPassword.fill(' ')
+                error("Your new password must be different from your current password.")
+            }
+
             val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
             verifyMasterPassword(oldPassword, kdfVersion)
 

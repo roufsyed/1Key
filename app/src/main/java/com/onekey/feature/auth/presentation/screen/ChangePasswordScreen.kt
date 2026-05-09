@@ -47,9 +47,17 @@ fun ChangePasswordScreen(
     val confirmMismatch = !confirmPasswordState.isEmpty &&
             !newPasswordState.contentEquals(confirmPasswordState)
     val newTooShort = !newPasswordState.isEmpty && newPasswordState.length < 8
+    // Refuse a no-op change. We compare against the current field rather than the
+    // stored verifier so the user gets immediate inline feedback as they type —
+    // no extra KDF work needed. The repository enforces the same rule
+    // (defense in depth) before touching the verifier.
+    val newSameAsCurrent = !newPasswordState.isEmpty &&
+            !currentPasswordState.isEmpty &&
+            newPasswordState.contentEquals(currentPasswordState)
     val canSubmit = !currentPasswordState.isEmpty &&
             newPasswordState.length >= 8 &&
             newPasswordState.contentEquals(confirmPasswordState) &&
+            !newSameAsCurrent &&
             state !is ChangePasswordUiState.Loading
 
     Scaffold(
@@ -101,8 +109,15 @@ fun ChangePasswordScreen(
                     showPassword = showNew,
                     onToggleVisibility = { showNew = !showNew },
                     imeAction = ImeAction.Next,
-                    isError = newTooShort,
-                    supportingText = if (newTooShort) "Minimum 8 characters" else null,
+                    isError = newTooShort || newSameAsCurrent,
+                    // Priority: same-as-current is the more specific complaint when
+                    // both apply (current is also short). Length only surfaces when the
+                    // new password is genuinely different but still under 8 chars.
+                    supportingText = when {
+                        newSameAsCurrent -> "New password must differ from your current password"
+                        newTooShort -> "Minimum 8 characters"
+                        else -> null
+                    },
                 )
 
                 PasswordField(
