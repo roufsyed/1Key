@@ -29,7 +29,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
-import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.SecurePasswordFieldState
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 
@@ -50,12 +52,12 @@ fun OnboardingScreen(
     var showRestoreDialog by rememberSaveable { mutableStateOf(false) }
     var pendingRestoreUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
-    // Hoisted so that navigating Back → Continue between pages doesn't wipe what the user
-    // already typed / accepted. AnimatedContent destroys child composables on transition,
-    // so any state held inside CreateVaultPage would be lost. Saveable so rotations don't
-    // wipe these either — same FBE-encrypted-Bundle tradeoff as the credential editor.
-    var password by rememberSaveable { mutableStateOf("") }
-    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    // Hoisted to survive AnimatedContent transitions (which destroy child composables).
+    // SecurePasswordFieldState uses `remember` (not `rememberSaveable`) intentionally:
+    // master passwords must not persist to InstanceState / SavedStateHandle bundles.
+    // Back→Continue navigation within a session preserves these; process death clears them.
+    val passwordState = rememberSecurePasswordFieldState()
+    val confirmPasswordState = rememberSecurePasswordFieldState()
     var privacyAccepted by rememberSaveable { mutableStateOf(false) }
 
     val restoreLauncher = rememberLauncherForActivityResult(
@@ -97,10 +99,8 @@ fun OnboardingScreen(
                 1 -> PrivacyPage(onNext = { step = 2 }, onBack = { step = 0 })
                 2 -> CreateVaultPage(
                     state = state,
-                    password = password,
-                    onPasswordChange = { password = it; viewModel.clearError() },
-                    confirmPassword = confirmPassword,
-                    onConfirmPasswordChange = { confirmPassword = it; viewModel.clearError() },
+                    passwordState = passwordState,
+                    confirmPasswordState = confirmPasswordState,
                     privacyAccepted = privacyAccepted,
                     onPrivacyAcceptedChange = { privacyAccepted = it },
                     onBack = {
@@ -108,7 +108,11 @@ fun OnboardingScreen(
                         // Clear so a stale error doesn't reappear if the user comes back to step 2.
                         viewModel.clearError()
                     },
-                    onSubmit = { viewModel.setup(password.toCharArray()) },
+                    onSubmit = {
+                        confirmPasswordState.clear()
+                        viewModel.setup(passwordState.consume())
+                    },
+                    onClearError = { viewModel.clearError() },
                     onRestoreFromBackup = {
                         viewModel.notifyPickerLaunched()
                         restoreLauncher.launch(arrayOf("*/*"))
@@ -133,9 +137,9 @@ fun OnboardingScreen(
     if (showRestoreDialog) {
         RestoreFromBackupDialog(
             state = state,
-            onConfirm = { password ->
+            onConfirm = { charArray ->
                 pendingRestoreUri?.let {
-                    viewModel.restoreFromEncryptedBackup(it, password.toCharArray(), context)
+                    viewModel.restoreFromEncryptedBackup(it, charArray, context)
                 }
             },
             onDismiss = {
@@ -302,27 +306,22 @@ private fun PrivacyPage(onNext: () -> Unit, onBack: () -> Unit) {
 @Composable
 private fun CreateVaultPage(
     state: AuthUiState,
-    password: String,
-    onPasswordChange: (String) -> Unit,
-    confirmPassword: String,
-    onConfirmPasswordChange: (String) -> Unit,
+    passwordState: SecurePasswordFieldState,
+    confirmPasswordState: SecurePasswordFieldState,
     privacyAccepted: Boolean,
     onPrivacyAcceptedChange: (Boolean) -> Unit,
     onBack: () -> Unit,
     onSubmit: () -> Unit,
+    onClearError: () -> Unit,
     onRestoreFromBackup: () -> Unit,
 ) {
     var showPassword by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
     var showPolicyDialog by remember { mutableStateOf(false) }
 
-    // `remember { derivedStateOf { ... } }` here would capture the FIRST recomposition's
-    // password/confirmPassword (both ""), and the captured plain-String parameters never
-    // re-track. derivedStateOf only tracks State<T> reads inside its block — function
-    // parameters are values, not state. Plain vals recompute correctly on each pass.
-    val passwordMismatch = confirmPassword.isNotEmpty() && password != confirmPassword
-    val passwordTooShort = password.isNotEmpty() && password.length < 8
-    val canSubmit = password.length >= 8 && !passwordMismatch && privacyAccepted && state !is AuthUiState.Loading
+    val passwordMismatch = !confirmPasswordState.isEmpty && !passwordState.contentEquals(confirmPasswordState)
+    val passwordTooShort = !passwordState.isEmpty && passwordState.length < 8
+    val canSubmit = passwordState.length >= 8 && !passwordMismatch && privacyAccepted && state !is AuthUiState.Loading
 
     // Hero (intro copy) is the only thing that scrolls; the form (fields, privacy
     // controls, primary + secondary actions) is a non-scrolling sibling pinned to
@@ -371,9 +370,9 @@ private fun CreateVaultPage(
                 .padding(top = 24.dp, bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            LockAwareOutlinedTextField(
-                value = password,
-                onValueChange = onPasswordChange,
+            SecurePasswordTextField(
+                state = passwordState,
+                onValueChanged = onClearError,
                 label = { Text("Master Password") },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -387,14 +386,13 @@ private fun CreateVaultPage(
                 supportingText = {
                     if (passwordTooShort) Text("At least 8 characters required")
                 },
-                singleLine = true,
             )
 
             Spacer(Modifier.height(12.dp))
 
-            LockAwareOutlinedTextField(
-                value = confirmPassword,
-                onValueChange = onConfirmPasswordChange,
+            SecurePasswordTextField(
+                state = confirmPasswordState,
+                onValueChanged = onClearError,
                 label = { Text("Confirm Password") },
                 visualTransformation = if (showConfirm) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -406,7 +404,6 @@ private fun CreateVaultPage(
                 modifier = Modifier.fillMaxWidth(),
                 isError = passwordMismatch,
                 supportingText = { if (passwordMismatch) Text("Passwords do not match") },
-                singleLine = true,
             )
 
             if (state is AuthUiState.Error) {
@@ -606,10 +603,10 @@ private fun VaultReadyPage(onContinue: () -> Unit) {
 @Composable
 private fun RestoreFromBackupDialog(
     state: AuthUiState,
-    onConfirm: (String) -> Unit,
+    onConfirm: (CharArray) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var password by remember { mutableStateOf("") }
+    val passwordState = rememberSecurePasswordFieldState()
     var showPassword by remember { mutableStateOf(false) }
 
     // Dismiss automatically once setup completes (LaunchedEffect handles navigation).
@@ -632,11 +629,9 @@ private fun RestoreFromBackupDialog(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                LockAwareOutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
+                SecurePasswordTextField(
+                    state = passwordState,
                     label = { Text("Backup password") },
-                    singleLine = true,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     trailingIcon = {
@@ -653,8 +648,8 @@ private fun RestoreFromBackupDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onConfirm(password) },
-                enabled = password.isNotEmpty() && state !is AuthUiState.Loading,
+                onClick = { onConfirm(passwordState.consume()) },
+                enabled = !passwordState.isEmpty && state !is AuthUiState.Loading,
             ) {
                 if (state is AuthUiState.Loading) {
                     CircularProgressIndicator(

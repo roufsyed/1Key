@@ -19,7 +19,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
-import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -64,7 +65,7 @@ fun SettingsScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
-    var deleteVaultPassword by remember { mutableStateOf("") }
+    val deleteVaultPasswordState = rememberSecurePasswordFieldState()
     var deleteVaultPasswordVisible by remember { mutableStateOf(false) }
     var deleteVaultPasswordError by remember { mutableStateOf<String?>(null) }
     var deleteVaultAttemptsRemaining by remember { mutableIntStateOf(3) }
@@ -74,7 +75,6 @@ fun SettingsScreen(
             when (event) {
                 SettingsEvent.VaultContentsDeleted -> {
                     showDeleteVaultDialog = false
-                    deleteVaultPassword = ""
                     deleteVaultPasswordVisible = false
                     deleteVaultPasswordError = null
                     deleteVaultAttemptsRemaining = 3
@@ -95,7 +95,7 @@ fun SettingsScreen(
                 }
                 SettingsEvent.VaultLocked -> {
                     showDeleteVaultDialog = false
-                    deleteVaultPassword = ""
+                    deleteVaultPasswordState.clear()
                     deleteVaultPasswordVisible = false
                     deleteVaultPasswordError = null
                     deleteVaultAttemptsRemaining = 3
@@ -166,7 +166,7 @@ fun SettingsScreen(
                     title = { Text("Settings") },
                     navigationIcon = {
                         if (showBack) {
-                            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                         }
                     },
                     actions = {
@@ -325,13 +325,12 @@ fun SettingsScreen(
 
     if (showDeleteVaultDialog) {
         val isVerifyingDeleteVault by settingsVm.isVerifyingDeleteVault.collectAsStateWithLifecycle()
-        val canConfirm = deleteVaultPassword.isNotEmpty() && !isVerifyingDeleteVault
+        val canConfirm = !deleteVaultPasswordState.isEmpty && !isVerifyingDeleteVault
 
         LockAwareDialog(
             onDismissRequest = {
                 if (isVerifyingDeleteVault) return@LockAwareDialog
                 showDeleteVaultDialog = false
-                deleteVaultPassword = ""
                 deleteVaultPasswordVisible = false
                 deleteVaultPasswordError = null
             },
@@ -356,14 +355,10 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    LockAwareOutlinedTextField(
-                        value = deleteVaultPassword,
-                        onValueChange = {
-                            deleteVaultPassword = it
-                            if (deleteVaultPasswordError != null) deleteVaultPasswordError = null
-                        },
+                    SecurePasswordTextField(
+                        state = deleteVaultPasswordState,
+                        onValueChanged = { if (deleteVaultPasswordError != null) deleteVaultPasswordError = null },
                         label = { Text("Master password") },
-                        singleLine = true,
                         enabled = !isVerifyingDeleteVault,
                         isError = deleteVaultPasswordError != null,
                         visualTransformation = if (deleteVaultPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
@@ -390,7 +385,7 @@ fun SettingsScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        settingsVm.deleteVaultContentsWithVerification(deleteVaultPassword.toCharArray())
+                        settingsVm.deleteVaultContentsWithVerification(deleteVaultPasswordState.consume())
                     },
                     enabled = canConfirm,
                     colors = ButtonDefaults.buttonColors(
@@ -414,7 +409,6 @@ fun SettingsScreen(
                     enabled = !isVerifyingDeleteVault,
                     onClick = {
                         showDeleteVaultDialog = false
-                        deleteVaultPassword = ""
                         deleteVaultPasswordVisible = false
                         deleteVaultPasswordError = null
                     }

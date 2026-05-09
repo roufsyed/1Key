@@ -7,30 +7,36 @@ import android.content.Context
 import android.os.Build
 import android.os.PersistableBundle
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private const val CLIPBOARD_CLEAR_DELAY_MS = 30_000L
+private const val CLIPBOARD_CLEAR_SECONDS = 30
 
 /**
- * Application-singleton clipboard manager for sensitive values. Provides three
- * properties that the raw system clipboard does not:
+ * Application-singleton clipboard manager for sensitive values. Provides:
  *
  *  1. **Sensitive marking** — on API 33+ the clip carries [ClipDescription.EXTRA_IS_SENSITIVE]
  *     so the OS paste-preview toast doesn't display the value and the clipboard manager
  *     skips persisting the entry.
- *  2. **Conditional auto-clear** — after [CLIPBOARD_CLEAR_DELAY_MS] the clipboard is wiped
- *     **only if it still contains the value we put there**. If the user copied something
- *     else from another app in the meantime, we leave their content alone.
+ *  2. **Conditional auto-clear** — after [CLIPBOARD_CLEAR_SECONDS] the clipboard is wiped
+ *     only if it still contains the value we put there. If the user copied something else
+ *     from another app in the meantime, we leave their content alone.
  *  3. **Navigation-safe scheduling** — the clear coroutine runs in this singleton's
  *     scope, so it survives screen navigation, app backgrounding, and vault auto-lock.
- *     Process death cancels it, but a copied secret can't outlive the process anyway.
+ *  4. **Visible countdown** — [countdown] emits the remaining seconds so UI can display
+ *     a "Clipboard clears in Xs" badge while the auto-clear is pending.
  */
 @Singleton
 class SecureClipboardManager @Inject constructor(private val context: Context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var clearJob: Job? = null
+
+    private val _countdown = MutableStateFlow<Int?>(null)
+    val countdown: StateFlow<Int?> = _countdown.asStateFlow()
 
     fun copySecure(label: String, value: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -42,13 +48,18 @@ class SecureClipboardManager @Inject constructor(private val context: Context) {
             }
         }
         clipboard.setPrimaryClip(clip)
-        scheduleClear(value)
+        scheduleCountdownAndClear(value)
     }
 
-    private fun scheduleClear(originalValue: String) {
+    private fun scheduleCountdownAndClear(originalValue: String) {
         clearJob?.cancel()
         clearJob = scope.launch {
-            delay(CLIPBOARD_CLEAR_DELAY_MS)
+            for (remaining in CLIPBOARD_CLEAR_SECONDS downTo 1) {
+                _countdown.value = remaining
+                delay(1_000L)
+            }
+            _countdown.value = null
+
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             // Only clear if the clipboard still holds what we put there. If the user
             // copied something else in the interim, leave their content alone.
@@ -68,5 +79,6 @@ class SecureClipboardManager @Inject constructor(private val context: Context) {
     fun cancelScheduledClear() {
         clearJob?.cancel()
         clearJob = null
+        _countdown.value = null
     }
 }

@@ -13,6 +13,7 @@ import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.domain.usecase.ExportVaultUseCase
 import com.onekey.core.domain.usecase.ImportVaultUseCase
 import com.onekey.core.security.AutoLockManager
+import com.onekey.feature.importexport.domain.BackupPasswordValidator
 import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
@@ -37,6 +38,7 @@ sealed class ImportExportEvent {
     data object ExportPasswordVerified : ImportExportEvent()
     data class ExportPasswordFailed(val attemptsRemaining: Int) : ImportExportEvent()
     data object ExportVaultLocked : ImportExportEvent()
+    data class ExportPasswordTooWeak(val message: String) : ImportExportEvent()
 }
 
 @Immutable
@@ -340,8 +342,19 @@ class ImportExportViewModel @Inject constructor(
 
     fun verifyPasswordForExport(password: CharArray) {
         viewModelScope.launch {
+            // Validate strength before the expensive Argon2id unlock call. If the
+            // password is too weak, surface the error immediately and zero the array.
+            val strengthResult = BackupPasswordValidator.validate(password)
+            if (strengthResult !is BackupPasswordValidator.Result.Valid) {
+                password.fill(' ')
+                _events.emit(ImportExportEvent.ExportPasswordTooWeak(
+                    BackupPasswordValidator.userMessage(strengthResult)
+                ))
+                return@launch
+            }
+
             try {
-                // PBKDF2 derivation runs inside unlockWithPassword — keep it off Main
+                // Argon2id derivation runs inside unlockWithPassword — keep it off Main
                 // so the export-verify dialog doesn't freeze the UI on submit.
                 val outcome = withContext(Dispatchers.Default) {
                     authRepository.unlockWithPassword(password)

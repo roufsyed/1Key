@@ -23,6 +23,9 @@
 -keep class java.security.** { *; }
 -keep class android.security.keystore.** { *; }
 
+# Argon2id — JNI bridge classes must survive shrinking/obfuscation.
+-keep class com.lambdapioneer.argon2kt.** { *; }
+
 # OpenCSV
 -keep class com.opencsv.** { *; }
 -dontwarn com.opencsv.**

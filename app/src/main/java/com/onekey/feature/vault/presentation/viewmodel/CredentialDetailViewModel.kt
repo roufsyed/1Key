@@ -67,6 +67,8 @@ class CredentialDetailViewModel @Inject constructor(
     val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val clipboardCountdown: StateFlow<Int?> = secureClipboard.countdown
+
     private val _pendingRestoreConflict = MutableStateFlow<RestoreConflict?>(null)
     val pendingRestoreConflict: StateFlow<RestoreConflict?> = _pendingRestoreConflict.asStateFlow()
 

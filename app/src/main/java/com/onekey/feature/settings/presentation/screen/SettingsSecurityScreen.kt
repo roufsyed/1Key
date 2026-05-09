@@ -6,6 +6,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,7 +23,8 @@ import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.presentation.lockaware.LockAwareDialog
-import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightKeys
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
@@ -53,13 +55,13 @@ fun SettingsSecurityScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showBiometricConfirmDialog by remember { mutableStateOf(false) }
-    var biometricPasswordInput by remember { mutableStateOf("") }
+    val biometricPasswordState = rememberSecurePasswordFieldState()
     var biometricPasswordVisible by remember { mutableStateOf(false) }
     var biometricPasswordError by remember { mutableStateOf(false) }
     var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
 
     var showRemovePinDialog by remember { mutableStateOf(false) }
-    var removePinPasswordInput by remember { mutableStateOf("") }
+    val removePinPasswordState = rememberSecurePasswordFieldState()
     var removePinPasswordVisible by remember { mutableStateOf(false) }
     var removePinPasswordError by remember { mutableStateOf(false) }
     var removePinAttemptsRemaining by remember { mutableIntStateOf(3) }
@@ -74,7 +76,6 @@ fun SettingsSecurityScreen(
             when (event) {
                 SettingsEvent.PinRemoved -> {
                     showRemovePinDialog = false
-                    removePinPasswordInput = ""
                     removePinPasswordVisible = false
                     removePinPasswordError = false
                     removePinAttemptsRemaining = 3
@@ -87,7 +88,6 @@ fun SettingsSecurityScreen(
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 SettingsEvent.BiometricEnabled -> {
                     showBiometricConfirmDialog = false
-                    biometricPasswordInput = ""
                     biometricPasswordVisible = false
                     biometricPasswordError = false
                     biometricAttemptsRemaining = 3
@@ -98,12 +98,12 @@ fun SettingsSecurityScreen(
                 }
                 SettingsEvent.VaultLocked -> {
                     showBiometricConfirmDialog = false
-                    biometricPasswordInput = ""
+                    biometricPasswordState.clear()
                     biometricPasswordVisible = false
                     biometricPasswordError = false
                     biometricAttemptsRemaining = 3
                     showRemovePinDialog = false
-                    removePinPasswordInput = ""
+                    removePinPasswordState.clear()
                     removePinPasswordVisible = false
                     removePinPasswordError = false
                     removePinAttemptsRemaining = 3
@@ -120,7 +120,7 @@ fun SettingsSecurityScreen(
             TopAppBar(
                 title = { Text("Security") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 },
             )
         },
@@ -190,7 +190,6 @@ fun SettingsSecurityScreen(
                                 leadingContent = { Icon(Icons.Default.LockReset, null) },
                                 trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                                 modifier = Modifier.clickable {
-                                    removePinPasswordInput = ""
                                     removePinPasswordVisible = false
                                     removePinPasswordError = false
                                     showRemovePinDialog = true
@@ -374,7 +373,6 @@ fun SettingsSecurityScreen(
         LockAwareDialog(
             onDismissRequest = {
                 showBiometricConfirmDialog = false
-                biometricPasswordInput = ""
                 biometricPasswordVisible = false
                 biometricPasswordError = false
                 biometricAttemptsRemaining = 3
@@ -393,14 +391,10 @@ fun SettingsSecurityScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    LockAwareOutlinedTextField(
-                        value = biometricPasswordInput,
-                        onValueChange = { input ->
-                            biometricPasswordInput = input
-                            if (biometricPasswordError) biometricPasswordError = false
-                        },
+                    SecurePasswordTextField(
+                        state = biometricPasswordState,
+                        onValueChanged = { if (biometricPasswordError) biometricPasswordError = false },
                         label = { Text("Master password") },
-                        singleLine = true,
                         isError = biometricPasswordError,
                         supportingText = if (biometricPasswordError) {
                             {
@@ -430,16 +424,15 @@ fun SettingsSecurityScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        settingsVm.enableBiometricWithVerification(biometricPasswordInput.toCharArray())
+                        settingsVm.enableBiometricWithVerification(biometricPasswordState.consume())
                     },
-                    enabled = biometricPasswordInput.isNotEmpty(),
+                    enabled = !biometricPasswordState.isEmpty,
                 ) { Text("Enable Biometric") }
             },
             dismissButton = {
                 TextButton(
                     onClick = {
                         showBiometricConfirmDialog = false
-                        biometricPasswordInput = ""
                         biometricPasswordVisible = false
                         biometricPasswordError = false
                         biometricAttemptsRemaining = 3
@@ -588,7 +581,6 @@ fun SettingsSecurityScreen(
         LockAwareDialog(
             onDismissRequest = {
                 showRemovePinDialog = false
-                removePinPasswordInput = ""
                 removePinPasswordVisible = false
                 removePinPasswordError = false
                 removePinAttemptsRemaining = 3
@@ -608,14 +600,10 @@ fun SettingsSecurityScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    LockAwareOutlinedTextField(
-                        value = removePinPasswordInput,
-                        onValueChange = { input ->
-                            removePinPasswordInput = input
-                            if (removePinPasswordError) removePinPasswordError = false
-                        },
+                    SecurePasswordTextField(
+                        state = removePinPasswordState,
+                        onValueChanged = { if (removePinPasswordError) removePinPasswordError = false },
                         label = { Text("Master password") },
-                        singleLine = true,
                         isError = removePinPasswordError,
                         supportingText = if (removePinPasswordError) {
                             {
@@ -645,16 +633,15 @@ fun SettingsSecurityScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        settingsVm.removePinWithVerification(removePinPasswordInput.toCharArray())
+                        settingsVm.removePinWithVerification(removePinPasswordState.consume())
                     },
-                    enabled = removePinPasswordInput.isNotEmpty(),
+                    enabled = !removePinPasswordState.isEmpty,
                 ) { Text("Remove PIN") }
             },
             dismissButton = {
                 TextButton(
                     onClick = {
                         showRemovePinDialog = false
-                        removePinPasswordInput = ""
                         removePinPasswordVisible = false
                         removePinPasswordError = false
                         removePinAttemptsRemaining = 3

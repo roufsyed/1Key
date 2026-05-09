@@ -1,7 +1,11 @@
 package com.onekey.core.security
 
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import androidx.annotation.RequiresApi
+import com.lambdapioneer.argon2kt.Argon2Kt
+import com.lambdapioneer.argon2kt.Argon2Mode
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -14,12 +18,29 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
-private const val KEYSTORE_ALIAS = "onekey_master"
+
+// Legacy alias — no setUnlockedDeviceRequired. Kept for reading wrapped blobs on
+// existing installs and on API < 28 devices where the upgrade cannot be applied.
+internal const val KEYSTORE_ALIAS_V1 = "onekey_master"
+
+// Upgraded alias — setUnlockedDeviceRequired(true) on API >= 28. Written during
+// the one-time silent Keystore migration that runs after the first successful unlock.
+internal const val KEYSTORE_ALIAS_V2 = "onekey_master_v2"
+
 private const val AES_GCM = "AES/GCM/NoPadding"
 private const val GCM_TAG_LENGTH = 128
-private const val PBKDF2_ITERATIONS = 310_000  // OWASP 2023 recommendation
+
+// PBKDF2 — kept for reading existing verifiers (kdf_version=0 rows).
+// New verifiers always use Argon2id.
+private const val PBKDF2_ITERATIONS = 310_000
 private const val PBKDF2_KEY_LENGTH = 256
 private const val PBKDF2_ALGORITHM = "PBKDF2WithHmacSHA256"
+
+// Argon2id parameters (OWASP 2023 interactive-auth recommendation).
+private const val ARGON2_T_COST = 3
+private const val ARGON2_M_COST = 65_536  // 64 MB
+private const val ARGON2_PARALLELISM = 1
+private const val ARGON2_HASH_LENGTH = 32  // 256-bit AES key
 
 data class EncryptedData(val ciphertext: ByteArray, val iv: ByteArray) {
     override fun equals(other: Any?): Boolean {
@@ -33,42 +54,112 @@ data class EncryptedData(val ciphertext: ByteArray, val iv: ByteArray) {
 @Singleton
 class CryptoManager @Inject constructor() {
 
-    // ── Keystore-backed key (wraps the session key) ──────────────────────────
+    // ── Android Keystore ─────────────────────────────────────────────────────
 
-    private fun getOrCreateKeystoreKey(): SecretKey {
+    private fun getOrCreateKeystoreKey(alias: String, unlockedDeviceRequired: Boolean): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        keyStore.getKey(KEYSTORE_ALIAS, null)?.let { return it as SecretKey }
+        keyStore.getKey(alias, null)?.let { return it as SecretKey }
 
         val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        keyGenerator.init(
-            KeyGenParameterSpec.Builder(
-                KEYSTORE_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-            )
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setKeySize(256)
-                .setUserAuthenticationRequired(false)
-                .build()
+        val spec = KeyGenParameterSpec.Builder(
+            alias,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
         )
+            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+            .setKeySize(256)
+            .setUserAuthenticationRequired(false)
+            .apply {
+                if (unlockedDeviceRequired && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    setUnlockedDeviceRequired(true)
+                }
+            }
+            .build()
+        keyGenerator.init(spec)
         return keyGenerator.generateKey()
     }
 
-    // ── PBKDF2 key derivation (master password → vault key) ──────────────────
+    // Returns the legacy (v1) key, creating it if absent. Used for existing installs
+    // on API < 28 and as the read key before the one-time upgrade migration runs.
+    fun getOrCreateLegacyKeystoreKey(): SecretKey =
+        getOrCreateKeystoreKey(KEYSTORE_ALIAS_V1, unlockedDeviceRequired = false)
+
+    // Creates the upgraded (v2) key with setUnlockedDeviceRequired=true on API >= 28.
+    // Only called once, during the silent Keystore migration after successful unlock.
+    @RequiresApi(Build.VERSION_CODES.P)
+    fun createUpgradedKeystoreKey(): SecretKey =
+        getOrCreateKeystoreKey(KEYSTORE_ALIAS_V2, unlockedDeviceRequired = true)
+
+    fun deleteKeystoreKey(alias: String) {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        if (keyStore.containsAlias(alias)) keyStore.deleteEntry(alias)
+    }
+
+    // Deletes both aliases. Called from resetVault() to ensure a full wipe.
+    fun deleteAllVaultKeys() {
+        deleteKeystoreKey(KEYSTORE_ALIAS_V1)
+        deleteKeystoreKey(KEYSTORE_ALIAS_V2)
+    }
+
+    // Returns an existing Keystore key by alias, or null if it has not been created yet.
+    fun loadKeystoreKey(alias: String): SecretKey? {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        return keyStore.getKey(alias, null) as? SecretKey
+    }
+
+    // ── PBKDF2 key derivation (backward-compat read path only) ───────────────
 
     fun deriveKeyFromPassword(password: CharArray, salt: ByteArray): SecretKey {
         val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
         val spec = PBEKeySpec(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEY_LENGTH)
         val raw = factory.generateSecret(spec).encoded
         spec.clearPassword()
-        return SecretKeySpec(raw, "AES")
+        val key = SecretKeySpec(raw, "AES")
+        raw.fill(0)
+        return key
     }
 
-    // ── AES/GCM encrypt with derived vault key ────────────────────────────────
+    // ── Argon2id key derivation (new installs + migrated verifiers) ──────────
     //
-    // Optional `aad` ties additional bytes (typically a header) to the GCM auth tag so
-    // that tampering with them invalidates decryption. Callers that don't need it pass
-    // null and the behavior matches a plain AES-GCM call.
+    // password is NOT zeroed here — the caller owns the CharArray and must zero it.
+    // The UTF-8 byte conversion is done without creating an intermediate String
+    // (CharBuffer.encode) to avoid interning key material in immutable heap objects.
+
+    fun deriveKeyFromPasswordArgon2id(password: CharArray, salt: ByteArray): SecretKey {
+        val passwordBytes = password.toUtf8ByteArray()
+        return try {
+            val raw = Argon2Kt().hash(
+                mode = Argon2Mode.ARGON2_ID,
+                password = passwordBytes,
+                salt = salt,
+                tCostInIterations = ARGON2_T_COST,
+                mCostInKibibyte = ARGON2_M_COST,
+                parallelism = ARGON2_PARALLELISM,
+                hashLengthInBytes = ARGON2_HASH_LENGTH,
+            ).rawHashAsByteArray()
+            val key = SecretKeySpec(raw, "AES")
+            raw.fill(0)
+            key
+        } finally {
+            passwordBytes.fill(0)
+        }
+    }
+
+    // Converts a CharArray to its UTF-8 byte representation without passing through
+    // a String, so the key material is never interned in the JVM string pool.
+    private fun CharArray.toUtf8ByteArray(): ByteArray {
+        val charBuffer = java.nio.CharBuffer.wrap(this)
+        val byteBuffer = Charsets.UTF_8.encode(charBuffer)
+        val bytes = ByteArray(byteBuffer.remaining())
+        byteBuffer.get(bytes)
+        if (byteBuffer.hasArray()) byteBuffer.array().fill(0)
+        return bytes
+    }
+
+    // ── AES/GCM encrypt ──────────────────────────────────────────────────────
+    //
+    // Optional `aad` ties additional bytes to the GCM auth tag so tampering with
+    // them invalidates decryption. Pass null when not needed.
 
     fun encrypt(plaintext: ByteArray, key: SecretKey, aad: ByteArray? = null): EncryptedData {
         val cipher = Cipher.getInstance(AES_GCM)
@@ -85,28 +176,22 @@ class CryptoManager @Inject constructor() {
         return cipher.doFinal(data.ciphertext)
     }
 
-    // ── Wrap/unwrap vault key with Keystore key (key-encryption-key pattern) ──
+    // ── Wrap/unwrap vault key (key-encryption-key pattern) ───────────────────
 
-    fun wrapKey(vaultKey: SecretKey): EncryptedData {
-        val kek = getOrCreateKeystoreKey()
-        return encrypt(vaultKey.encoded, kek)
-    }
+    fun wrapKey(vaultKey: SecretKey, keystoreKey: SecretKey): EncryptedData =
+        encrypt(vaultKey.encoded, keystoreKey)
 
-    fun unwrapKey(wrappedKey: EncryptedData): SecretKey {
-        val kek = getOrCreateKeystoreKey()
-        val raw = decrypt(wrappedKey, kek)
-        return SecretKeySpec(raw, "AES")
+    fun unwrapKey(wrappedKey: EncryptedData, keystoreKey: SecretKey): SecretKey {
+        val raw = decrypt(wrappedKey, keystoreKey)
+        val key = SecretKeySpec(raw, "AES")
+        raw.fill(0)
+        return key
     }
 
     fun generateSalt(length: Int = 32): ByteArray {
         val salt = ByteArray(length)
         java.security.SecureRandom().nextBytes(salt)
         return salt
-    }
-
-    fun deleteVaultKey() {
-        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
-        if (keyStore.containsAlias(KEYSTORE_ALIAS)) keyStore.deleteEntry(KEYSTORE_ALIAS)
     }
 
     fun encryptString(value: String, key: SecretKey): EncryptedData =

@@ -5,7 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -18,7 +18,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.SecurePasswordFieldState
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import com.onekey.feature.auth.presentation.viewmodel.ChangePasswordUiState
 import com.onekey.feature.auth.presentation.viewmodel.ChangePasswordViewModel
 
@@ -31,9 +33,9 @@ fun ChangePasswordScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    var currentPassword by remember { mutableStateOf("") }
-    var newPassword by remember { mutableStateOf("") }
-    var confirmPassword by remember { mutableStateOf("") }
+    val currentPasswordState = rememberSecurePasswordFieldState()
+    val newPasswordState = rememberSecurePasswordFieldState()
+    val confirmPasswordState = rememberSecurePasswordFieldState()
     var showCurrent by remember { mutableStateOf(false) }
     var showNew by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
@@ -42,11 +44,12 @@ fun ChangePasswordScreen(
         if (state is ChangePasswordUiState.Success) onSuccess()
     }
 
-    val confirmMismatch = confirmPassword.isNotEmpty() && newPassword != confirmPassword
-    val newTooShort = newPassword.isNotEmpty() && newPassword.length < 8
-    val canSubmit = currentPassword.isNotEmpty() &&
-            newPassword.length >= 8 &&
-            newPassword == confirmPassword &&
+    val confirmMismatch = !confirmPasswordState.isEmpty &&
+            !newPasswordState.contentEquals(confirmPasswordState)
+    val newTooShort = !newPasswordState.isEmpty && newPasswordState.length < 8
+    val canSubmit = !currentPasswordState.isEmpty &&
+            newPasswordState.length >= 8 &&
+            newPasswordState.contentEquals(confirmPasswordState) &&
             state !is ChangePasswordUiState.Loading
 
     Scaffold(
@@ -54,7 +57,7 @@ fun ChangePasswordScreen(
             TopAppBar(
                 title = { Text("Change Master Password") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 },
             )
         }
@@ -84,8 +87,8 @@ fun ChangePasswordScreen(
                 )
 
                 PasswordField(
-                    value = currentPassword,
-                    onValueChange = { currentPassword = it; viewModel.clearError() },
+                    state = currentPasswordState,
+                    onValueChanged = { viewModel.clearError() },
                     label = "Current Password",
                     showPassword = showCurrent,
                     onToggleVisibility = { showCurrent = !showCurrent },
@@ -93,8 +96,7 @@ fun ChangePasswordScreen(
                 )
 
                 PasswordField(
-                    value = newPassword,
-                    onValueChange = { newPassword = it },
+                    state = newPasswordState,
                     label = "New Password",
                     showPassword = showNew,
                     onToggleVisibility = { showNew = !showNew },
@@ -104,8 +106,7 @@ fun ChangePasswordScreen(
                 )
 
                 PasswordField(
-                    value = confirmPassword,
-                    onValueChange = { confirmPassword = it },
+                    state = confirmPasswordState,
                     label = "Confirm New Password",
                     showPassword = showConfirm,
                     onToggleVisibility = { showConfirm = !showConfirm },
@@ -131,10 +132,10 @@ fun ChangePasswordScreen(
 
                 Button(
                     onClick = {
-                        viewModel.changePassword(
-                            currentPassword.toCharArray(),
-                            newPassword.toCharArray(),
-                        )
+                        val current = currentPasswordState.consume()
+                        val new = newPasswordState.consume()
+                        confirmPasswordState.clear()
+                        viewModel.changePassword(current, new)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = canSubmit,
@@ -152,18 +153,18 @@ fun ChangePasswordScreen(
 
 @Composable
 private fun PasswordField(
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: SecurePasswordFieldState,
     label: String,
     showPassword: Boolean,
     onToggleVisibility: () -> Unit,
     imeAction: ImeAction,
+    onValueChanged: () -> Unit = {},
     isError: Boolean = false,
     supportingText: String? = null,
 ) {
-    LockAwareOutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
+    SecurePasswordTextField(
+        state = state,
+        onValueChanged = onValueChanged,
         label = { Text(label) },
         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(
@@ -178,6 +179,5 @@ private fun PasswordField(
         isError = isError,
         supportingText = supportingText?.let { { Text(it) } },
         modifier = Modifier.fillMaxWidth(),
-        singleLine = true,
     )
 }

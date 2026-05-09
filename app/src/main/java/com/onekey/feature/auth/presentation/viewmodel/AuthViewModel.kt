@@ -16,6 +16,7 @@ import com.onekey.core.security.AuthAttemptsStore
 import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
+import com.onekey.core.security.PasswordAttemptTracker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -63,6 +64,7 @@ class AuthViewModel @Inject constructor(
     private val lockReasonStore: LockReasonStore,
     private val autoLockManager: AutoLockManager,
     private val authAttemptsStore: AuthAttemptsStore,
+    private val passwordAttemptTracker: PasswordAttemptTracker,
 ) : ViewModel() {
 
     fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
@@ -78,6 +80,14 @@ class AuthViewModel @Inject constructor(
      */
     val biometricUnlockGate: StateFlow<BiometricUnlockGate> = appPrefs.getBiometricUnlockGate()
         .stateIn(viewModelScope, SharingStarted.Eagerly, BiometricUnlockGate(false, false))
+
+    /**
+     * Epoch-ms when the current master-password lockout expires, or null if no lockout
+     * is in effect. May be in the past once the window has elapsed — the UI compares
+     * against [System.currentTimeMillis] to decide whether to show the countdown.
+     */
+    val passwordLockoutUntilMs: StateFlow<Long?> = passwordAttemptTracker.lockoutUntilMs
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _state = MutableStateFlow<AuthUiState>(AuthUiState.Idle)
     val state: StateFlow<AuthUiState> = _state.asStateFlow()
@@ -131,16 +141,32 @@ class AuthViewModel @Inject constructor(
 
     fun unlockWithPassword(password: CharArray) {
         viewModelScope.launch {
+            // Defense-in-depth: honor the lockout even if called programmatically while
+            // the UI button is disabled. This stops automated callers from bypassing
+            // the per-attempt Argon2id cost by retrying before the window expires.
+            val lockoutUntil = passwordLockoutUntilMs.value
+            if (lockoutUntil != null && System.currentTimeMillis() < lockoutUntil) {
+                password.fill(' ')
+                val remainingSecs = ((lockoutUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(1L)
+                _state.value = AuthUiState.Error("Too many failed attempts. Try again in ${remainingSecs}s.")
+                return@launch
+            }
+
             _state.value = AuthUiState.Loading
-            // PBKDF2 verifier check (~300-800ms) — keep off Main so the button properly
-            // shows its spinner and disables on first tap, instead of freezing the UI
-            // and leaving the button looking unresponsive on subsequent retries.
+            // Argon2id/PBKDF2 verifier check (~300-800ms) — keep off Main so the button
+            // properly shows its spinner instead of freezing the UI on first tap.
             val result = withContext(Dispatchers.Default) { unlockVault.withPassword(password) }
-            if (result is AppResult.Success) {
-                appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
-                // A successful master-password unlock proves possession; release the
-                // biometric block that was set by the failed-attempts auto-lock.
-                lockReasonStore.clear()
+            when (result) {
+                is AppResult.Success -> {
+                    passwordAttemptTracker.reset()
+                    appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+                    // Successful master-password proof: release the biometric block set
+                    // by a prior too-many-failures auto-lock.
+                    lockReasonStore.clear()
+                }
+                is AppResult.Error -> {
+                    passwordAttemptTracker.recordFailure()
+                }
             }
             _state.value = when (result) {
                 is AppResult.Success -> AuthUiState.Unlocked

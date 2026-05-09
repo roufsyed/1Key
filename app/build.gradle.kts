@@ -126,6 +126,9 @@ dependencies {
     // ML Kit Text Recognition (on-device, Latin script)
     implementation(libs.mlkit.text.recognition)
 
+    // Argon2id — Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
+    implementation(libs.argon2kt)
+
     // Testing — JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).

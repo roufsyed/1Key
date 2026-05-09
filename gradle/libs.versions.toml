@@ -23,6 +23,7 @@ mlkitTextRecognition = "16.0.1"
 junit = "4.13.2"
 robolectric = "4.13"
 lint = "31.7.2"
+argon2kt = "1.6.0"
 
 [libraries]
 # Core
@@ -78,6 +79,8 @@ robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "
 lint-api = { group = "com.android.tools.lint", name = "lint-api", version.ref = "lint" }
 lint-checks = { group = "com.android.tools.lint", name = "lint-checks", version.ref = "lint" }
 lint-tests = { group = "com.android.tools.lint", name = "lint-tests", version.ref = "lint" }
+# Argon2id
+argon2kt = { group = "com.lambdapioneer.argon2kt", name = "argon2kt", version.ref = "argon2kt" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -3,7 +3,7 @@ package com.onekey.feature.auth.presentation.screen
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
@@ -61,7 +63,10 @@ fun SetupPinScreen(
     var showMismatch by rememberSaveable { mutableStateOf(false) }
 
     var showForgotPinDialog by rememberSaveable { mutableStateOf(false) }
-    var forgotPinPasswordInput by rememberSaveable { mutableStateOf("") }
+    // SecurePasswordFieldState rather than rememberSaveable String — reduces the window during
+    // which the master-password String lives on the JVM heap. Does not survive rotation
+    // (intentional: passwords should not persist in InstanceState).
+    val forgotPinPasswordState = rememberSecurePasswordFieldState()
     var forgotPinPasswordVisible by rememberSaveable { mutableStateOf(false) }
     var forgotPinPasswordError by rememberSaveable { mutableStateOf(false) }
     var forgotPinAttemptsRemaining by rememberSaveable { mutableIntStateOf(3) }
@@ -103,7 +108,7 @@ fun SetupPinScreen(
                 }
                 AuthEvent.MasterPasswordVerifiedForPinChange -> {
                     showForgotPinDialog = false
-                    forgotPinPasswordInput = ""
+                    forgotPinPasswordState.clear()
                     forgotPinPasswordVisible = false
                     forgotPinPasswordError = false
                     forgotPinAttemptsRemaining = 3
@@ -119,7 +124,7 @@ fun SetupPinScreen(
                 }
                 AuthEvent.PinChangeVaultLocked -> {
                     showForgotPinDialog = false
-                    forgotPinPasswordInput = ""
+                    forgotPinPasswordState.clear()
                     forgotPinPasswordVisible = false
                     forgotPinPasswordError = false
                     forgotPinAttemptsRemaining = 3
@@ -177,7 +182,7 @@ fun SetupPinScreen(
                             }
                             else -> onBack()
                         }
-                    }) { Icon(Icons.Default.ArrowBack, null) }
+                    }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 }
             )
         }
@@ -302,14 +307,16 @@ fun SetupPinScreen(
     }
 
     if (showForgotPinDialog) {
+        val dismissDialog = {
+            showForgotPinDialog = false
+            // forgotPinPasswordState is cleared by SecurePasswordTextField's DisposableEffect
+            // on unmount, but we reset the other dialog state explicitly here.
+            forgotPinPasswordVisible = false
+            forgotPinPasswordError = false
+            forgotPinAttemptsRemaining = 3
+        }
         LockAwareDialog(
-            onDismissRequest = {
-                showForgotPinDialog = false
-                forgotPinPasswordInput = ""
-                forgotPinPasswordVisible = false
-                forgotPinPasswordError = false
-                forgotPinAttemptsRemaining = 3
-            },
+            onDismissRequest = dismissDialog,
             icon = { Icon(Icons.Default.Key, contentDescription = null) },
             title = { Text("Use master password") },
             text = {
@@ -324,14 +331,10 @@ fun SetupPinScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    LockAwareOutlinedTextField(
-                        value = forgotPinPasswordInput,
-                        onValueChange = { input ->
-                            forgotPinPasswordInput = input
-                            if (forgotPinPasswordError) forgotPinPasswordError = false
-                        },
+                    SecurePasswordTextField(
+                        state = forgotPinPasswordState,
+                        onValueChanged = { if (forgotPinPasswordError) forgotPinPasswordError = false },
                         label = { Text("Master password") },
-                        singleLine = true,
                         isError = forgotPinPasswordError,
                         supportingText = if (forgotPinPasswordError) {
                             {
@@ -361,21 +364,13 @@ fun SetupPinScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.verifyMasterPasswordForPinChange(forgotPinPasswordInput.toCharArray())
+                        viewModel.verifyMasterPasswordForPinChange(forgotPinPasswordState.consume())
                     },
-                    enabled = forgotPinPasswordInput.isNotEmpty() && state !is AuthUiState.Loading,
+                    enabled = !forgotPinPasswordState.isEmpty && state !is AuthUiState.Loading,
                 ) { Text("Continue") }
             },
             dismissButton = {
-                TextButton(
-                    onClick = {
-                        showForgotPinDialog = false
-                        forgotPinPasswordInput = ""
-                        forgotPinPasswordVisible = false
-                        forgotPinPasswordError = false
-                        forgotPinAttemptsRemaining = 3
-                    }
-                ) { Text("Cancel") }
+                TextButton(onClick = dismissDialog) { Text("Cancel") }
             },
         )
     }

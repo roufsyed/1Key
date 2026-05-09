@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +31,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -163,12 +166,14 @@ fun CredentialDetailScreen(
                 )
             } else {
                 val binEnabled by viewModel.isRecycleBinEnabled.collectAsStateWithLifecycle()
+                val clipboardCountdown by viewModel.clipboardCountdown.collectAsStateWithLifecycle()
                 CredentialViewContent(
                     credential = state.credential,
                     displayAccessedAt = displayAccessedAt,
                     history = history,
                     binEnabled = binEnabled,
                     isInRecycleBin = state.credential.deletedAt != null,
+                    clipboardCountdown = clipboardCountdown,
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
                     onDeleteNow = viewModel::deleteNow,
@@ -211,6 +216,7 @@ private fun CredentialViewContent(
     history: List<CredentialHistoryEntry>,
     binEnabled: Boolean,
     isInRecycleBin: Boolean,
+    clipboardCountdown: Int?,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDeleteNow: () -> Unit,
@@ -242,7 +248,7 @@ private fun CredentialViewContent(
                         Text(credential.title)
                     }
                 },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
                 actions = {
                     if (!isInRecycleBin) {
                         IconButton(onClick = onToggleFavorite) {
@@ -269,6 +275,31 @@ private fun CredentialViewContent(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 8.dp, bottom = 16.dp),
         ) {
+            androidx.compose.animation.AnimatedVisibility(visible = clipboardCountdown != null) {
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Clipboard clears in ${clipboardCountdown}s",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
             if (isInRecycleBin) {
                 RecycleBinBanner(onRestore = onRestore)
             }
@@ -559,9 +590,17 @@ private fun DetailField(
             // Sensitive values bypass SelectionContainer so an OS-menu long-press copy
             // can't sidestep SecureClipboardManager — the in-app copy button is the
             // only way to put the value on the clipboard, and it auto-clears.
+            // clearAndSetSemantics replaces the accessibility node text with a neutral
+            // description so screen readers and automation services cannot read the value.
             if (sensitive) {
                 DisableSelection {
-                    Text(value, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clearAndSetSemantics {
+                            contentDescription = "Sensitive value hidden"
+                        },
+                    )
                 }
             } else {
                 SelectionContainer {

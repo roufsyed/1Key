@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -56,8 +57,9 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.presentation.lockaware.LockAwareDialog
-import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.core.presentation.lockaware.LockAwareWindowDialog
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import com.onekey.feature.importexport.domain.ConflictResolution
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
@@ -89,16 +91,16 @@ fun BackupScreen(
     var selectedFormat by remember { mutableStateOf(ExportFormat.JSON) }
     var encryptExport by remember { mutableStateOf(true) }
     var showExportPasswordDialog by remember { mutableStateOf(false) }
-    var exportPasswordInput by remember { mutableStateOf("") }
+    val exportPasswordState = rememberSecurePasswordFieldState()
     var exportPasswordVisible by remember { mutableStateOf(false) }
     var exportPasswordError by remember { mutableStateOf<String?>(null) }
     var isVerifyingExportPassword by remember { mutableStateOf(false) }
     var showExportLockedDialog by remember { mutableStateOf(false) }
     var showDisableEncryptionDialog by remember { mutableStateOf(false) }
-    var disableEncPwdInput by remember { mutableStateOf("") }
+    val disableEncPwdState = rememberSecurePasswordFieldState()
     var disableEncPwdVisible by remember { mutableStateOf(false) }
     var disableEncPwdError by remember { mutableStateOf<String?>(null) }
-    var importPasswordInput by remember { mutableStateOf("") }
+    val importPasswordState = rememberSecurePasswordFieldState()
     var importPasswordVisible by remember { mutableStateOf(false) }
     var showSkippedDialog by remember { mutableStateOf(false) }
     var showFailedDialog by remember { mutableStateOf(false) }
@@ -131,7 +133,7 @@ fun BackupScreen(
                 is ImportExportEvent.PlainExportAllowed -> {
                     encryptExport = false
                     showDisableEncryptionDialog = false
-                    disableEncPwdInput = ""
+                    // disableEncPwdState cleared by SecurePasswordTextField's DisposableEffect on unmount
                     disableEncPwdVisible = false
                     disableEncPwdError = null
                 }
@@ -139,9 +141,8 @@ fun BackupScreen(
                     disableEncPwdError = event.message
                 }
                 is ImportExportEvent.ExportPasswordVerified -> {
-                    viewModel.setPendingExportPassword(exportPasswordInput.toCharArray())
+                    viewModel.setPendingExportPassword(exportPasswordState.consume())
                     showExportPasswordDialog = false
-                    exportPasswordInput = ""
                     exportPasswordVisible = false
                     exportPasswordError = null
                     isVerifyingExportPassword = false
@@ -158,10 +159,14 @@ fun BackupScreen(
                 is ImportExportEvent.ExportVaultLocked -> {
                     isVerifyingExportPassword = false
                     showExportPasswordDialog = false
-                    exportPasswordInput = ""
+                    exportPasswordState.clear()
                     exportPasswordVisible = false
                     exportPasswordError = null
                     showExportLockedDialog = true
+                }
+                is ImportExportEvent.ExportPasswordTooWeak -> {
+                    isVerifyingExportPassword = false
+                    exportPasswordError = event.message
                 }
             }
         }
@@ -194,7 +199,7 @@ fun BackupScreen(
             TopAppBar(
                 title = { Text("Backup & Import") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 },
             )
         },
@@ -365,7 +370,6 @@ fun BackupScreen(
         LockAwareDialog(
             onDismissRequest = {
                 showDisableEncryptionDialog = false
-                disableEncPwdInput = ""
                 disableEncPwdVisible = false
                 disableEncPwdError = null
             },
@@ -387,14 +391,10 @@ fun BackupScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    LockAwareOutlinedTextField(
-                        value = disableEncPwdInput,
-                        onValueChange = { input ->
-                            disableEncPwdInput = input
-                            if (disableEncPwdError != null) disableEncPwdError = null
-                        },
+                    SecurePasswordTextField(
+                        state = disableEncPwdState,
+                        onValueChanged = { if (disableEncPwdError != null) disableEncPwdError = null },
                         label = { Text("Master password") },
-                        singleLine = true,
                         isError = disableEncPwdError != null,
                         supportingText = disableEncPwdError?.let { err -> { Text(err) } },
                         visualTransformation = if (disableEncPwdVisible) VisualTransformation.None
@@ -415,10 +415,9 @@ fun BackupScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.verifyPasswordForPlainExport(disableEncPwdInput.toCharArray())
-                        disableEncPwdInput = ""
+                        viewModel.verifyPasswordForPlainExport(disableEncPwdState.consume())
                     },
-                    enabled = disableEncPwdInput.isNotEmpty(),
+                    enabled = !disableEncPwdState.isEmpty,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError,
@@ -428,7 +427,6 @@ fun BackupScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showDisableEncryptionDialog = false
-                    disableEncPwdInput = ""
                     disableEncPwdVisible = false
                     disableEncPwdError = null
                 }) { Text("Keep Encrypted") }
@@ -443,7 +441,6 @@ fun BackupScreen(
             onDismissRequest = {
                 if (!isVerifyingExportPassword) {
                     showExportPasswordDialog = false
-                    exportPasswordInput = ""
                     exportPasswordVisible = false
                     exportPasswordError = null
                 }
@@ -457,14 +454,10 @@ fun BackupScreen(
                             "You will need the same password to restore from this file.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    LockAwareOutlinedTextField(
-                        value = exportPasswordInput,
-                        onValueChange = { input ->
-                            exportPasswordInput = input
-                            if (exportPasswordError != null) exportPasswordError = null
-                        },
+                    SecurePasswordTextField(
+                        state = exportPasswordState,
+                        onValueChanged = { if (exportPasswordError != null) exportPasswordError = null },
                         label = { Text("Master password") },
-                        singleLine = true,
                         isError = exportPasswordError != null,
                         supportingText = exportPasswordError?.let { err -> { Text(err) } },
                         visualTransformation = if (exportPasswordVisible) VisualTransformation.None
@@ -486,9 +479,9 @@ fun BackupScreen(
                 Button(
                     onClick = {
                         isVerifyingExportPassword = true
-                        viewModel.verifyPasswordForExport(exportPasswordInput.toCharArray())
+                        viewModel.verifyPasswordForExport(exportPasswordState.consume())
                     },
-                    enabled = exportPasswordInput.isNotEmpty() && !isVerifyingExportPassword,
+                    enabled = !exportPasswordState.isEmpty && !isVerifyingExportPassword,
                 ) {
                     if (isVerifyingExportPassword) {
                         CircularProgressIndicator(
@@ -505,7 +498,6 @@ fun BackupScreen(
                 TextButton(
                     onClick = {
                         showExportPasswordDialog = false
-                        exportPasswordInput = ""
                         exportPasswordVisible = false
                         exportPasswordError = null
                     },
@@ -566,7 +558,6 @@ fun BackupScreen(
     if (awaitingImport != null) {
         LockAwareDialog(
             onDismissRequest = {
-                importPasswordInput = ""
                 importPasswordVisible = false
                 viewModel.cancelPendingImport()
             },
@@ -585,11 +576,9 @@ fun BackupScreen(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    LockAwareOutlinedTextField(
-                        value = importPasswordInput,
-                        onValueChange = { importPasswordInput = it },
+                    SecurePasswordTextField(
+                        state = importPasswordState,
                         label = { Text("Backup password") },
-                        singleLine = true,
                         isError = awaitingImport.error != null,
                         visualTransformation = if (importPasswordVisible) VisualTransformation.None
                                                else PasswordVisualTransformation(),
@@ -609,16 +598,14 @@ fun BackupScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.importWithPassword(importPasswordInput.toCharArray())
-                        importPasswordInput = ""
+                        viewModel.importWithPassword(importPasswordState.consume())
                         importPasswordVisible = false
                     },
-                    enabled = importPasswordInput.isNotEmpty(),
+                    enabled = !importPasswordState.isEmpty,
                 ) { Text("Decrypt & Import") }
             },
             dismissButton = {
                 TextButton(onClick = {
-                    importPasswordInput = ""
                     importPasswordVisible = false
                     viewModel.cancelPendingImport()
                 }) { Text("Cancel") }

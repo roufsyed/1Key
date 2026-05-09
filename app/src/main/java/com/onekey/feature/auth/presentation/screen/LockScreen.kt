@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -53,6 +54,8 @@ import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.lockaware.SecurePasswordTextField
+import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import com.onekey.core.presentation.util.rememberCanUseBiometric
 import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.core.security.LockReason
@@ -78,6 +81,7 @@ fun LockScreen(
     val isBiometricEnabled by viewModel.isBiometricEnabled.collectAsStateWithLifecycle()
     val requiresMasterPasswordRecheck by viewModel.requiresMasterPasswordRecheck.collectAsStateWithLifecycle()
     val lockReason by viewModel.lockReason.collectAsStateWithLifecycle()
+    val passwordLockoutUntilMs by viewModel.passwordLockoutUntilMs.collectAsStateWithLifecycle()
     // Atomic snapshot of (biometric enabled, lock reason set) — read together from the same
     // DataStore Preferences object so the auto-trigger never fires in the brief cold-start
     // window where one of the two flat flows has updated and the other hasn't.
@@ -270,6 +274,7 @@ fun LockScreen(
                     Spacer(Modifier.height(14.dp))
                     PasswordUnlockSection(
                         state = state,
+                        lockoutUntilMs = passwordLockoutUntilMs,
                         onPasswordSubmit = { viewModel.unlockWithPassword(it) },
                     )
                 } else if (isPinSetup && !forcePasswordFallback) {
@@ -284,6 +289,7 @@ fun LockScreen(
                 } else {
                     PasswordUnlockSection(
                         state = state,
+                        lockoutUntilMs = passwordLockoutUntilMs,
                         onPasswordSubmit = { viewModel.unlockWithPassword(it) },
                     )
                     if (isPinSetup && forcePasswordFallback && !mustUsePassword) {
@@ -635,17 +641,37 @@ private fun PinUnlockSection(
 @Composable
 private fun PasswordUnlockSection(
     state: AuthUiState,
+    lockoutUntilMs: Long?,
     onPasswordSubmit: (CharArray) -> Unit,
 ) {
-    var password by remember { mutableStateOf("") }
+    val passwordState = rememberSecurePasswordFieldState()
     var showPassword by remember { mutableStateOf(false) }
 
     val density = LocalDensity.current
     val shakePx = remember(density) { with(density) { 16.dp.toPx() } }
     val shakeOffset = remember { Animatable(0f) }
 
+    // Ticking remaining-seconds counter. Resets whenever lockoutUntilMs changes.
+    // Polls every 200ms — smooth enough for a "Xs" countdown without busy-looping.
+    var lockoutSecondsRemaining by remember { mutableIntStateOf(0) }
+    LaunchedEffect(lockoutUntilMs) {
+        if (lockoutUntilMs == null) {
+            lockoutSecondsRemaining = 0
+            return@LaunchedEffect
+        }
+        while (true) {
+            val remaining = ((lockoutUntilMs - System.currentTimeMillis()) / 1000)
+                .toInt().coerceAtLeast(0)
+            lockoutSecondsRemaining = remaining
+            if (remaining <= 0) break
+            kotlinx.coroutines.delay(200L)
+        }
+    }
+    val isLockedOut = lockoutSecondsRemaining > 0
+
     LaunchedEffect(state) {
         if (state is AuthUiState.Error) {
+            passwordState.clear()
             shakeOffset.animateTo(
                 targetValue = 0f,
                 animationSpec = keyframes {
@@ -667,10 +693,44 @@ private fun PasswordUnlockSection(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.graphicsLayer { translationX = shakeOffset.value },
     ) {
-        LockAwareOutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
+        if (isLockedOut) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column {
+                        Text(
+                            "Too many failed attempts",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            "Try again in ${lockoutSecondsRemaining}s",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        SecurePasswordTextField(
+            state = passwordState,
             label = { Text("Master Password") },
+            enabled = !isLockedOut,
             visualTransformation = if (showPassword) VisualTransformation.None
                                    else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
@@ -678,7 +738,7 @@ private fun PasswordUnlockSection(
                 imeAction = ImeAction.Done,
             ),
             keyboardActions = KeyboardActions(onDone = {
-                if (password.isNotEmpty()) onPasswordSubmit(password.toCharArray())
+                if (!passwordState.isEmpty && !isLockedOut) onPasswordSubmit(passwordState.consume())
             }),
             trailingIcon = {
                 IconButton(onClick = { showPassword = !showPassword }) {
@@ -689,8 +749,7 @@ private fun PasswordUnlockSection(
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = state !is AuthUiState.Loading,
-            singleLine = true,
+            isError = state is AuthUiState.Error && !isLockedOut,
             shape = RoundedCornerShape(16.dp),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = Color.Transparent,
@@ -703,11 +762,11 @@ private fun PasswordUnlockSection(
         )
         Spacer(Modifier.height(16.dp))
         Button(
-            onClick = { if (password.isNotEmpty()) onPasswordSubmit(password.toCharArray()) },
+            onClick = { if (!passwordState.isEmpty && !isLockedOut) onPasswordSubmit(passwordState.consume()) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),
-            enabled = password.isNotEmpty() && state !is AuthUiState.Loading,
+            enabled = !passwordState.isEmpty && !isLockedOut && state !is AuthUiState.Loading,
             shape = RoundedCornerShape(18.dp),
         ) {
             if (state is AuthUiState.Loading) {
