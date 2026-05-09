@@ -20,7 +20,23 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.onekey.feature.settings.presentation.viewmodel.SettingsAction
+import com.onekey.feature.settings.presentation.viewmodel.SettingsDestination
+import com.onekey.feature.settings.presentation.viewmodel.SettingsDialogId
+import com.onekey.feature.settings.presentation.viewmodel.SettingsDirectToggle
+import com.onekey.feature.settings.presentation.viewmodel.SettingsEntry
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
+import com.onekey.feature.settings.presentation.viewmodel.SettingsSearchViewModel
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -37,9 +53,14 @@ fun SettingsScreen(
     onPrivacyPolicy: () -> Unit,
     onFaq: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
+    searchVm: SettingsSearchViewModel = hiltViewModel(),
 ) {
     val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
     val isSeedingData by settingsVm.isSeedingData.collectAsStateWithLifecycle()
+    val query by searchVm.query.collectAsStateWithLifecycle()
+    val searchActive by searchVm.searchActive.collectAsStateWithLifecycle()
+    val searchResults by searchVm.results.collectAsStateWithLifecycle()
+    val focusManager = LocalFocusManager.current
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showDeleteVaultDialog by remember { mutableStateOf(false) }
@@ -99,21 +120,75 @@ fun SettingsScreen(
         }
     }
 
+    fun handleResultTap(entry: SettingsEntry) {
+        focusManager.clearFocus()
+        searchVm.setSearchActive(false)
+        when (val action = entry.action) {
+            is SettingsAction.Navigate -> when (action.destination) {
+                SettingsDestination.General -> onGeneral()
+                SettingsDestination.Security -> onSecurity()
+                SettingsDestination.Backup -> onBackup()
+                SettingsDestination.Faq -> onFaq()
+                SettingsDestination.PrivacyPolicy -> onPrivacyPolicy()
+                SettingsDestination.SetupPin -> onSetupPin()
+                SettingsDestination.ChangePassword -> onChangePassword()
+            }
+            is SettingsAction.DirectToggle -> when (action.toggle) {
+                SettingsDirectToggle.DarkTheme -> settingsVm.toggleTheme()
+                SettingsDirectToggle.ShowFavourites -> settingsVm.setShowFavourites(!settingsVm.isShowFavourites.value)
+                SettingsDirectToggle.HideTopBarOnScroll -> settingsVm.setHideTopBarOnScroll(!settingsVm.isHideTopBarOnScroll.value)
+                SettingsDirectToggle.VaultFooter -> settingsVm.setVaultFooterVisible(!settingsVm.isVaultFooterVisible.value)
+                SettingsDirectToggle.MasterPasswordRecheck -> settingsVm.setMasterPasswordRecheckEnabled(!settingsVm.isMasterPasswordRecheckEnabled.value)
+            }
+            is SettingsAction.OpenDialogOn -> when (action.dialogId) {
+                SettingsDialogId.DeleteVault -> showDeleteVaultDialog = true
+            }
+        }
+    }
+
+    BackHandler(enabled = searchActive) {
+        searchVm.setSearchActive(false)
+    }
+
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = if (searchActive) Modifier else Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    if (showBack) {
-                        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-            )
+            if (searchActive) {
+                SettingsSearchBar(
+                    query = query,
+                    onQueryChange = { searchVm.updateQuery(it) },
+                    onClose = { searchVm.setSearchActive(false) },
+                    onClear = { searchVm.updateQuery("") },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text("Settings") },
+                    navigationIcon = {
+                        if (showBack) {
+                            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, null) }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { searchVm.setSearchActive(true) }) {
+                            Icon(Icons.Default.Search, contentDescription = "Search settings")
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
+        if (searchActive && query.length >= 2) {
+            SettingsSearchResults(
+                query = query,
+                results = searchResults,
+                onResultClick = { handleResultTap(it) },
+                modifier = Modifier
+                    .padding(padding)
+                    .imePadding(),
+            )
+        } else {
         Column(
             modifier = Modifier
                 .padding(padding)
@@ -244,6 +319,7 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(32.dp))
         }
+        }
     }
 
     if (showDeleteVaultDialog) {
@@ -361,4 +437,105 @@ private fun SettingsMenuRow(
         trailingContent = { Icon(Icons.Default.ChevronRight, null) },
         modifier = Modifier.clickable(onClick = onClick),
     )
+}
+
+@Composable
+private fun SettingsSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    onClear: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        tonalElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .height(64.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
+            }
+            TextField(
+                value = query,
+                onValueChange = onQueryChange,
+                placeholder = { Text("Search settings") },
+                singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester),
+            )
+            if (query.isNotEmpty()) {
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Default.Clear, contentDescription = "Clear query")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSearchResults(
+    query: String,
+    results: List<SettingsEntry>,
+    onResultClick: (SettingsEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (results.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "No results for \"$query\"",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(32.dp),
+            )
+        }
+    } else {
+        LazyColumn(modifier = modifier.fillMaxSize()) {
+            items(results, key = { it.sectionLabel + it.title }) { entry ->
+                ListItem(
+                    headlineContent = { Text(entry.title) },
+                    supportingContent = { Text(entry.subtitle) },
+                    leadingContent = {
+                        Icon(Icons.Default.Settings, contentDescription = null)
+                    },
+                    trailingContent = { SettingsSectionBadge(entry.sectionLabel) },
+                    modifier = Modifier.clickable { onResultClick(entry) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSectionBadge(label: String) {
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
 }
