@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>1Key — Privacy Policy</title>
+<meta name="description" content="How 1Key handles your data — collected, transmitted, stored, and shared." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets/docs.css" />
+</head>
+<body>
+
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3z"/><circle cx="12" cy="11" r="2"/><path d="M12 13v4"/></svg></span>
+      1Key
+    </a>
+    <div class="nav-links">
+      <a href="index.html#inside">What's inside</a>
+      <a href="whitepaper.html">White paper</a>
+      <a href="FAQ.html">FAQ</a>
+      <a href="PRIVACY_POLICY.html" class="active">Privacy</a>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="icon-btn" id="theme-btn" aria-label="Toggle theme"></button>
+      <a class="nav-cta" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">Download APK<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg></a>
+    </div>
+  </div>
+</nav>
+
+<header class="doc-hero wrap">
+  <span class="eyebrow">Privacy policy</span>
+  <h1>The shortest <em>privacy policy</em> you'll read this year.</h1>
+  <p class="lede">No accounts. No telemetry. No network permission. Here's the full list of what 1Key does — and doesn't — do with your data.</p>
+  <div class="doc-meta">
+    <span class="pill">v1.0</span>
+    <span>· Last updated <b>May 2026</b></span>
+  </div>
+</header>
+
+<main class="wrap doc-grid">
+  <aside class="toc">
+    <h5>On this page</h5>
+    <ol>
+      <li><a href="#dont-collect">What we don't collect</a></li>
+      <li><a href="#protected">How data is protected</a></li>
+      <li><a href="#permissions">Permissions we use</a></li>
+      <li><a href="#no-permissions">Permissions we don't</a></li>
+      <li><a href="#bruteforce">Brute-force protection</a></li>
+      <li><a href="#clipboard">Clipboard &amp; screen capture</a></li>
+      <li><a href="#backups">Backups &amp; recycle bin</a></li>
+      <li><a href="#deletion">Data deletion</a></li>
+      <li><a href="#background">Background activity</a></li>
+      <li><a href="#regulatory">Regulatory</a></li>
+    </ol>
+  </aside>
+
+  <article class="prose">
+
+    <div class="callout primary">
+      <div class="callout-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3z"/></svg>
+        TL;DR
+      </div>
+      <p>1Key collects <b>no personal data</b>, has <b>no Internet permission</b>, and stores your vault <b>only on this device</b>. Everything below is the long version of that sentence.</p>
+    </div>
+
+    <h2 id="dont-collect"><span class="num">01</span>What we don't collect</h2>
+    <ul>
+      <li>No accounts, no email, no signup of any kind.</li>
+      <li>No analytics, telemetry, or crash reporting — ever.</li>
+      <li>No advertising IDs and no tracking.</li>
+    </ul>
+
+    <h2 id="protected"><span class="num">02</span>How your data is protected</h2>
+    <ul>
+      <li><b>Field-level encryption.</b> Every credential field — title, username, password, URL, notes, custom fields, TOTP secret — is encrypted separately with AES-256-GCM. Each field's ciphertext is bound to its row and column, so an attacker can't swap encrypted blobs between accounts.</li>
+      <li><b>Memory-hard password verification.</b> Your master password is checked using Argon2id (64 MiB memory, 3 passes) — the OWASP-recommended algorithm. Even with the encrypted blobs in hand, brute-forcing is unrealistic on consumer hardware.</li>
+      <li><b>Verifier kept off-disk-readable.</b> The password verifier and PIN hash live in <code>EncryptedSharedPreferences</code>, encrypted at rest by an Android Keystore-bound key. Without live access to your phone's Keystore, an attacker can't read the verifier — meaning offline brute-forcing is not possible.</li>
+      <li><b>Hardware-backed wrapping.</b> The vault key is wrapped by a key inside the Android Keystore (TEE / StrongBox on supported devices). On Android 9+ unwrapping additionally requires the device to be unlocked.</li>
+      <li><b>Subkey separation.</b> Field encryption uses HKDF-derived subkeys, not the raw vault key — so different parts of the data are encrypted under different keys derived for that purpose only.</li>
+      <li><b>Memory hygiene.</b> The unwrapped vault key only exists in memory while the vault is unlocked, and is dropped the moment auto-lock fires or you lock manually.</li>
+      <li><b>Existing installs migrate automatically.</b> Older vaults using the previous PBKDF2 verifier silently upgrade to Argon2id on the first unlock after the app update.</li>
+    </ul>
+
+    <h2 id="permissions"><span class="num">03</span>Permissions we use</h2>
+    <ul>
+      <li><b>Biometric</b> — to verify your fingerprint or face for app unlock. The biometric data itself never reaches the app; we only receive a yes/no result from Android.</li>
+      <li><b>Camera</b> — only for QR-code scanning when you add a new 2FA secret, and OCR credential capture. No photos are taken or stored.</li>
+      <li><b>Storage</b> — used only on Android 12 and below for reading and writing backup files. Modern Android uses the system file picker, which doesn't require this permission.</li>
+    </ul>
+
+    <h2 id="no-permissions"><span class="num">04</span>Permissions we <em>don't</em> request</h2>
+    <ul>
+      <li>No <b>Internet</b> permission — the app cannot make any network request, period. You can verify this in Android Settings → Apps → 1Key → Mobile data &amp; Wi-Fi: data usage is exactly zero, ever.</li>
+      <li>No location, contacts, microphone, SMS, or any other personal-data permission.</li>
+    </ul>
+
+    <h2 id="bruteforce"><span class="num">05</span>Brute-force protection</h2>
+    <p>Wrong master-password and wrong-PIN attempts are tracked in persistent storage (so killing the app cannot reset the counter) and trigger escalating cooldowns:</p>
+    <table>
+      <thead><tr><th>Wrong attempts</th><th>Cooldown</th></tr></thead>
+      <tbody>
+        <tr><td>3 failures</td><td>30 seconds</td></tr>
+        <tr><td>5 failures</td><td>5 minutes</td></tr>
+        <tr><td>10 failures</td><td>1 hour</td></tr>
+      </tbody>
+    </table>
+    <p>After 3 wrong PINs, the easier PIN unlock is disabled until you successfully enter the master password.</p>
+
+    <h2 id="clipboard"><span class="num">06</span>Clipboard &amp; screen capture</h2>
+    <ul>
+      <li>Sensitive copies (passwords, 2FA codes) are automatically cleared from the clipboard after 30 seconds.</li>
+      <li>On Android 13 and above, those copies are marked sensitive so the system's paste-preview toast doesn't reveal the value.</li>
+      <li>Screenshots and screen recordings of the app are blocked by default — including the Recent Apps preview. You can change this in Security settings.</li>
+      <li>Revealed passwords cannot be selected from the on-screen text via the long-press menu, so they can only leave the app via the in-app copy button (which routes through the auto-clear path).</li>
+    </ul>
+
+    <h2 id="backups"><span class="num">07</span>Backups &amp; recycle bin</h2>
+    <ul>
+      <li>Encrypted <code>.1key</code> backups are protected by your master password using Argon2id. The export timestamp and vault-version counter are also authenticated, so a backup file can't be tampered with or replayed across vaults without detection.</li>
+      <li>Plain JSON or CSV exports are unencrypted text. Treat those files as sensitive: anyone who finds one can read every password inside. 1Key warns clearly and requires master-password confirmation before producing one.</li>
+      <li>Items in the recycle bin remain encrypted with the same protections as active items. They're auto-purged after 30 days by default; you can change the retention (1 week, 30 days, 6 months, 1 year, or never) or disable auto-purge entirely in Settings.</li>
+    </ul>
+
+    <h2 id="deletion"><span class="num">08</span>Data deletion</h2>
+    <ul>
+      <li>Uninstalling the app removes all of your data. Android wipes the app's private storage, including your encrypted vault. There is no remote copy of anything.</li>
+      <li>Use <b>"Delete Vault"</b> in Settings to wipe all credentials while keeping the app installed. This requires your master password to confirm.</li>
+    </ul>
+
+    <h2 id="background"><span class="num">09</span>Background activity</h2>
+    <p>The app does not run when you are not using it. There are no background services, scheduled jobs, or wake-ups. When you close or background the app, the auto-lock timer fires (immediately by default) and the encryption key is dropped from memory.</p>
+
+    <h2 id="regulatory"><span class="num">10</span>Regulatory</h2>
+    <div class="callout">
+      <p>GDPR, CCPA, and COPPA do not apply to this app because <b>no personal data is collected, processed, or transmitted</b> at any point.</p>
+    </div>
+
+  </article>
+</main>
+
+<footer class="doc-foot">
+  <div class="wrap doc-foot-grid">
+    <div>Want the cryptographic detail? Read the <a href="whitepaper.html">white paper</a>, or browse the <a href="FAQ.html">FAQ</a>.</div>
+    <div class="doc-foot-cta">
+      <a class="btn" href="https://github.com/roufsyed/1Key" target="_blank" rel="noopener">View source<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg></a>
+      <a class="btn btn-primary" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">Download APK<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg></a>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

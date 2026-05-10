@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>1Key — Local-First Password Manager for Android</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* Light theme — from app */
+    --primary:        #1A56DB;
+    --on-primary:     #FFFFFF;
+    --primary-container: #D6E4FF;
+    --on-primary-container: #001C57;
+    --secondary:      #0694A2;
+    --tertiary:       #E02424;
+    --bg:             #F8FAFF;
+    --on-bg:          #1A1C24;
+    --surface:        #FFFFFF;
+    --on-surface:     #1A1C24;
+    --surface-variant:#EEF2FF;
+    --on-surface-variant:#44464F;
+    --outline:        #74777F;
+    --outline-soft:   #E3E7F2;
+    --muted:          #5C6072;
+
+    --maxw: 1240px;
+    --radius-sm: 10px;
+    --radius:    16px;
+    --radius-lg: 24px;
+    --radius-xl: 32px;
+
+    --shadow-card:  0 1px 0 rgba(13,28,73,.04), 0 1px 2px rgba(13,28,73,.04), 0 8px 24px -12px rgba(13,28,73,.10);
+    --shadow-pop:   0 24px 60px -20px rgba(13,28,73,.25), 0 4px 14px -8px rgba(13,28,73,.18);
+
+    --font-sans: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+    --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+  }
+
+  [data-theme="dark"] {
+    --primary:        #6C9FFF;
+    --on-primary:     #00215D;
+    --primary-container: #003399;
+    --on-primary-container: #DAE2FF;
+    --secondary:      #4ECDC4;
+    --tertiary:       #FF6B6B;
+    --bg:             #0E1117;
+    --on-bg:          #E2E2EC;
+    --surface:        #1A1F2E;
+    --on-surface:     #E2E2EC;
+    --surface-variant:#252A3A;
+    --on-surface-variant:#C4C6D0;
+    --outline:        #8E9099;
+    --outline-soft:   #2A2F40;
+    --muted:          #9498AB;
+
+    --shadow-card:  0 1px 0 rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    --shadow-pop:   0 24px 60px -20px rgba(0,0,0,.7), 0 4px 14px -8px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--on-bg);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "ss01","cv11";
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--primary); color: var(--on-primary); }
+
+  /* ── Layout ───────────────────────────────────────── */
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 28px; }
+
+  /* ── Nav ──────────────────────────────────────────── */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    background: color-mix(in oklab, var(--bg) 75%, transparent);
+    border-bottom: 1px solid color-mix(in oklab, var(--outline-soft) 80%, transparent);
+  }
+  .nav-inner {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: -.01em; }
+  .brand-mark {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--primary); color: var(--on-primary);
+    display: grid; place-items: center;
+    box-shadow: 0 2px 8px -2px color-mix(in oklab, var(--primary) 60%, transparent);
+  }
+  .brand-mark svg { width: 16px; height: 16px; }
+  .nav-links { display: flex; gap: 4px; align-items: center; }
+  .nav-links a {
+    padding: 8px 12px; border-radius: 8px; font-size: 14.5px;
+    color: var(--muted); transition: color .15s, background .15s;
+  }
+  .nav-links a:hover { color: var(--on-bg); background: var(--surface-variant); }
+  .nav-cta {
+    background: var(--on-bg); color: var(--bg);
+    padding: 9px 16px; border-radius: 10px; font-weight: 500; font-size: 14px;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .nav-cta:hover { transform: translateY(-1px); }
+  .icon-btn {
+    width: 36px; height: 36px; border-radius: 10px;
+    border: 1px solid var(--outline-soft);
+    background: var(--surface);
+    color: var(--on-surface);
+    display: grid; place-items: center; cursor: pointer;
+    transition: background .15s;
+  }
+  .icon-btn:hover { background: var(--surface-variant); }
+
+  /* ── Hero ─────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    padding: 72px 0 96px;
+    overflow: hidden;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 64px;
+    align-items: center;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px 6px 8px;
+    border-radius: 999px;
+    background: var(--surface-variant);
+    color: var(--primary);
+    font-size: 13px; font-weight: 500;
+    border: 1px solid color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+  .badge-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--secondary);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--secondary) 25%, transparent);
+  }
+  .h1 {
+    font-family: var(--font-sans);
+    font-size: clamp(40px, 5.6vw, 76px);
+    line-height: 1.02;
+    letter-spacing: -.035em;
+    font-weight: 600;
+    margin: 22px 0 24px;
+  }
+  .h1 em {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--primary);
+    letter-spacing: -.02em;
+  }
+  .lede {
+    font-size: 19px; color: var(--muted);
+    max-width: 520px;
+    margin: 0 0 36px;
+  }
+  .lede b { color: var(--on-bg); font-weight: 600; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 14px 22px;
+    border-radius: 12px;
+    font-size: 15px; font-weight: 500;
+    cursor: pointer; border: 0;
+    transition: transform .15s, box-shadow .15s, background .15s;
+    font-family: inherit;
+  }
+  .btn-primary {
+    background: var(--primary); color: var(--on-primary);
+    box-shadow: 0 1px 0 rgba(255,255,255,.2) inset, 0 8px 24px -10px color-mix(in oklab, var(--primary) 70%, transparent);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 1px 0 rgba(255,255,255,.2) inset, 0 14px 30px -12px color-mix(in oklab, var(--primary) 75%, transparent); }
+  .btn-ghost {
+    background: var(--surface); color: var(--on-surface);
+    border: 1px solid var(--outline-soft);
+  }
+  .btn-ghost:hover { background: var(--surface-variant); }
+  .btn-link {
+    background: transparent; color: var(--on-bg);
+    padding: 14px 8px;
+  }
+  .btn-link:hover { color: var(--primary); }
+  .btn-meta {
+    display: block; font-size: 11.5px; color: color-mix(in oklab, currentColor 70%, transparent);
+    margin-top: 1px; font-weight: 400;
+  }
+
+  .hero-meta {
+    display: flex; gap: 28px; flex-wrap: wrap;
+    margin-top: 36px; padding-top: 28px;
+    border-top: 1px solid var(--outline-soft);
+    color: var(--muted); font-size: 13.5px;
+  }
+  .hero-meta b { color: var(--on-bg); font-weight: 600; }
+
+  /* Hero device + ambient */
+  .hero-stage {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    display: grid; place-items: center;
+  }
+  .ambient {
+    position: absolute; inset: -20% -10%;
+    pointer-events: none;
+    background:
+      radial-gradient(40% 40% at 30% 30%, color-mix(in oklab, var(--primary) 22%, transparent), transparent 70%),
+      radial-gradient(36% 36% at 75% 70%, color-mix(in oklab, var(--secondary) 18%, transparent), transparent 70%);
+    filter: blur(20px);
+    opacity: .9;
+  }
+  .grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--outline) 12%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--outline) 12%, transparent) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(closest-side, #000 30%, transparent 80%);
+    -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent 80%);
+  }
+
+  .phone {
+    position: relative;
+    width: 320px;
+    border-radius: 44px;
+    background: #0a0d14;
+    padding: 11px;
+    box-shadow:
+      0 0 0 1.5px #2a2f40,
+      0 50px 100px -30px rgba(13,28,73,.45),
+      0 20px 40px -20px rgba(13,28,73,.25);
+    transform: rotate(-3deg);
+  }
+  [data-theme="dark"] .phone { box-shadow: 0 0 0 1.5px #2a2f40, 0 50px 100px -30px rgba(0,0,0,.7); }
+  .phone-screen {
+    border-radius: 34px;
+    overflow: hidden;
+    background: var(--bg);
+    aspect-ratio: 9/19.5;
+    position: relative;
+  }
+  .phone-screen img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .phone-notch {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #1a1f2e;
+    z-index: 2;
+  }
+
+  .phone-back {
+    position: absolute; top: 30px; left: -40px;
+    width: 280px;
+    transform: rotate(8deg);
+    z-index: -1;
+    opacity: .92;
+    filter: blur(.3px);
+  }
+  .phone-back .phone-screen { aspect-ratio: 9/19.5; }
+
+  .floating-chip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--outline-soft);
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: var(--shadow-pop);
+    display: flex; align-items: center; gap: 12px;
+    font-size: 13px;
+  }
+  .chip-icon {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: var(--primary-container); color: var(--primary);
+    display: grid; place-items: center;
+  }
+  .chip-icon svg { width: 16px; height: 16px; }
+  .chip-meta { display: flex; flex-direction: column; line-height: 1.25; }
+  .chip-meta b { font-weight: 600; }
+  .chip-meta span { color: var(--muted); font-size: 11.5px; }
+
+  .chip-1 { top: 18%; right: -6%; transform: rotate(-2deg); }
+  .chip-2 { bottom: 18%; left: -8%; transform: rotate(3deg); }
+  .chip-3 { top: 56%; right: -2%; transform: rotate(2deg); padding: 10px 14px; }
+
+  /* ── Section base ─────────────────────────────────── */
+  section { padding: 96px 0; position: relative; }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: .14em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .eyebrow::before {
+    content: ""; width: 18px; height: 1.5px; background: var(--primary); border-radius: 2px;
+  }
+  .h2 {
+    font-size: clamp(32px, 4vw, 52px);
+    line-height: 1.05;
+    letter-spacing: -.025em;
+    font-weight: 600;
+    margin: 14px 0 20px;
+    max-width: 22ch;
+  }
+  .h2 em {
+    font-family: var(--font-serif); font-style: italic; font-weight: 400;
+    color: var(--primary);
+  }
+  .section-lede {
+    color: var(--muted); font-size: 18px; max-width: 60ch;
+    margin: 0;
+  }
+
+  /* ── Why ──────────────────────────────────────────── */
+  .why-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 64px;
+    align-items: start;
+  }
+  .why-stat {
+    background: var(--surface);
+    border: 1px solid var(--outline-soft);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    box-shadow: var(--shadow-card);
+  }
+  .why-stat + .why-stat { margin-top: 16px; }
+  .why-stat .label { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-weight: 600; }
+  .why-stat .num {
+    font-size: 56px; line-height: 1;
+    font-weight: 500; letter-spacing: -.04em;
+    margin-top: 10px;
+    font-family: var(--font-serif);
+    font-style: italic;
+  }
+  .why-stat .num s {
+    text-decoration: line-through;
+    color: var(--tertiary);
+    text-decoration-thickness: 3px;
+  }
+  .why-stat .num small { font-size: 24px; color: var(--muted); margin-left: 8px; font-family: var(--font-sans); font-style: normal; letter-spacing: 0; }
+  .why-stat .desc { color: var(--muted); margin-top: 12px; font-size: 14.5px; }
+  .why-prose p { font-size: 18px; color: var(--on-bg); }
+  .why-prose p + p { margin-top: 18px; }
+  .why-prose .muted { color: var(--muted); }
+  .why-prose code {
+    font-family: var(--font-mono);
+    font-size: .85em;
+    background: var(--surface-variant);
+    padding: 2px 6px; border-radius: 6px;
+  }
+
+  /* ── Feature grid ─────────────────────────────────── */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--outline-soft);
+    border: 1px solid var(--outline-soft);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    margin-top: 56px;
+  }
+  .feat {
+    background: var(--surface);
+    padding: 32px;
+    display: flex; flex-direction: column;
+    gap: 14px;
+    min-height: 220px;
+    transition: background .2s;
+  }
+  .feat:hover { background: var(--surface-variant); }
+  .feat-head { display: flex; align-items: center; gap: 12px; }
+  .feat-icon {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--primary-container); color: var(--primary);
+    display: grid; place-items: center;
+  }
+  .feat-icon svg { width: 18px; height: 18px; }
+  .feat h3 { margin: 0; font-size: 16.5px; font-weight: 600; letter-spacing: -.005em; }
+  .feat p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+  .feat code {
+    font-family: var(--font-mono); font-size: 12.5px;
+    color: var(--on-surface); background: var(--surface-variant);
+    padding: 1px 5px; border-radius: 4px;
+  }
+  .feat:hover code { background: var(--surface); }
+  .feat-tag {
+    margin-top: auto;
+    font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+
+  /* ── See it gallery ───────────────────────────────── */
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-top: 56px;
+    align-items: end;
+  }
+  .gallery-phone {
+    background: #0a0d14;
+    border-radius: 32px;
+    padding: 8px;
+    box-shadow:
+      0 0 0 1px #2a2f40,
+      var(--shadow-card);
+    transition: transform .25s ease;
+  }
+  .gallery-phone:hover { transform: translateY(-6px); }
+  .gallery-phone .label {
+    color: #fff; font-size: 12px;
+    padding: 8px 14px 6px; opacity: .7;
+    font-family: var(--font-mono);
+    text-transform: uppercase; letter-spacing: .1em;
+  }
+  .gallery-phone .screen {
+    border-radius: 24px; overflow: hidden;
+    aspect-ratio: 9/19.5;
+    background: var(--bg);
+  }
+  .gallery-phone img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* ── Limits ───────────────────────────────────────── */
+  .limits {
+    background: var(--surface);
+    border: 1px solid var(--outline-soft);
+    border-radius: var(--radius-xl);
+    padding: 56px;
+    margin-top: 48px;
+    box-shadow: var(--shadow-card);
+    position: relative;
+    overflow: hidden;
+  }
+  .limits::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+    background: linear-gradient(90deg, var(--tertiary), var(--primary));
+  }
+  .limits-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 36px;
+    margin-top: 32px;
+  }
+  .limit { display: flex; flex-direction: column; gap: 8px; }
+  .limit-num {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 64px; line-height: 1;
+    font-weight: 400;
+    color: var(--tertiary);
+    letter-spacing: -.03em;
+  }
+  .limit h4 { margin: 4px 0 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  .limit p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  .limits-foot {
+    margin-top: 36px; padding-top: 32px;
+    border-top: 1px solid var(--outline-soft);
+    color: var(--muted); font-size: 15px;
+    max-width: 80ch;
+  }
+
+  /* ── Should you use? ──────────────────────────────── */
+  .should {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin-top: 48px;
+  }
+  .should-card {
+    background: var(--surface);
+    border: 1px solid var(--outline-soft);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+  }
+  .should-card.yes { border-color: color-mix(in oklab, var(--secondary) 30%, var(--outline-soft)); }
+  .should-card.no  { border-color: color-mix(in oklab, var(--tertiary)  20%, var(--outline-soft)); }
+  .should-head {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px dashed var(--outline-soft);
+  }
+  .should-pip {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: grid; place-items: center;
+    font-weight: 600; font-size: 18px;
+  }
+  .should-card.yes .should-pip { background: color-mix(in oklab, var(--secondary) 18%, transparent); color: var(--secondary); }
+  .should-card.no  .should-pip { background: color-mix(in oklab, var(--tertiary) 14%, transparent); color: var(--tertiary); }
+  .should-head h3 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  .should-head h3 small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+  .should ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
+  .should li {
+    display: flex; gap: 12px; align-items: flex-start;
+    font-size: 15.5px; color: var(--on-bg);
+  }
+  .should li svg { flex-shrink: 0; margin-top: 3px; width: 18px; height: 18px; }
+  .should-card.yes li svg { color: var(--secondary); }
+  .should-card.no  li svg { color: var(--tertiary); }
+
+  /* ── Get it ───────────────────────────────────────── */
+  .get-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin-top: 56px;
+  }
+  .get-card {
+    background: var(--surface);
+    border: 1px solid var(--outline-soft);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    display: flex; flex-direction: column;
+    box-shadow: var(--shadow-card);
+  }
+  .get-card .step {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--muted); text-transform: uppercase; letter-spacing: .12em;
+  }
+  .get-card h3 {
+    margin: 8px 0 8px; font-size: 24px; font-weight: 600; letter-spacing: -.02em;
+  }
+  .get-card p { color: var(--muted); margin: 0 0 24px; font-size: 14.5px; }
+
+  .terminal {
+    background: #0a0d14;
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    color: #E2E2EC;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.85;
+    margin-top: auto;
+    border: 1px solid #1a1f2e;
+    overflow: hidden;
+  }
+  .terminal-head {
+    display: flex; align-items: center; gap: 6px;
+    margin: -14px -18px 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #1a1f2e;
+    background: #11151f;
+  }
+  .terminal-head .dot { width: 10px; height: 10px; border-radius: 50%; background: #2a2f40; }
+  .terminal-head .label { font-size: 11px; color: #8E9099; margin-left: 8px; letter-spacing: .05em; }
+  .terminal .cmd { color: #6C9FFF; }
+  .terminal .arg { color: #4ECDC4; }
+  .terminal .comment { color: #6b7080; }
+  .terminal .prompt { color: #5C6072; user-select: none; }
+
+  .install-row {
+    display: flex; gap: 12px; align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--outline-soft);
+  }
+  .install-row:last-child { border-bottom: 0; }
+  .install-row svg { width: 22px; height: 22px; color: var(--primary); flex-shrink: 0; }
+  .install-row .body { flex: 1; }
+  .install-row b { font-size: 15px; }
+  .install-row span { display: block; color: var(--muted); font-size: 13px; }
+  .install-row a {
+    font-size: 13px; color: var(--primary); font-weight: 500;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .install-row a:hover { text-decoration: underline; }
+
+  /* ── Footer ───────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--outline-soft);
+    padding: 56px 0 40px;
+    margin-top: 40px;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 40px;
+    margin-bottom: 40px;
+  }
+  .footer-brand .lede { font-size: 14.5px; max-width: 38ch; margin-top: 14px; }
+  .footer-col h5 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 14px; font-weight: 600; }
+  .footer-col a {
+    display: block; padding: 6px 0;
+    color: var(--on-bg); font-size: 14.5px;
+  }
+  .footer-col a:hover { color: var(--primary); }
+  .footer-bottom {
+    display: flex; justify-content: space-between;
+    padding-top: 32px; border-top: 1px solid var(--outline-soft);
+    color: var(--muted); font-size: 13px;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .footer-bottom .pill {
+    font-family: var(--font-mono); font-size: 11.5px;
+    background: var(--surface-variant); color: var(--on-surface-variant);
+    padding: 4px 10px; border-radius: 999px;
+  }
+
+  /* ── Tweaks panel ─────────────────────────────────── */
+  .tweaks {
+    position: fixed; bottom: 24px; right: 24px; z-index: 60;
+    background: var(--surface);
+    border: 1px solid var(--outline-soft);
+    border-radius: 16px;
+    padding: 14px;
+    box-shadow: var(--shadow-pop);
+    display: flex; gap: 8px; align-items: center;
+    font-size: 13px;
+  }
+  .tweaks .label { color: var(--muted); padding: 0 6px; }
+  .tweaks button {
+    background: var(--surface-variant); color: var(--on-surface);
+    border: 0; padding: 8px 12px; border-radius: 10px;
+    cursor: pointer; font-family: inherit; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .tweaks button.active { background: var(--primary); color: var(--on-primary); }
+  .tweaks button svg { width: 14px; height: 14px; }
+
+  /* ── Responsive ───────────────────────────────────── */
+  @media (max-width: 980px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 56px; }
+    .hero-stage { aspect-ratio: 4/3; max-width: 480px; margin: 0 auto; }
+    .why-grid { grid-template-columns: 1fr; }
+    .features { grid-template-columns: 1fr 1fr; }
+    .gallery { grid-template-columns: 1fr 1fr; }
+    .limits-grid { grid-template-columns: 1fr; gap: 20px; }
+    .should { grid-template-columns: 1fr; }
+    .get-grid { grid-template-columns: 1fr; }
+    .footer-grid { grid-template-columns: 1fr 1fr; }
+    .nav-links { display: none; }
+    section { padding: 72px 0; }
+    .limits { padding: 32px 24px; }
+  }
+  @media (max-width: 600px) {
+    .features { grid-template-columns: 1fr; }
+    .gallery { grid-template-columns: 1fr; gap: 32px; }
+    .footer-grid { grid-template-columns: 1fr 1fr; gap: 28px; }
+    .footer-grid > *:first-child { grid-column: 1 / -1; }
+    .hero { padding: 48px 0 64px; }
+    .floating-chip { display: none; }
+    .phone-back { display: none; }
+  }
+
+  /* Fade-in on load */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .fade { animation: fadeUp .6s cubic-bezier(.2,.6,.2,1) both; }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ────────────────────────────────────────────── -->
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark">
+        <!-- Shield + key -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3z"/>
+          <circle cx="12" cy="11" r="2"/>
+          <path d="M12 13v4"/>
+        </svg>
+      </span>
+      1Key
+    </a>
+    <div class="nav-links">
+      <a href="#why">Why</a>
+      <a href="#inside">What's inside</a>
+      <a href="#see">Screenshots</a>
+      <a href="#use">Should you use it</a>
+      <a href="#get">Get it</a>
+      <a href="#docs">Docs</a>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button class="icon-btn" id="theme-btn" aria-label="Toggle theme">
+        <svg id="icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+      </button>
+      <a class="nav-cta" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">
+        Download APK
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
+      </a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ───────────────────────────────────────────── -->
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div class="fade">
+      <span class="badge"><span class="badge-dot"></span> Local-first · GPL-3.0 · v1.0</span>
+      <h1 class="h1">The password manager that <em>doesn't have a server</em> to breach.</h1>
+      <p class="lede">1Key lives only on your phone. <b>No cloud. No account. No telemetry. No <code style="font-family:var(--font-mono);font-size:.85em;background:var(--surface-variant);padding:1px 6px;border-radius:5px">INTERNET</code> permission</b> in the manifest. Free, forever.</p>
+
+      <div class="cta-row">
+        <a class="btn btn-primary" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
+          <span>Download APK<span class="btn-meta">~8 MB · Android 8+</span></span>
+        </a>
+        <a class="btn btn-ghost" href="https://roufsyed.github.io/1Key/whitepaper.html" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+          Read white paper
+        </a>
+        <a class="btn btn-link" href="https://github.com/roufsyed/1Key" target="_blank" rel="noopener">
+          View source
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>
+        </a>
+      </div>
+
+      <div class="hero-meta">
+        <div><b>Argon2id</b><br/>m=64 MiB · t=3</div>
+        <div><b>AES-256-GCM</b><br/>+ HKDF subkeys</div>
+        <div><b>0</b> network calls<br/>0 trackers</div>
+        <div><b>API 26+</b><br/>Targets Android 16</div>
+      </div>
+    </div>
+
+    <div class="hero-stage">
+      <div class="ambient"></div>
+      <div class="grid-bg"></div>
+
+      <!-- Back phone -->
+      <div class="phone phone-back" aria-hidden="true">
+        <div class="phone-screen">
+          <span class="phone-notch"></span>
+          <img src="assets/2fa_list.jpeg" alt="" />
+        </div>
+      </div>
+
+      <!-- Front phone -->
+      <div class="phone">
+        <div class="phone-screen">
+          <span class="phone-notch"></span>
+          <img src="assets/vault_home.jpeg" alt="1Key vault home screen" />
+        </div>
+      </div>
+
+      <div class="floating-chip chip-1">
+        <span class="chip-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>
+        </span>
+        <div class="chip-meta"><b>0 network calls</b><span>verified at runtime</span></div>
+      </div>
+
+      <div class="floating-chip chip-2">
+        <span class="chip-icon" style="background:color-mix(in oklab,var(--secondary) 18%,transparent);color:var(--secondary)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </span>
+        <div class="chip-meta"><b>Encrypted at rest</b><span>AES-256-GCM</span></div>
+      </div>
+
+      <div class="floating-chip chip-3">
+        <span class="chip-icon" style="background:color-mix(in oklab,var(--tertiary) 14%,transparent);color:var(--tertiary)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l3-9 3 9 3-9 3 9 3-9 3 9"/></svg>
+        </span>
+        <div class="chip-meta"><b>£0 / forever</b><span>no premium tier</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ── WHY ────────────────────────────────────────────── -->
+<section id="why">
+  <div class="wrap">
+    <span class="eyebrow">Why 1Key exists</span>
+    <h2 class="h2">Every password manager keeps your vault on <em>their</em> servers.</h2>
+
+    <div class="why-grid" style="margin-top:48px">
+      <div class="why-prose">
+        <p>Mainstream managers charge <b>£25–£100/year</b> for autofill, TOTP, and export — features that should be commoditised by now. The pitch is convenience: sync, recovery, sharing. The bill is an encrypted blob sitting on someone else's machine, attached to your email, waiting for the next breach disclosure.</p>
+        <p class="muted">1Key takes the opposite trade. Your vault lives in one place — <b>this phone</b> — and never leaves unless you explicitly export it. You give up sync and recovery. In return: no vendor server in your threat model, no account to subpoena, no auth blob to brute-force offline, and no subscription.</p>
+      </div>
+      <div>
+        <div class="why-stat">
+          <span class="label">Mainstream cost</span>
+          <div class="num"><s>£25–£100</s><small>/ year</small></div>
+          <p class="desc">Premium tiers for autofill, TOTP, and exports — features that ship in 1Key's free build.</p>
+        </div>
+        <div class="why-stat">
+          <span class="label">1Key cost</span>
+          <div class="num">£0<small>/ forever</small></div>
+          <p class="desc">GPL-3.0. One tier. The build you sideload <em>is</em> the full app.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── WHAT'S INSIDE ──────────────────────────────────── -->
+<section id="inside" style="background:linear-gradient(180deg,var(--bg),color-mix(in oklab,var(--surface-variant) 60%,var(--bg)));">
+  <div class="wrap">
+    <span class="eyebrow">What's inside</span>
+    <h2 class="h2">Eight things <em>doing the work</em> while you copy-paste.</h2>
+    <p class="section-lede">A walk through the cryptographic and UX choices behind a vault that never phones home.</p>
+
+    <div class="features">
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          </span>
+          <h3>Argon2id KDF</h3>
+        </div>
+        <p><code>m=64 MiB</code>, <code>t=3</code>, <code>p=1</code>. Memory-hard derivation that flattens the GPU and ASIC speedup attackers expect from PBKDF2 or bcrypt.</p>
+        <span class="feat-tag">Key derivation</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 6v6c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V6l-8-4z"/><path d="M9 12l2 2 4-4"/></svg>
+          </span>
+          <h3>AES-256-GCM + HKDF</h3>
+        </div>
+        <p>Authenticated encryption with HKDF-SHA256 subkey separation. Each field is encrypted independently and bound by AAD to its row and column.</p>
+        <span class="feat-tag">Symmetric encryption</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M12 7v5l3 2"/></svg>
+          </span>
+          <h3>Keystore-bound verifier</h3>
+        </div>
+        <p>The password check sits in <code>EncryptedSharedPreferences</code>, not next to the database. A leaked SQLite file alone has no oracle to brute-force on devices with a working hardware Keystore.</p>
+        <span class="feat-tag">Hardware-backed</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </span>
+          <h3>TOTP in the same record</h3>
+        </div>
+        <p>Your second factor lives next to the credential it protects. No app switching, no premium tier, no separate authenticator to set up.</p>
+        <span class="feat-tag">2FA built-in</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3-3h12l3 3v12a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3"/></svg>
+          </span>
+          <h3>OCR credential capture</h3>
+        </div>
+        <p>Point the camera at a card, screen, or printed token. On-device ML Kit extracts the text. Nothing uploads. Nothing trains a model elsewhere.</p>
+        <span class="feat-tag">On-device ML</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+          </span>
+          <h3>Encrypted backups (V4)</h3>
+        </div>
+        <p>AES-256-GCM under Argon2id, with timestamp and vault-version counter in the auth tag. An old backup cannot be replayed against a current vault.</p>
+        <span class="feat-tag">Anti-rollback</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M3 12h18"/></svg>
+          </span>
+          <h3>Auto-detecting importer</h3>
+        </div>
+        <p>Google Passwords, LastPass, KeePass, 1Password, Bitwarden, iCloud Keychain, Dashlane, NordPass. Drop the CSV — no manual column mapping.</p>
+        <span class="feat-tag">8 formats</span>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="feat-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9h6v6H9z"/></svg>
+          </span>
+          <h3>Table-stakes UX</h3>
+        </div>
+        <p>Categories, favourites, recycle bin, search, sort, autofill, biometric unlock. Free tier in 1Key is the only tier — there is nothing else to upsell.</p>
+        <span class="feat-tag">Everything included</span>
+      </article>
+
+    </div>
+
+    <p style="margin-top:32px; color:var(--muted); font-size:14.5px;">
+      Full cryptographic architecture and threat model: <a href="https://roufsyed.github.io/1Key/whitepaper.html" target="_blank" rel="noopener" style="color:var(--primary); font-weight:500; text-decoration:underline; text-underline-offset:3px;">read the white paper →</a>
+    </p>
+  </div>
+</section>
+
+<!-- ── SEE IT ─────────────────────────────────────────── -->
+<section id="see">
+  <div class="wrap">
+    <span class="eyebrow">See it</span>
+    <h2 class="h2">Material 3, with the <em>cloud-account</em> bits removed.</h2>
+    <p class="section-lede">Five screens. No onboarding to a server. No "verify your email." Set the master password, the vault opens.</p>
+
+    <div class="gallery">
+      <div class="gallery-phone">
+        <div class="label">Vault</div>
+        <div class="screen"><img src="assets/vault_home.jpeg" alt="Vault home" /></div>
+      </div>
+      <div class="gallery-phone">
+        <div class="label">All items</div>
+        <div class="screen"><img src="assets/all_items.jpeg" alt="All items list" /></div>
+      </div>
+      <div class="gallery-phone">
+        <div class="label">2FA codes</div>
+        <div class="screen"><img src="assets/2fa_list.jpeg" alt="2FA codes" /></div>
+      </div>
+      <div class="gallery-phone">
+        <div class="label">Credential</div>
+        <div class="screen"><img src="assets/credential_detail.jpeg" alt="Credential detail" /></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── HONEST LIMITS ──────────────────────────────────── -->
+<section id="limits">
+  <div class="wrap">
+    <span class="eyebrow" style="color:var(--tertiary)">Honest limits</span>
+    <h2 class="h2">Three rules. <em>Read them</em> before you commit.</h2>
+    <p class="section-lede">These aren't an MVP backlog. They're the architecture working as designed.</p>
+
+    <div class="limits">
+      <div class="limits-grid">
+        <div class="limit">
+          <span class="limit-num">01</span>
+          <h4>One device.</h4>
+          <p>No sync. Lose the phone without a current backup, lose the vault. Encrypted backups are your safety net — make them.</p>
+        </div>
+        <div class="limit">
+          <span class="limit-num">02</span>
+          <h4>One password.</h4>
+          <p>No recovery, no escrow, no reset link. Forget it without a backup, lose the vault. There is no admin who can help.</p>
+        </div>
+        <div class="limit">
+          <span class="limit-num">03</span>
+          <h4>One developer.</h4>
+          <p>No on-call, no SLA, no third-party security audit yet. The code is open — read it, build it, run whichever version works.</p>
+        </div>
+      </div>
+      <p class="limits-foot">If you need cross-device sync, team sharing, or vendor recovery, choose a hosted manager. They exist for good reasons. 1Key is for users who deliberately want <b style="color:var(--on-bg)">no vendor server in their threat model</b>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── SHOULD YOU USE? ────────────────────────────────── -->
+<section id="use" style="background:color-mix(in oklab,var(--surface-variant) 60%,var(--bg))">
+  <div class="wrap">
+    <span class="eyebrow">Should you use 1Key?</span>
+    <h2 class="h2">A two-column gut check.</h2>
+
+    <div class="should">
+      <div class="should-card yes">
+        <div class="should-head">
+          <span class="should-pip">✓</span>
+          <h3>Use 1Key if<small>The architecture matches your threat model</small></h3>
+        </div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You want a manager that <b>never talks to a server</b></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You're done paying <b>£25–£100/year</b> for autofill and TOTP</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You can keep an <b>encrypted backup</b> somewhere safe</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You're comfortable reading source or trusting community review</li>
+        </ul>
+      </div>
+      <div class="should-card no">
+        <div class="should-head">
+          <span class="should-pip">✕</span>
+          <h3>Don't use 1Key if<small>A hosted manager is the better fit</small></h3>
+        </div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg> You need <b>cross-device sync</b></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg> You need to <b>share credentials</b> with a team</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg> You can't reliably remember a strong master password</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg> You need formal <b>SOC 2 / ISO 27001</b> vendor compliance</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── GET IT ─────────────────────────────────────────── -->
+<section id="get">
+  <div class="wrap">
+    <span class="eyebrow">Get it</span>
+    <h2 class="h2">Two ways in. <em>Both</em> reproducible.</h2>
+    <p class="section-lede">Sideload the signed APK from GitHub Releases, or build from source in three commands. F-Droid distribution is planned.</p>
+
+    <div class="get-grid">
+      <div class="get-card">
+        <span class="step">Option 1 · Fast path</span>
+        <h3>Install the signed APK</h3>
+        <p>Latest release, signed with the developer's key. Verify the SHA-256 against the release notes before sideloading.</p>
+
+        <div class="install-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
+          <div class="body">
+            <b>1key-v1.0.0.apk</b>
+            <span>~8 MB · Android 8.0+ · arm64-v8a, armeabi-v7a</span>
+          </div>
+          <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">GitHub Releases →</a>
+        </div>
+        <div class="install-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          <div class="body">
+            <b>F-Droid</b>
+            <span>Reproducible build — distribution planned</span>
+          </div>
+          <a style="color:var(--muted)">Soon</a>
+        </div>
+      </div>
+
+      <div class="get-card">
+        <span class="step">Option 2 · Build it yourself</span>
+        <h3>Three commands, no API keys</h3>
+        <p>Clone, compile, install. No <code style="font-family:var(--font-mono);font-size:.9em;background:var(--surface-variant);padding:1px 5px;border-radius:4px">.env</code>, no Firebase token, no service account.</p>
+
+        <div class="terminal">
+          <div class="terminal-head">
+            <span class="dot" style="background:#FF6B6B"></span>
+            <span class="dot" style="background:#FFD166"></span>
+            <span class="dot" style="background:#4ECDC4"></span>
+            <span class="label">~ / build 1key</span>
+          </div>
+<div><span class="prompt">$ </span><span class="cmd">git</span> <span class="arg">clone</span> https://github.com/roufsyed/1Key</div>
+<div><span class="prompt">$ </span><span class="cmd">cd</span> <span class="arg">1Key</span></div>
+<div><span class="prompt">$ </span><span class="cmd">./gradlew</span> <span class="arg">assembleDebug</span></div>
+<div><span class="comment"># → app/build/outputs/apk/debug/app-debug.apk</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── DOCS ───────────────────────────────────────────── -->
+<section id="docs" style="padding-top:64px;padding-bottom:64px">
+  <div class="wrap">
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:48px;align-items:start;">
+      <div>
+        <span class="eyebrow">Documents</span>
+        <h2 class="h2" style="font-size:clamp(28px,3.2vw,40px)">Read before you trust.</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+        <a class="get-card" style="padding:24px;text-decoration:none" href="https://roufsyed.github.io/1Key/whitepaper.html" target="_blank" rel="noopener">
+          <span class="step">HTML</span>
+          <h3 style="font-size:18px;margin:8px 0 6px">White paper</h3>
+          <p style="margin:0;font-size:13.5px">Cryptographic architecture and threat model.</p>
+        </a>
+        <a class="get-card" style="padding:24px;text-decoration:none" href="https://roufsyed.github.io/1Key/PRIVACY_POLICY.html" target="_blank" rel="noopener">
+          <span class="step">Plain text</span>
+          <h3 style="font-size:18px;margin:8px 0 6px">Privacy policy</h3>
+          <p style="margin:0;font-size:13.5px">What 1Key collects (nothing) and what it stores (locally).</p>
+        </a>
+        <a class="get-card" style="padding:24px;text-decoration:none" href="https://roufsyed.github.io/1Key/FAQ.html" target="_blank" rel="noopener">
+          <span class="step">Markdown</span>
+          <h3 style="font-size:18px;margin:8px 0 6px">FAQ</h3>
+          <p style="margin:0;font-size:13.5px">Encryption, passwords, backups, sync — short answers.</p>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────── -->
+<footer>
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-brand footer-col">
+        <a class="brand" href="index.html">
+          <span class="brand-mark">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v7c0 5 3.5 8.5 8 10 4.5-1.5 8-5 8-10V5l-8-3z"/><circle cx="12" cy="11" r="2"/><path d="M12 13v4"/></svg>
+          </span>
+          1Key
+        </a>
+        <p class="lede">A local-first password manager for Android. No cloud, no account, no telemetry. Free, GPL-3.0.</p>
+      </div>
+      <div class="footer-col">
+        <h5>Product</h5>
+        <a href="#inside">What's inside</a>
+        <a href="#see">Screenshots</a>
+        <a href="#use">Should you use</a>
+        <a href="#get">Get it</a>
+      </div>
+      <div class="footer-col">
+        <h5>Source</h5>
+        <a href="https://github.com/roufsyed/1Key" target="_blank" rel="noopener">GitHub repo</a>
+        <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/roufsyed/1Key/issues" target="_blank" rel="noopener">Issues</a>
+      </div>
+      <div class="footer-col">
+        <h5>Legal</h5>
+        <a href="https://roufsyed.github.io/1Key/whitepaper.html" target="_blank" rel="noopener">White paper</a>
+        <a href="https://roufsyed.github.io/1Key/PRIVACY_POLICY.html" target="_blank" rel="noopener">Privacy policy</a>
+        <a href="https://roufsyed.github.io/1Key/FAQ.html" target="_blank" rel="noopener">FAQ</a>
+        <a href="https://github.com/roufsyed/1Key/blob/master/LICENSE" target="_blank" rel="noopener">GPL-3.0 license</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>© 2026 1Key · Built by one developer, for users who want zero servers in their threat model.</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="pill">v1.0.0</span>
+        <span class="pill">min API 26</span>
+        <span class="pill">target API 36</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- ── TWEAKS ─────────────────────────────────────────── -->
+<div class="tweaks" id="tweaks" style="display:none">
+  <span class="label">Theme</span>
+  <button data-theme-set="light" class="active">Light</button>
+  <button data-theme-set="dark">Dark</button>
+</div>
+
+<script>
+  // Theme toggle
+  const root = document.documentElement;
+  const themeBtn = document.getElementById('theme-btn');
+  const sunIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
+  const moonIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>';
+
+  function setTheme(t) {
+    if (t === 'dark') root.setAttribute('data-theme', 'dark');
+    else root.removeAttribute('data-theme');
+    themeBtn.innerHTML = t === 'dark' ? sunIcon : moonIcon;
+    localStorage.setItem('1key-theme', t);
+    document.querySelectorAll('[data-theme-set]').forEach(b => {
+      b.classList.toggle('active', b.dataset.themeSet === t);
+    });
+  }
+  themeBtn.addEventListener('click', () => {
+    setTheme(root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  document.querySelectorAll('[data-theme-set]').forEach(b => {
+    b.addEventListener('click', () => setTheme(b.dataset.themeSet));
+  });
+  setTheme(localStorage.getItem('1key-theme') || 'light');
+
+  // Edit-mode (Tweaks) wiring
+  const tweaksEl = document.getElementById('tweaks');
+  window.addEventListener('message', (e) => {
+    if (!e.data || !e.data.type) return;
+    if (e.data.type === '__activate_edit_mode') tweaksEl.style.display = 'flex';
+    if (e.data.type === '__deactivate_edit_mode') tweaksEl.style.display = 'none';
+  });
+  window.parent.postMessage({type: '__edit_mode_available'}, '*');
+</script>
+
+</body>
+</html>
