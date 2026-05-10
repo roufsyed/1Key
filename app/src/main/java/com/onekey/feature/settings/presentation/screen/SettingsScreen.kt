@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.core.presentation.lockaware.SecurePasswordTextField
 import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
 import androidx.activity.compose.BackHandler
@@ -451,7 +452,7 @@ private fun SettingsSearchBar(
             IconButton(onClick = onClose) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Close search")
             }
-            TextField(
+            LockAwareTextField(
                 value = query,
                 onValueChange = onQueryChange,
                 placeholder = { Text("Search settings") },

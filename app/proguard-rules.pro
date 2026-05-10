@@ -19,6 +19,13 @@
 -keepattributes *Annotation*
 -dontwarn sun.misc.**
 
+# ML Kit references com.google.android.datatransport.* internally for its
+# Firelog telemetry pipeline. We exclude that subgraph in app/build.gradle.kts
+# (privacy: the app declares no INTERNET), so R8 sees dangling references it
+# would otherwise abort on. The references sit on code paths that never run
+# without the transport library, so silencing them is safe.
+-dontwarn com.google.android.datatransport.**
+
 # Argon2id — JNI bridge classes must survive shrinking and obfuscation.
 # Without this, the JNI stubs get stripped and the native KDF crashes
 # on the first call. This keep is required, not defensive.
