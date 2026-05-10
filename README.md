@@ -120,6 +120,8 @@ A quick at-a-glance comparison against three of the most popular password manage
 
 ## Encryption compared
 
+For a full technical and strategic overview, see the **[1Key white paper](docs/whitepaper.md)** — cryptographic architecture, threat model, and a frank statement of what the project does and doesn't defend against.
+
 1Key matches the modern cryptographic baseline used by 1Password, Bitwarden, and Proton Pass — Argon2id, authenticated encryption, end-to-end-encrypted vault material — and adds local-only hardening tailored to the Android threat model: the vault key never leaves the device, the master-password verifier is held in Keystore-backed `EncryptedSharedPreferences` (so a stolen DB file alone cannot be brute-forced offline), and Room columns are encrypted at rest with HKDF-derived per-field subkeys. This is **not stronger crypto than well-funded competitors** — 1Password's Secret Key in particular remains unmatched against cloud-blob brute force — but for users who don't want a server in the loop, it removes the off-device auth blob entirely.
 
 | Encryption property | 1Password | Bitwarden | Proton Pass | 1Key |

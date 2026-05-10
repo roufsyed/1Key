@@ -1,3 +1,8 @@
+---
+title: 1Key FAQ
+description: Frequently asked questions about 1Key — encryption, passwords, backups, sync, and security model.
+---
+
 # 1Key — Frequently Asked Questions
 
 ## Encryption & passwords

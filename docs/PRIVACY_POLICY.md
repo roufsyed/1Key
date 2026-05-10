@@ -1,3 +1,8 @@
+---
+title: 1Key Privacy Policy
+description: How 1Key handles your data — collected, transmitted, stored, and shared.
+---
+
 # 1Key Privacy Policy
 
 _Last updated: May 2026_

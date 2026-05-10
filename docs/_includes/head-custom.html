@@ -1,0 +1,25 @@
+<!--
+  Mermaid diagram support for the Cayman theme.
+  Loads mermaid.js from a pinned CDN, then converts every fenced
+  code block tagged `mermaid` (which kramdown emits as
+  <pre><code class="language-mermaid">...) into a <div class="mermaid">
+  block before initialising mermaid.
+-->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll("code.language-mermaid").forEach(function (node) {
+      var div = document.createElement("div");
+      div.className = "mermaid";
+      div.textContent = node.textContent;
+      node.parentElement.replaceWith(div);
+    });
+    mermaid.initialize({ startOnLoad: true, theme: "default" });
+  });
+</script>
+
+<!-- Wide table + long-token wrapping fixes for Cayman's 860px content column. -->
+<style>
+  .markdown-body table { display: block; overflow-x: auto; }
+  .markdown-body code { word-break: break-word; }
+</style>

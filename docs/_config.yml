@@ -1,0 +1,36 @@
+title: 1Key
+description: Local-first Android password manager — no cloud, no account, no telemetry
+theme: jekyll-theme-cayman
+url: https://roufsyed.github.io
+baseurl: /1key
+
+# Markdown rendering
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Mermaid diagrams via the cayman theme need a small head-include; if Pages
+# does not render the mermaid blocks natively, add the script to head.html.
+plugins:
+  - jekyll-seo-tag
+
+# Files Jekyll should leave alone. The screenshots directory is referenced
+# from the README via raw GitHub URLs, not the Pages site, so it doesn't
+# need to ship in the build. The remaining entries pre-empt local Jekyll
+# build artefacts that someone might generate by running `bundle install`.
+exclude:
+  - screenshots/
+  - Gemfile
+  - Gemfile.lock
+  - vendor/
+  - .bundle/
+  - .jekyll-cache/
+
+# Defaults: every Markdown page gets the Cayman layout unless it overrides.
+defaults:
+  - scope:
+      path: ""
+      type: "pages"
+    values:
+      layout: "default"
