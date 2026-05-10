@@ -178,7 +178,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .toc li { counter-increment: tocn; }
 .toc a {
   display: flex; gap: 10px; align-items: baseline;
-  color: var(--muted); padding: 6px 0;
+  color: var(--muted); padding: 10px 0;
   border-radius: 6px;
   transition: color .15s;
 }
@@ -229,6 +229,8 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
   background: var(--surface-variant);
   padding: 2px 6px; border-radius: 6px;
   color: var(--on-surface);
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .prose pre {
   background: #0a0d14;
@@ -385,4 +387,19 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
   .nav-links { display: none; }
   .doc-foot-grid { grid-template-columns: 1fr; }
   .doc-foot-cta { justify-content: flex-start; }
+}
+
+/* Wide tables: scroll horizontally instead of clipping on phones / tablets. */
+@media (max-width: 768px) {
+  .prose table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Phone-specific: tighter gutters, larger touch targets. */
+@media (max-width: 480px) {
+  .wrap { padding: 0 16px; }
+  .icon-btn { width: 44px; height: 44px; }
 }

@@ -237,6 +237,7 @@
   .phone {
     position: relative;
     width: 320px;
+    max-width: 100%;
     border-radius: 44px;
     background: #0a0d14;
     padding: 11px;
@@ -552,7 +553,8 @@
     line-height: 1.85;
     margin-top: auto;
     border: 1px solid #1a1f2e;
-    overflow: hidden;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .terminal-head {
     display: flex; align-items: center; gap: 6px;
@@ -659,6 +661,14 @@
     .hero { padding: 48px 0 64px; }
     .floating-chip { display: none; }
     .phone-back { display: none; }
+  }
+  /* Phone-specific: tighter gutters, smaller phone mock, scaled CTA. */
+  @media (max-width: 480px) {
+    .wrap { padding: 0 16px; }
+    .phone { width: min(280px, calc(100vw - 48px)); }
+    .nav-cta { padding: 10px 14px; min-height: 44px; }
+    .btn { padding: 12px 18px; }
+    section { padding: 48px 0; }
   }
 
   /* Fade-in on load */
