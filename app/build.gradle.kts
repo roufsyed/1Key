@@ -120,11 +120,16 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
 
-    // ML Kit Barcode Scanning
-    implementation(libs.mlkit.barcode)
-
-    // ML Kit Text Recognition (on-device, Latin script)
-    implementation(libs.mlkit.text.recognition)
+    // ML Kit Barcode Scanning + Text Recognition (on-device, Latin script).
+    // Both pull in com.google.android.datatransport (Firelog) transitively, which adds
+    // INTERNET + ACCESS_NETWORK_STATE permissions and queues telemetry locally. We
+    // physically exclude that subgraph — inference runs on-device and never needs it.
+    implementation(libs.mlkit.barcode) {
+        exclude(group = "com.google.android.datatransport")
+    }
+    implementation(libs.mlkit.text.recognition) {
+        exclude(group = "com.google.android.datatransport")
+    }
 
     // Argon2id — Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
     implementation(libs.argon2kt)

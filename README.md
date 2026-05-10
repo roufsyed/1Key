@@ -46,6 +46,94 @@ Every major password manager today requires you to:
 
 ---
 
+## Features
+
+### Password Vault
+- Store credentials with title, username, password, URL, notes, and custom fields
+- Tag-based organisation with custom categories
+- Favourites tab for frequently used accounts
+- Full-text search across all fields
+
+### TOTP / 2FA — all in one place
+Most apps make you switch between a password manager and a separate authenticator. 1Key stores both in the same credential entry. Scan a QR code once, and your TOTP codes live alongside the password they protect — no app switching.
+
+- Scan setup QR codes with the built-in camera scanner
+- Live 30-second countdown with automatic code refresh
+- One-tap copy to clipboard
+
+### OCR Credential Capture
+Point your camera at a printed password, a screen showing credentials, or a physical token card, and 1Key extracts the text using on-device ML Kit OCR — no image is uploaded. The recognised text is pre-filled into the credential form for you to review and save. Everything runs locally on the device.
+
+### Backup & Import
+- Export your vault as an encrypted `.1key` file (AES-256-GCM with Argon2id key derivation, timestamp and vault-version bound into the auth tag) or plain CSV/JSON
+- Encrypted exports require your master password to restore — no password, no access
+- Import from 1Key backups or directly from other password managers
+
+**Supported import sources:**
+| App | Format |
+|-----|--------|
+| Google Passwords | CSV |
+| LastPass | CSV |
+| KeePass | CSV |
+| Safari / iCloud Keychain | CSV |
+| 1Password | CSV |
+| Dashlane | CSV |
+| NordPass | CSV |
+
+The importer auto-detects format and column headers — no manual mapping required. Duplicate credentials are detected and skipped.
+
+### Unlock Options
+
+- **Master password** — always available as the primary fallback
+- **Biometric** — fingerprint or face unlock backed by hardware-secure key; requires master-password confirmation to enable
+- **PIN** — 6-digit PIN for quick access; resets to master password if removed
+- **Background auto-lock** — locks when the app moves to the background. Options: Immediate (default), 30 seconds, 1 minute, 5 minutes
+- **Inactivity auto-lock** — locks when the app is in the foreground but idle. Options: Never, 30 seconds, 1 minute, 5 minutes (default), 15 minutes
+- **Periodic master-password recheck** — optionally require master password every 48 hours / 3 days / 1 week / 3 weeks even when biometric or PIN is enabled
+- **Tiered attempt limiting** — 3, 5, and 10 wrong attempts on master password or PIN trigger 30-second, 5-minute, and 1-hour cooldowns respectively. Counters survive process kills.
+
+---
+
+## How 1Key compares
+
+A quick at-a-glance comparison against three of the most popular password managers.
+
+| | 1Password | Bitwarden | Proton Pass | 1Key |
+|---|---|---|---|---|
+| Cost | $2.99-9.99/mo | Free + paid tiers | Free + paid | Free, all features |
+| Account not required | ✗ | ✗ | ✗ | ✓ |
+| INTERNET permission not required | ✗ | ✗ | ✗ | ✓ |
+| Vault stored on vendor servers | ✓ E2EE | ✓ E2EE | ✓ E2EE | ✗ — local only |
+| Account metadata held off-device | Email, billing, devices | Email, devices | Proton account graph | None |
+| Telemetry / analytics | Opt-out | Configurable | Opt-out | None — no INTERNET |
+| Built-in TOTP / 2FA codes | ✓ | Premium only | ✓ | ✓ |
+| PIN code unlock | ✓ | ✓ | ✓ | ✓ |
+| OCR (camera scan) | ✓ (cards / docs) | ✗ | ✗ | ✓ (any field) |
+| Categories | ✓ | Folders instead | Vaults instead | ✓ |
+| Encrypted local backup file | ✓ (1pux) | ✓ (JSON) | ✓ | ✓ (V4 envelope) |
+| Recycle bin (soft delete) | ✓ Archive | ✓ Trash | ✓ Trash | ✓ |
+| KDF | PBKDF2-650k + Secret Key | PBKDF2-600k or Argon2id (opt-in) | bcrypt cost 10 | Argon2id (m=64 MiB, t=3, p=1) |
+| Verifier brute-forceable from leaked file | If cloud breached | If cloud breached | If cloud breached | No — Keystore-bound |
+| Open source | Closed | Client + server | Clients | Single repo |
+
+---
+
+## Encryption compared
+
+1Key matches the modern cryptographic baseline used by 1Password, Bitwarden, and Proton Pass — Argon2id, authenticated encryption, end-to-end-encrypted vault material — and adds local-only hardening tailored to the Android threat model: the vault key never leaves the device, the master-password verifier is held in Keystore-backed `EncryptedSharedPreferences` (so a stolen DB file alone cannot be brute-forced offline), and Room columns are encrypted at rest with HKDF-derived per-field subkeys. This is **not stronger crypto than well-funded competitors** — 1Password's Secret Key in particular remains unmatched against cloud-blob brute force — but for users who don't want a server in the loop, it removes the off-device auth blob entirely.
+
+| Encryption property | 1Password | Bitwarden | Proton Pass | 1Key |
+| --- | --- | --- | --- | --- |
+| Password KDF (default) | PBKDF2-SHA256 650k iter + 128-bit Secret Key (~128 bits of extra entropy no KDF can match) | PBKDF2 600k (Argon2id 64MiB / t=3 / p=4 opt-in) | bcrypt cost 10 (≈100 ms, no memory hardness) | Argon2id m=64MiB / t=3 / p=1. Memory-hard, so stronger than bcrypt/PBKDF2 vs GPU/ASIC. Comparable to Bitwarden's opt-in Argon2id; 1Password's Secret Key remains unmatched against offline brute force. |
+| AEAD construction | AES-256-GCM (AEAD) | AES-256-CBC + HMAC-SHA256 (Encrypt-then-MAC, also safe) | OpenPGP (hybrid, per item) | AES-256-GCM (AEAD). All four are safe; this is parity, not a moat. |
+| Vault key at rest | Cloud-synced E2EE blob (server holds ciphertext) | Cloud-synced E2EE blob (server holds ciphertext) | Cloud-synced E2EE blob (server holds ciphertext) | Local-only, AES-GCM-wrapped by an Android Keystore key. Never leaves the device. |
+| Offline brute-force surface | Cloud auth blob; Secret Key neutralizes brute force entirely | Cloud auth blob (KDF params known) | Cloud auth blob (bcrypt only) | No off-device auth blob. On Android, a leaked DB file alone is not brute-forceable — the verifier sits in Keystore-backed `EncryptedSharedPreferences`. |
+| Local DB column encryption | N/A — sync model relies on cloud ciphertext; on-device cache details vary | N/A — sync model relies on cloud ciphertext; on-device cache details vary | N/A — sync model relies on cloud ciphertext | Room columns (including title) stored as AES-GCM ciphertext with HKDF-derived subkeys + per-field AAD. Defends device forensic snapshots. |
+
+**Sources:** 1Password [Security Design white paper](https://1passwordstatic.com/files/security/1password-white-paper.pdf) · Bitwarden [KDF algorithms](https://bitwarden.com/help/kdf-algorithms/) and [`kdf-config.ts`](https://github.com/bitwarden/clients/blob/main/libs/key-management/src/models/kdf-config.ts) · Proton Pass [security model](https://proton.me/blog/proton-pass-security-model)
+
+---
+
 ## Privacy
 
 1Key collects **nothing**. No analytics, no crash reporting, no telemetry, no usage data — not even anonymised. There is no backend, no account system, and no `INTERNET` permission in the manifest.
@@ -100,54 +188,6 @@ Wrong-password and wrong-PIN attempts are tracked in DataStore (so killing and r
 | 10 | 1 hour |
 
 After 3 wrong PINs, the user is forced to fall back to the master password — proving real identity before the easier path resumes. Biometric attempts have their own 3-strike counter that triggers the same fallback.
-
----
-
-## Features
-
-### Password Vault
-- Store credentials with title, username, password, URL, notes, and custom fields
-- Tag-based organisation with custom categories
-- Favourites tab for frequently used accounts
-- Full-text search across all fields
-
-### TOTP / 2FA — all in one place
-Most apps make you switch between a password manager and a separate authenticator. 1Key stores both in the same credential entry. Scan a QR code once, and your TOTP codes live alongside the password they protect — no app switching.
-
-- Scan setup QR codes with the built-in camera scanner
-- Live 30-second countdown with automatic code refresh
-- One-tap copy to clipboard
-
-### OCR Credential Capture
-Point your camera at a printed password, a screen showing credentials, or a physical token card, and 1Key extracts the text using on-device ML Kit OCR — no image is uploaded. The recognised text is pre-filled into the credential form for you to review and save. Everything runs locally on the device.
-
-### Backup & Import
-- Export your vault as an encrypted `.1key` file (AES-256-GCM with Argon2id key derivation, timestamp and vault-version bound into the auth tag) or plain CSV/JSON
-- Encrypted exports require your master password to restore — no password, no access
-- Import from 1Key backups or directly from other password managers
-
-**Supported import sources:**
-| App | Format |
-|-----|--------|
-| Google Passwords | CSV |
-| LastPass | CSV |
-| KeePass | CSV |
-| Safari / iCloud Keychain | CSV |
-| 1Password | CSV |
-| Dashlane | CSV |
-| NordPass | CSV |
-
-The importer auto-detects format and column headers — no manual mapping required. Duplicate credentials are detected and skipped.
-
-### Unlock Options
-
-- **Master password** — always available as the primary fallback
-- **Biometric** — fingerprint or face unlock backed by hardware-secure key; requires master-password confirmation to enable
-- **PIN** — 6-digit PIN for quick access; resets to master password if removed
-- **Background auto-lock** — locks when the app moves to the background. Options: Immediate (default), 30 seconds, 1 minute, 5 minutes
-- **Inactivity auto-lock** — locks when the app is in the foreground but idle. Options: Never, 30 seconds, 1 minute, 5 minutes (default), 15 minutes
-- **Periodic master-password recheck** — optionally require master password every 48 hours / 3 days / 1 week / 3 weeks even when biometric or PIN is enabled
-- **Tiered attempt limiting** — 3, 5, and 10 wrong attempts on master password or PIN trigger 30-second, 5-minute, and 1-hour cooldowns respectively. Counters survive process kills.
 
 ---
 
