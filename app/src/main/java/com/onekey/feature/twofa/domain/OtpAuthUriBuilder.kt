@@ -1,7 +1,6 @@
 package com.onekey.feature.twofa.domain
 
 import android.net.Uri
-import com.onekey.core.domain.model.OtpAlgorithm
 import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
 
@@ -66,12 +65,4 @@ object OtpAuthUriBuilder {
     private const val HOST_TOTP = "totp"
     private const val HOST_HOTP = "hotp"
     private const val STEAM_ISSUER = "Steam"
-
-    /**
-     * Defensive helper used as a stable reference from tests and the exporter:
-     * tells whether [OtpAlgorithm] handling will round-trip cleanly. All current
-     * variants do; the helper exists to make a future addition explicit.
-     */
-    fun isAlgorithmKnown(algorithm: OtpAlgorithm): Boolean =
-        OtpAlgorithm.entries.contains(algorithm)
 }

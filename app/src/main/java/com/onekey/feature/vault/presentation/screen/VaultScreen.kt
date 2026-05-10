@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -320,7 +321,7 @@ internal fun AddCredentialBottomSheet(
             ListItem(
                 leadingContent = {
                     Icon(
-                        Icons.Default.Label,
+                        Icons.AutoMirrored.Filled.Label,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -461,5 +462,5 @@ internal fun tagIcon(name: String) = when (name) {
     "Database"     -> Icons.Default.Storage
     "Email Account"-> Icons.Default.Email
     "Server"       -> Icons.Default.Computer
-    else           -> Icons.Default.Label
+    else           -> Icons.AutoMirrored.Filled.Label
 }

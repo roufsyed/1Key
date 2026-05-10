@@ -27,6 +27,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.filled.StickyNote2
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -1171,13 +1173,13 @@ private fun PreviewPhaseBody(
                     ) {
                         onOptsChange(opts.copy(deriveTitleFromUrl = it))
                     }
-                    FieldToggleRow("Notes", Icons.Default.StickyNote2, opts.notes) {
+                    FieldToggleRow("Notes", Icons.AutoMirrored.Filled.StickyNote2, opts.notes) {
                         onOptsChange(opts.copy(notes = it))
                     }
                     FieldToggleRow("2FA / TOTP secret", Icons.Default.Shield, opts.totp) {
                         onOptsChange(opts.copy(totp = it))
                     }
-                    FieldToggleRow("Categories / tags", Icons.Default.Label, opts.tags) {
+                    FieldToggleRow("Categories / tags", Icons.AutoMirrored.Filled.Label, opts.tags) {
                         onOptsChange(opts.copy(tags = it))
                     }
                     if (preview.customFieldKeys.isEmpty()) {
@@ -1851,7 +1853,7 @@ private fun PreviewCredentialCard(
             AnimatedRow(visible = opts.notes && credential.notes.isNotBlank()) {
                 val preview = if (credential.notes.length > 60)
                     credential.notes.take(60) + "…" else credential.notes
-                PreviewFieldRow(Icons.Default.StickyNote2, preview)
+                PreviewFieldRow(Icons.AutoMirrored.Filled.StickyNote2, preview)
             }
             AnimatedRow(visible = opts.totp && credential.otpParams != null) {
                 PreviewFieldRow(Icons.Default.Shield, "2FA / TOTP enabled")
@@ -1938,7 +1940,7 @@ private fun previewTypeIcon(type: CredentialType) = when (type) {
     CredentialType.DATABASE -> Icons.Default.Storage
     CredentialType.EMAIL -> Icons.Default.Email
     CredentialType.SERVER -> Icons.Default.Computer
-    CredentialType.OTHER -> Icons.Default.Label
+    CredentialType.OTHER -> Icons.AutoMirrored.Filled.Label
 }
 
 @Composable

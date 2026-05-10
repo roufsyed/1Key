@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalGetImage::class)
-
 package com.onekey.feature.twofa.presentation.screen
 
 import android.annotation.SuppressLint
@@ -7,7 +5,6 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -193,10 +190,9 @@ private fun CameraPreviewWithOverlay(
                     .build()
                     .also { analysis ->
                         analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                            // The @file:OptIn at the top of this file authorises every
-                            // ExperimentalGetImage call site; AGP 8.7's lint runner has a
-                            // known false positive against `imageProxy.image` accessed
-                            // inside nested lambdas, so we suppress at the offending line.
+                            // CameraX's ExperimentalGetImage uses androidx RequiresOptIn,
+                            // so a Kotlin @OptIn is a no-op. AGP lint still flags
+                            // imageProxy.image inside this nested lambda — suppress here.
                             @SuppressLint("UnsafeOptInUsageError")
                             val mediaImage = imageProxy.image
                             if (mediaImage != null) {

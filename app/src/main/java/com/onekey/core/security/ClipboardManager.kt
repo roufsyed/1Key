@@ -75,10 +75,4 @@ class SecureClipboardManager @Inject constructor(private val context: Context) {
             }
         }
     }
-
-    fun cancelScheduledClear() {
-        clearJob?.cancel()
-        clearJob = null
-        _countdown.value = null
-    }
 }

@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalGetImage::class)
-
 package com.onekey.feature.vault.presentation.screen
 
 import android.content.pm.PackageManager
@@ -24,6 +22,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -124,7 +123,7 @@ private fun typeIcon(type: CredentialType) = when (type) {
     CredentialType.DATABASE -> Icons.Default.Storage
     CredentialType.EMAIL -> Icons.Default.Email
     CredentialType.SERVER -> Icons.Default.Computer
-    CredentialType.OTHER -> Icons.Default.Label
+    CredentialType.OTHER -> Icons.AutoMirrored.Filled.Label
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
