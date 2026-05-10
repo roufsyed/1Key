@@ -237,4 +237,12 @@ No `INTERNET`. No `READ_CONTACTS`. No `ACCESS_FINE_LOCATION`. Nothing else. On A
 
 ## License
 
-Copyright © 2026 Rouf Syed. All rights reserved — see [LICENSE](LICENSE) for details.
+1Key is licensed under the [GNU General Public License v3.0](LICENSE). You are free to use, study, modify, and redistribute it under the terms of that license.
+
+The name **"1Key"**, the wordmark, and the application icon are not licensed under the GPL and may not be used in derivative works — see [TRADEMARKS.md](TRADEMARKS.md).
+
+## On forking
+
+1Key is licensed GPL-3.0 and you have every legal right to fork it. We ask that you don't, unless 1Key is unmaintained or is going somewhere you can't follow. Bug reports, security audits, and pull requests against this repository are far more useful to users than a parallel build.
+
+If you do fork, you must rename the app, change the package ID, and remove the 1Key icon and wordmark per [TRADEMARKS.md](TRADEMARKS.md) — users deserve to know whose binary they are trusting with their vault.
