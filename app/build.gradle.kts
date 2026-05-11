@@ -130,15 +130,17 @@ dependencies {
     implementation(libs.camerax.view)
 
     // ML Kit Barcode Scanning + Text Recognition (on-device, Latin script).
-    // Both pull in com.google.android.datatransport (Firelog) transitively, which adds
-    // INTERNET + ACCESS_NETWORK_STATE permissions and queues telemetry locally. We
-    // physically exclude that subgraph — inference runs on-device and never needs it.
-    implementation(libs.mlkit.barcode) {
-        exclude(group = "com.google.android.datatransport")
-    }
-    implementation(libs.mlkit.text.recognition) {
-        exclude(group = "com.google.android.datatransport")
-    }
+    // These transitively pull in com.google.android.datatransport (Firelog), which
+    // injects INTERNET + ACCESS_NETWORK_STATE permissions. We CANNOT exclude the
+    // transport subgraph at the Gradle level: BarcodeScanning.getClient() has a
+    // static class-init reference to com.google.android.datatransport.cct.CCTDestination,
+    // and excluding it causes a NoClassDefFoundError at runtime when the QR scanner
+    // opens. Instead, we keep the classes in the APK so ML Kit loads, and strip the
+    // INTERNET / ACCESS_NETWORK_STATE permissions from the merged manifest via
+    // tools:node="remove" in AndroidManifest.xml. The Firelog Uploader still runs
+    // but the OS blocks every socket attempt — telemetry cannot exfiltrate.
+    implementation(libs.mlkit.barcode)
+    implementation(libs.mlkit.text.recognition)
 
     // Argon2id — Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
     implementation(libs.argon2kt)

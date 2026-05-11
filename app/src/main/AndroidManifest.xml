@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- For Biometric authentication -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <!-- For QR Scanning in TOTP -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- For Creating encrypted backups and import on manual user intervention only-->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+
+    <!-- ML Kit's transitive Firelog transport injects INTERNET + ACCESS_NETWORK_STATE
+         into the merged manifest. We keep the transport classes in the APK (otherwise
+         BarcodeScanning.getClient() crashes with NoClassDefFoundError on CCTDestination)
+         but strip the permissions so the OS blocks any actual network call. -->
+    <!-- This is done to stay true to our claim of 0 network calls -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
     <application
         android:name=".OneKeyApp"
