@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Colors used by RemoteViews surfaces (autofill chips). RemoteViews are
+    inflated in the system Autofill UI's process, where theme attrs do NOT
+    resolve, so every colour has to be a real @color resource. -night
+    variants live in values-night/ for system dark mode.
+-->
+<resources>
+    <!-- Autofill chip palette — light mode -->
+    <color name="autofill_chip_title">#0B1220</color>
+    <color name="autofill_chip_subtitle">#5B6470</color>
+    <color name="autofill_chip_accent">#1A56DB</color>
+    <color name="autofill_chip_icon_bg">#1A56DB</color>
+    <color name="autofill_chip_icon_fg">#FFFFFF</color>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    1Key brand mark for the autofill chip — a simplified key glyph derived
+    from the launcher foreground. Sized at 24dp viewBox so the system
+    renderer scales it cleanly into the 18-22dp icon slot. Fill is the
+    foreground colour resolved at runtime via the @color qualifier set, so
+    the same vector works on light and dark dropdown surfaces.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="@color/autofill_chip_icon_fg">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,3 C8.13,3 5,6.13 5,10 C5,13.03 6.93,15.6 9.6,16.6 L9.6,18.8 L7.8,18.8 L7.8,21 L9.6,21 L9.6,19.7 L11.4,19.7 L11.4,18.4 L12.6,18.4 L12.6,16.6 C15.27,15.6 17.2,13.03 17.2,10 C17.2,6.13 14.07,3 12,3 Z M12,5 C13.65,5 15.2,7.24 15.2,10 C15.2,12.76 13.65,15 12,15 C10.35,15 8.8,12.76 8.8,10 C8.8,7.24 10.35,5 12,5 Z M12,7.6 C10.86,7.6 9.93,8.53 9.93,9.67 C9.93,10.81 10.86,11.74 12,11.74 C13.14,11.74 14.07,10.81 14.07,9.67 C14.07,8.53 13.14,7.6 12,7.6 Z" />
+</vector>

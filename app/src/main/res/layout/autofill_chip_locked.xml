@@ -1,23 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Single-line chip for the locked-vault / search fallback states.
+    Single-line chip for the locked-vault and search affordances rendered
+    inside the system Autofill dropdown.
 
-    Rendered inside the system AutofillService dropdown — RemoteViews only.
-    No themed attrs allowed; the OS hosts this in its own process with no
-    access to the app's resource set. Colours are explicit (matches the
-    onekey primary palette manually).
+    Layout constraints:
+      - Renders in the system Autofill UI's process via RemoteViews. Theme
+        attrs do NOT resolve there; every colour is an explicit @color (with
+        a values-night override for dark dropdowns).
+      - Vector drawables are safe at our minSdk (26 ≥ 24).
+      - Only a small subset of View types is supported by RemoteViews:
+        LinearLayout / FrameLayout / TextView / ImageView are all fine.
+
+    Visual: 32dp rounded-square brand container on the left (1Key blue) with
+    a centred white key glyph; bold blue label on the right. Single line so
+    long captions get ellipsised rather than wrapping over two rows (which
+    would inflate the dropdown height).
 -->
-<TextView
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/autofill_chip_label"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="14dp"
-    android:textColor="#1A56DB"
-    android:textSize="15sp"
-    android:textStyle="bold"
-    android:drawableStart="@android:drawable/sym_def_app_icon"
-    android:drawablePadding="10dp"
+    android:orientation="horizontal"
     android:gravity="center_vertical"
-    tools:ignore="UseAppTint"
-    xmlns:tools="http://schemas.android.com/tools" />
+    android:paddingStart="14dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <FrameLayout
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:background="@drawable/bg_autofill_chip_icon">
+
+        <ImageView
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_autofill_chip_key"
+            android:importantForAccessibility="no" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/autofill_chip_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:textColor="@color/autofill_chip_accent"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:ellipsize="end"
+        android:maxLines="1" />
+</LinearLayout>

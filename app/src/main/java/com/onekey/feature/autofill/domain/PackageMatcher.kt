@@ -5,7 +5,6 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.CredentialRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,22 +46,9 @@ class PackageMatcher @Inject constructor(
         val result = withContext(Dispatchers.Default) { credentialRepository.getAllCredentials() }
         val all = (result as? AppResult.Success)?.data ?: return emptyList()
         return all.asSequence()
-            .filter { extractHost(it.url) == host }
+            .filter { HostExtractor.hostOf(it.url) == host }
             .take(limit)
             .toList()
-    }
-
-    private fun extractHost(rawUrl: String?): String? {
-        if (rawUrl.isNullOrBlank()) return null
-        val cleaned = rawUrl.trim()
-        // `URI` requires a scheme. Synthesise `https://` so bare hosts parse.
-        val withScheme = if (cleaned.contains("://")) cleaned else "https://$cleaned"
-        return try {
-            val parsed = URI(withScheme)
-            parsed.host?.lowercase()?.removePrefix("www.")
-        } catch (_: Throwable) {
-            null
-        }
     }
 
     private companion object {

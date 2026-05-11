@@ -154,6 +154,10 @@ dependencies {
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    // Virtual-time TestScheduler so the autofill VM's debounce/flow plumbing
+    // can be exercised deterministically without real `delay`s slowing the
+    // suite to a crawl.
+    testImplementation(libs.kotlinx.coroutines.test)
 
     // Custom lint rules. `lintChecks` puts the rules on this module's lint
     // classpath; AGP's lint task discovers them via the registry in the lint

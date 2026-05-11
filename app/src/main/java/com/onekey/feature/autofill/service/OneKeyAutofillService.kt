@@ -115,7 +115,7 @@ class OneKeyAutofillService : AutofillService() {
             // Locked vault: single auth chip that bounces through the unlock
             // activity. The activity will rebuild a Dataset with real values
             // and return it via AutofillManager.EXTRA_AUTHENTICATION_RESULT.
-            val pendingIntent = buildUnlockPendingIntent(parsed)
+            val pendingIntent = buildUnlockPendingIntent(parsed, startInSearch = false)
             builder.addDataset(entry.datasetBuilder().buildLockedDataset(parsed, pendingIntent))
         } else {
             val matches = entry.packageMatcher().findMatches(parsed)
@@ -124,9 +124,12 @@ class OneKeyAutofillService : AutofillService() {
                     builder.addDataset(entry.datasetBuilder().buildCredentialDataset(parsed, credential))
                 }
             }
-            // Trailing chip: route through the unlock activity (which detects
-            // already-unlocked state and lands directly on the picker).
-            val pendingIntent = buildUnlockPendingIntent(parsed)
+            // Trailing chip: route through the unlock activity and land
+            // directly in search mode. The user already saw the exact-host
+            // matches above; tapping this chip means they want to search the
+            // rest of their vault (e.g. credentials saved under a different
+            // host name).
+            val pendingIntent = buildUnlockPendingIntent(parsed, startInSearch = true)
             builder.addDataset(entry.datasetBuilder().buildSearchDataset(parsed, pendingIntent))
         }
 
@@ -144,7 +147,7 @@ class OneKeyAutofillService : AutofillService() {
 
     private fun buildSearchOnlyResponse(parsed: ParsedFields, saveInfo: android.service.autofill.SaveInfo?): FillResponse? {
         return runCatching {
-            val pi = buildUnlockPendingIntent(parsed)
+            val pi = buildUnlockPendingIntent(parsed, startInSearch = true)
             val builder = FillResponse.Builder()
                 .addDataset(entry.datasetBuilder().buildSearchDataset(parsed, pi))
             saveInfo?.let { builder.setSaveInfo(it) }
@@ -152,9 +155,13 @@ class OneKeyAutofillService : AutofillService() {
         }.getOrNull()
     }
 
-    private fun buildUnlockPendingIntent(parsed: ParsedFields): PendingIntent {
+    private fun buildUnlockPendingIntent(parsed: ParsedFields, startInSearch: Boolean): PendingIntent {
         val intent = Intent(applicationContext, AutofillUnlockActivity::class.java).apply {
             putExtra(AutofillUnlockActivity.EXTRA_PARSED_FIELDS, parsed)
+            // Distinguishes the trailing "Search 1Key" chip from the
+            // locked-vault chip — the activity reads this from its initial
+            // Intent and lands directly in search mode when true.
+            putExtra(AutofillUnlockActivity.EXTRA_START_IN_SEARCH, startInSearch)
         }
         // FLAG_MUTABLE: required so the system can append
         // AutofillManager.EXTRA_AUTHENTICATION_RESULT before delivering.

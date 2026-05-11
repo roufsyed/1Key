@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Dark-mode overrides for the autofill chip palette. The system Autofill UI
+    runs whatever theme the user's device is in; reading the same @color names
+    here ensures the chip is legible against both light and dark dropdown
+    backgrounds.
+
+    Title/subtitle lighten to near-white / mid-grey for readability; the
+    accent and icon background brighten slightly so they pop against the dark
+    surface without clashing with the lighter foreground text.
+-->
+<resources>
+    <color name="autofill_chip_title">#F5F7FA</color>
+    <color name="autofill_chip_subtitle">#A0A8B5</color>
+    <color name="autofill_chip_accent">#7BA9FF</color>
+    <color name="autofill_chip_icon_bg">#2A5FE0</color>
+    <color name="autofill_chip_icon_fg">#FFFFFF</color>
+</resources>
