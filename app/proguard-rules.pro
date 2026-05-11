@@ -37,6 +37,24 @@
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory
 -keepnames class kotlinx.coroutines.android.AndroidDispatcherFactory
 
+# Autofill — the framework binds OneKeyAutofillService by name from the
+# manifest. Stripping or renaming the class breaks the bind. The activities
+# are referenced from the manifest too so they're already kept by the AGP
+# default rules; we only need an explicit rule for the service.
+-keep class com.onekey.feature.autofill.service.OneKeyAutofillService { *; }
+
+# Parcelable @Parcelize types crossing process boundaries. ParsedFields rides
+# Intent extras between OneKeyAutofillService (our process) and
+# AutofillUnlockActivity (also our process, but launched via PendingIntent so
+# the OS handles the parcel). AutofillField is its nested member. R8's default
+# Parcelable rules cover most cases, but @Parcelize-generated CREATORs
+# occasionally lose their writeToParcel signature under aggressive shrinking
+# — this keep prevents the regression entirely.
+-keep class com.onekey.feature.autofill.domain.ParsedFields { *; }
+-keep class com.onekey.feature.autofill.domain.AutofillField { *; }
+-keep class com.onekey.feature.autofill.domain.AutofillField$* { *; }
+-keep class com.onekey.feature.autofill.domain.AutofillScenario { *; }
+
 # Note on what's intentionally absent:
 #   CameraX, ML Kit (barcode + text recognition), OpenCSV, Hilt's generated
 #   components, and the Compose runtime all ship their own consumer-rules.pro

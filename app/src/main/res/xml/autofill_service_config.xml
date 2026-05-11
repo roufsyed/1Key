@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    AutofillService metadata.
+
+    v1 deliberately omits:
+      - `supportsInlineSuggestions`: deferred. Path-A ships system-dropdown
+        chips only; inline IME suggestions land in v1.1.
+      - `<compatibility-package>`: deferred. Compat mode is needed for
+        browsers that don't expose autofill hints natively. Modern Chrome
+        / Firefox / Edge work without it; older or OEM browsers fall through
+        until we curate a list.
+
+    `settingsActivity` deep-links from the system Autofill panel into 1Key's
+    own autofill settings.
+-->
+<autofill-service
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsInlineSuggestions="false"
+    android:settingsActivity="com.onekey.MainActivity" />

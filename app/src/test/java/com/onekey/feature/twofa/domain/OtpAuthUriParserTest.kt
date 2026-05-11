@@ -1,5 +1,6 @@
 package com.onekey.feature.twofa.domain
 
+import android.app.Application
 import com.onekey.core.domain.model.OtpAlgorithm
 import com.onekey.core.domain.model.OtpType
 import org.junit.Assert.assertEquals
@@ -17,9 +18,13 @@ import org.robolectric.annotation.Config
  * `@Config(sdk = [34])` pins Robolectric to API 34 — the highest its 4.13
  * release supports. Our `compileSdk` is 35, but the URI parsing code path
  * doesn't depend on any post-34 platform behaviour, so dropping back is safe.
+ *
+ * `application = Application::class` bypasses HiltAndroidApp; the real
+ * OneKeyApp triggers EncryptedSharedPreferences provisioning at startup,
+ * which Robolectric's shadow KeyStore cannot resolve.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], application = Application::class)
 class OtpAuthUriParserTest {
 
     @Test fun parses_minimal_totp_uri() {

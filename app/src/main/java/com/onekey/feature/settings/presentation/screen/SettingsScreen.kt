@@ -51,6 +51,7 @@ fun SettingsScreen(
     onVaultReset: () -> Unit,
     onGeneral: () -> Unit,
     onSecurity: () -> Unit,
+    onAutofill: () -> Unit,
     onBackup: () -> Unit,
     onPrivacyPolicy: () -> Unit,
     onFaq: () -> Unit,
@@ -134,6 +135,7 @@ fun SettingsScreen(
                 SettingsDestination.PrivacyPolicy -> onPrivacyPolicy()
                 SettingsDestination.SetupPin -> onSetupPin()
                 SettingsDestination.ChangePassword -> onChangePassword()
+                SettingsDestination.Autofill -> onAutofill()
             }
             is SettingsAction.OpenDialogOn -> when (action.dialogId) {
                 SettingsDialogId.DeleteVault -> showDeleteVaultDialog = true
@@ -207,6 +209,13 @@ fun SettingsScreen(
                         title = "Security",
                         subtitle = "Unlock methods, auto-lock, master password",
                         onClick = onSecurity,
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsMenuRow(
+                        icon = Icons.Default.Keyboard,
+                        title = "Autofill",
+                        subtitle = "Fill saved logins into other apps and websites",
+                        onClick = onAutofill,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(

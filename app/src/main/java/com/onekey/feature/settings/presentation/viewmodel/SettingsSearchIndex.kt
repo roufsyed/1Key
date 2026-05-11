@@ -15,7 +15,7 @@ sealed class SettingsAction {
 }
 
 enum class SettingsDestination {
-    General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword
+    General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword, Autofill
 }
 
 // Only dialogs whose state lives in SettingsScreen itself.
@@ -47,6 +47,7 @@ object SettingsHighlightKeys {
     const val RESTORE_LAST_SCREEN = "restore_last_screen"
     const val MASTER_PASSWORD_RECHECK = "master_password_recheck"
     const val ALLOW_SCREENSHOTS = "allow_screenshots"
+    const val AUTOFILL_ENABLED = "autofill_enabled"
 }
 
 internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
@@ -196,6 +197,16 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         keywords = listOf("screenshot", "screen record", "recent apps", "capture"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
         highlightKey = SettingsHighlightKeys.ALLOW_SCREENSHOTS,
+    ),
+
+    // ── Autofill ─────────────────────────────────────────────────────────────
+    SettingsEntry(
+        title = "Autofill",
+        subtitle = "Fill saved logins into other apps and websites",
+        sectionLabel = "Autofill",
+        keywords = listOf("autofill", "fill", "input method", "service", "auto-fill", "password fill"),
+        action = SettingsAction.Navigate(SettingsDestination.Autofill),
+        highlightKey = SettingsHighlightKeys.AUTOFILL_ENABLED,
     ),
 
     // ── Backup ───────────────────────────────────────────────────────────────

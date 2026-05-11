@@ -42,6 +42,7 @@ import com.onekey.feature.settings.presentation.screen.ManageCategoriesScreen
 import com.onekey.feature.settings.presentation.screen.SettingsFaqScreen
 import com.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
 import com.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScreen
+import com.onekey.feature.settings.presentation.screen.SettingsAutofillScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
@@ -73,6 +74,7 @@ sealed class Screen(val route: String) {
     data object RecycleBin : Screen("recycle_bin")
     data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
+    data object SettingsAutofill : Screen("settings/autofill")
     data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
     data object SettingsFaq : Screen("settings/faq")
     data object ManageCategories : Screen("manage_categories")
@@ -278,6 +280,7 @@ fun OneKeyNavGraph(
                         },
                         onGeneral = { navController.navigate(Screen.SettingsGeneral.route) },
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
+                        onAutofill = { navController.navigate(Screen.SettingsAutofill.route) },
                         onBackup = { navController.navigate(Screen.Backup.route) },
                         onPrivacyPolicy = { navController.navigate(Screen.SettingsPrivacyPolicy.route) },
                         onFaq = { navController.navigate(Screen.SettingsFaq.route) },
@@ -297,6 +300,10 @@ fun OneKeyNavGraph(
                         onSetupPin = { navController.navigate(Screen.SetupPin.route) },
                         onChangePassword = { navController.navigate(Screen.ChangePassword.route) },
                     )
+                }
+
+                composable(Screen.SettingsAutofill.route) {
+                    SettingsAutofillScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.SettingsPrivacyPolicy.route) {

@@ -1,5 +1,6 @@
 package com.onekey.feature.twofa.domain
 
+import android.app.Application
 import com.onekey.core.domain.model.OtpAlgorithm
 import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
@@ -16,10 +17,12 @@ import org.robolectric.annotation.Config
  * the contract the plaintext exporter relies on for backup → restore safety.
  *
  * `@Config(sdk = [34])` pins Robolectric to API 34; see [OtpAuthUriParserTest]
- * for rationale.
+ * for rationale. `application = Application::class` bypasses HiltAndroidApp,
+ * which would otherwise eagerly provision EncryptedSharedPreferences (an
+ * AndroidKeyStore dependency Robolectric's shadow KeyStore can't resolve).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], application = Application::class)
 class OtpAuthUriBuilderTest {
 
     @Test fun roundtrip_default_totp() {

@@ -44,6 +44,7 @@ private val KEY_RECYCLE_BIN_ENABLED = booleanPreferencesKey("recycle_bin_enabled
 private val KEY_LOCK_REASON_CONTEXT = stringPreferencesKey("lock_reason_context")
 private val KEY_RESTORE_LAST_SCREEN_ON_UNLOCK = booleanPreferencesKey("restore_last_screen_on_unlock")
 private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
+private val KEY_AUTOFILL_ENABLED = booleanPreferencesKey("autofill_enabled")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -191,6 +192,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean) {
         dataStore.edit { it[KEY_RESTORE_LAST_SCREEN_ON_UNLOCK] = enabled }
+    }
+
+    override fun isAutofillEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_AUTOFILL_ENABLED] ?: true }.distinctUntilChanged()
+
+    override suspend fun setAutofillEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_AUTOFILL_ENABLED] = enabled }
     }
 
     override fun isVaultFooterVisible(): Flow<Boolean> =

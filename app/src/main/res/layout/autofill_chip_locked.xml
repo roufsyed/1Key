@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Single-line chip for the locked-vault / search fallback states.
+
+    Rendered inside the system AutofillService dropdown — RemoteViews only.
+    No themed attrs allowed; the OS hosts this in its own process with no
+    access to the app's resource set. Colours are explicit (matches the
+    onekey primary palette manually).
+-->
+<TextView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/autofill_chip_label"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="14dp"
+    android:textColor="#1A56DB"
+    android:textSize="15sp"
+    android:textStyle="bold"
+    android:drawableStart="@android:drawable/sym_def_app_icon"
+    android:drawablePadding="10dp"
+    android:gravity="center_vertical"
+    tools:ignore="UseAppTint"
+    xmlns:tools="http://schemas.android.com/tools" />

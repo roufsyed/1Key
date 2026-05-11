@@ -41,5 +41,70 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+            Autofill unlock activity. Launched by the system through a
+            PendingIntent attached to a Dataset.setAuthentication chip when
+            the vault is locked, or directly when the user taps the "Search
+            1Key" trailing chip after we already produced match Datasets.
+
+            exported=false: PendingIntent retains our app identity at delivery
+            time, so the system does not need component-level export.
+            excludeFromRecents=true: this is a transient unlock surface — it
+            must not appear in the user's recent-apps thumbnail strip.
+            taskAffinity="" plus launchMode=singleInstance: keeps the autofill
+            UI out of MainActivity's task stack and guarantees only one
+            instance regardless of how many fields the user retries on.
+        -->
+        <activity
+            android:name=".feature.autofill.presentation.AutofillUnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.OneKey" />
+
+        <!--
+            Autofill save activity. Launched by OneKeyAutofillService.onSaveRequest
+            (NOT by the system directly), running inside our own process, so
+            exported=false is correct.
+
+            Same task-isolation rationale as the unlock activity.
+        -->
+        <activity
+            android:name=".feature.autofill.presentation.AutofillSaveActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.OneKey" />
+
+        <!--
+            AutofillService.
+
+            BIND_AUTOFILL_SERVICE is a signature-or-system permission only the
+            OS holds; requiring it on the <service> blocks any non-system
+            caller from binding (which would otherwise let any app receive
+            the user's structure-walking output).
+
+            exported=true: required so the framework can resolve the
+            component.
+            directBootAware=false: the vault key is unavailable before user
+            unlock anyway; binding pre-unlock would just be a no-op.
+        -->
+        <service
+            android:name=".feature.autofill.service.OneKeyAutofillService"
+            android:exported="true"
+            android:directBootAware="false"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service_config" />
+        </service>
     </application>
 </manifest>

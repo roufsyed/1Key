@@ -38,6 +38,15 @@ interface AppPreferencesRepository {
     suspend fun setRecycleBinEnabled(enabled: Boolean)
     fun isRestoreLastScreenOnUnlock(): Flow<Boolean>
     suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean)
+    /**
+     * Soft kill-switch for the autofill service. The OS-level enablement
+     * (`AutofillManager.hasEnabledAutofillServices`) is the source of truth for whether
+     * the system routes fill requests here; this preference lets a user disable our
+     * response without first revoking us in system Settings. Defaults to `true` so
+     * users who enable the service in Settings get fills immediately.
+     */
+    fun isAutofillEnabled(): Flow<Boolean>
+    suspend fun setAutofillEnabled(enabled: Boolean)
     /** Persistent lock-reason context — survives process restart so biometric stays paused. */
     fun getLockReasonContext(): Flow<String?>
     suspend fun setLockReasonContext(context: String?)
