@@ -46,6 +46,7 @@ private val KEY_LOCK_REASON_CONTEXT = stringPreferencesKey("lock_reason_context"
 private val KEY_RESTORE_LAST_SCREEN_ON_UNLOCK = booleanPreferencesKey("restore_last_screen_on_unlock")
 private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
 private val KEY_AUTOFILL_ENABLED = booleanPreferencesKey("autofill_enabled")
+private val KEY_AUTOFILL_CATEGORY_FILTER = booleanPreferencesKey("autofill_category_filter")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -203,6 +204,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setAutofillEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_AUTOFILL_ENABLED] = enabled }
+    }
+
+    override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_AUTOFILL_CATEGORY_FILTER] ?: false }.distinctUntilChanged()
+
+    override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_AUTOFILL_CATEGORY_FILTER] = enabled }
     }
 
     override fun isVaultFooterVisible(): Flow<Boolean> =

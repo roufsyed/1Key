@@ -31,6 +31,7 @@ fun SettingsAutofillScreen(
     viewModel: AutofillSettingsViewModel = hiltViewModel(),
 ) {
     val isEnabled by viewModel.isAutofillEnabled.collectAsStateWithLifecycle()
+    val isCategoryFilterEnabled by viewModel.isCategoryFilterEnabled.collectAsStateWithLifecycle()
     val isSystemProvider by viewModel.isSystemAutofillProvider.collectAsStateWithLifecycle()
     val highlightKey by viewModel.highlightKey.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -117,6 +118,22 @@ fun SettingsAutofillScreen(
                             },
                         )
                     }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Show category filter") },
+                        supportingContent = {
+                            Text(
+                                "Add a chip row below the search field so you can narrow by tag. " +
+                                    "Off by default — most fills are resolved by host match before search."
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isCategoryFilterEnabled,
+                                onCheckedChange = { viewModel.setCategoryFilterEnabled(it) },
+                            )
+                        },
+                    )
                 }
             }
 

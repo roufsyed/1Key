@@ -5,10 +5,19 @@ import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import androidx.paging.PagingData
 import com.onekey.core.domain.model.AppResult
+import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialSortOrder
+import com.onekey.core.domain.model.InactivityLockTimeout
+import com.onekey.core.domain.model.MasterPasswordInterval
+import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.model.Tag
+import com.onekey.core.domain.model.TagWithCount
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
+import com.onekey.core.domain.repository.BiometricUnlockGate
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.domain.repository.TagRepository
 import com.onekey.feature.autofill.domain.AutofillScenario
 import com.onekey.feature.autofill.domain.PackageMatcher
 import com.onekey.feature.autofill.domain.ParsedFields
@@ -63,6 +72,8 @@ class AutofillUnlockViewModelTest {
     private lateinit var scope: TestScope
     private lateinit var auth: FakeAuthRepository
     private lateinit var repo: FakeCredentialRepository
+    private lateinit var tags: FakeTagRepository
+    private lateinit var prefs: FakeAppPreferencesRepository
     private lateinit var matcher: PackageMatcher
 
     @Before fun setup() {
@@ -70,6 +81,8 @@ class AutofillUnlockViewModelTest {
         scope = TestScope(testDispatcher)
         auth = FakeAuthRepository()
         repo = FakeCredentialRepository()
+        tags = FakeTagRepository()
+        prefs = FakeAppPreferencesRepository()
         matcher = PackageMatcher(repo)
     }
 
@@ -108,7 +121,7 @@ class AutofillUnlockViewModelTest {
                 "autofill_search_query" to "github",
             )
         )
-        val vm = AutofillUnlockViewModel(matcher, repo, auth, saved)
+        val vm = AutofillUnlockViewModel(matcher, repo, auth, tags, prefs, saved)
         assertEquals("github typed by the user must outlive the seed", "github", vm.searchQuery.value)
     }
 
@@ -298,17 +311,160 @@ class AutofillUnlockViewModelTest {
         assertEquals(listOf("live"), results)
     }
 
+    // ── tag filtering ────────────────────────────────────────────────────────
+
+    @Test fun availableTags_is_empty_when_category_filter_pref_off() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = false
+        tags.tagsWithCounts.value = listOf(tagWithCount("Banking", 3))
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"))
+        advanceUntilIdle()
+        assertTrue("Pref-off must hide tags from the chip row", vm.availableTags.value.isEmpty())
+    }
+
+    @Test fun availableTags_surfaces_repository_list_when_pref_on() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = true
+        tags.tagsWithCounts.value = listOf(tagWithCount("Banking", 5), tagWithCount("Work", 2))
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"))
+        advanceUntilIdle()
+        assertEquals(listOf("Banking", "Work"), vm.availableTags.value.map { it.tag.name })
+    }
+
+    @Test fun tag_filter_narrows_results_by_membership() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = true
+        repo.allCredentials = listOf(
+            credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
+            credential("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
+            credential("3", "HSBC", "u", "https://hsbc.com", tags = listOf("Banking")),
+        )
+        val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = true)
+        auth.unlocked.value = true
+        vm.loadSnapshot()
+        vm.onSearchQueryChanged("")
+        vm.onTagSelected("Banking")
+        advanceUntilIdle()
+        val ids = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
+            .credentials.map { it.id }
+        assertEquals(listOf("1", "3"), ids)
+    }
+
+    @Test fun tag_and_query_combine_with_AND_semantics() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = true
+        repo.allCredentials = listOf(
+            credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
+            credential("2", "Chase Cards", "u", "https://creditcards.chase.com", tags = listOf("Cards")),
+            credential("3", "HSBC", "u", "https://hsbc.com", tags = listOf("Banking")),
+        )
+        val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = true)
+        auth.unlocked.value = true
+        vm.loadSnapshot()
+        vm.onSearchQueryChanged("chase")
+        vm.onTagSelected("Banking")
+        advanceUntilIdle()
+        val ids = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
+            .credentials.map { it.id }
+        assertEquals(
+            "Tag AND query: only Chase under Banking, not Chase Cards under Cards",
+            listOf("1"),
+            ids,
+        )
+    }
+
+    @Test fun tag_filter_preserves_exact_host_ordering() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = true
+        repo.allCredentials = listOf(
+            credential("title-only", "Drive at Acme", "u", "https://drive.example.com", tags = listOf("Work")),
+            credential("substring", "Mail at Acme", "u", "https://mail.acme.com", tags = listOf("Work")),
+            credential("exact", "Acme Login", "u", "https://accounts.acme.com", tags = listOf("Work")),
+        )
+        val vm = buildVm(parsed = parsed(webDomain = "accounts.acme.com"), startInSearch = true)
+        auth.unlocked.value = true
+        vm.loadSnapshot()
+        vm.onTagSelected("Work")
+        vm.onSearchQueryChanged("acme")
+        advanceUntilIdle()
+        val ids = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
+            .credentials.map { it.id }
+        assertEquals(listOf("exact", "substring", "title-only"), ids)
+    }
+
+    @Test fun tag_change_applies_to_results() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = true
+        repo.allCredentials = listOf(
+            credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
+            credential("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
+        )
+        // startInSearch = false so the query stays empty — we're asserting
+        // that the tag selection alone narrows the result list.
+        val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = false)
+        auth.unlocked.value = true
+        vm.loadSnapshot()
+        advanceUntilIdle()
+        vm.onTagSelected("Work")
+        advanceUntilIdle()
+        val ids = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
+            .credentials.map { it.id }
+        assertEquals(listOf("2"), ids)
+    }
+
+    @Test fun tag_selection_survives_process_death() = runTest(testDispatcher) {
+        prefs.categoryFilterEnabled.value = true
+        tags.tagsWithCounts.value = listOf(tagWithCount("Banking", 1))
+        // Re-creation simulated by seeding the SavedStateHandle.
+        val vm = buildVm(
+            parsed = parsed(webDomain = "chase.com"),
+            seededSavedState = mapOf("autofill_selected_tag" to "Banking"),
+        )
+        assertEquals("Banking", vm.selectedTag.value)
+    }
+
+    @Test fun pref_off_clears_retained_tag_selection() = runTest(testDispatcher) {
+        // User had Banking selected from a prior session; pref starts ON.
+        prefs.categoryFilterEnabled.value = true
+        val vm = buildVm(
+            parsed = parsed(webDomain = "chase.com"),
+            seededSavedState = mapOf("autofill_selected_tag" to "Banking"),
+        )
+        advanceUntilIdle()
+        assertEquals("Banking", vm.selectedTag.value)
+
+        // User toggles the pref off — retained selection becomes meaningless.
+        prefs.categoryFilterEnabled.value = false
+        advanceUntilIdle()
+        assertNull(vm.selectedTag.value)
+    }
+
+    @Test fun empty_query_with_active_tag_shows_all_tag_members_alphabetical() = runTest(testDispatcher) {
+        // Empty-query + tag = full tag listing (NO 8-item recent cap), sorted alphabetically.
+        // The starter preview cap only applies to the "All" empty-query case.
+        prefs.categoryFilterEnabled.value = true
+        repo.allCredentials = (1..12).map { n ->
+            credential("$n", "Z${'a' + n - 1}", "u", "https://x$n.example.com", tags = listOf("Big"))
+        } + credential("noise", "Out of tag", "u", "https://elsewhere.example.com", tags = listOf("Other"))
+        val vm = buildVm(parsed = parsed(webDomain = "x1.example.com"), startInSearch = true)
+        auth.unlocked.value = true
+        vm.loadSnapshot()
+        vm.onSearchQueryChanged("")
+        vm.onTagSelected("Big")
+        advanceUntilIdle()
+        val list = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded).credentials
+        assertEquals("All 12 in-tag entries, no 8-cap", 12, list.size)
+        // Alphabetical by title, case-insensitive.
+        assertEquals("Za", list.first().title)
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private fun buildVm(
         parsed: ParsedFields?,
         startInSearch: Boolean = false,
+        seededSavedState: Map<String, Any?> = emptyMap(),
     ): AutofillUnlockViewModel {
         val saved = SavedStateHandle().also { h ->
             if (parsed != null) h[AutofillUnlockActivity.EXTRA_PARSED_FIELDS] = parsed
             h[AutofillUnlockActivity.EXTRA_START_IN_SEARCH] = startInSearch
+            seededSavedState.forEach { (k, v) -> h[k] = v }
         }
-        return AutofillUnlockViewModel(matcher, repo, auth, saved)
+        return AutofillUnlockViewModel(matcher, repo, auth, tags, prefs, saved)
     }
 
     private fun parsed(
@@ -330,13 +486,81 @@ class AutofillUnlockViewModelTest {
         url: String,
         updatedAt: Long = 0L,
         deletedAt: Long? = null,
+        tags: List<String> = emptyList(),
     ): Credential = Credential(
         id = id, title = title, username = username, password = "p",
         url = url, notes = "", otpParams = null,
-        tags = emptyList(), customFields = emptyList(),
+        tags = tags, customFields = emptyList(),
         createdAt = 0L, updatedAt = updatedAt,
         deletedAt = deletedAt,
     )
+
+    private fun tagWithCount(name: String, count: Int): TagWithCount =
+        TagWithCount(
+            tag = Tag(name = name, color = 0, icon = "", isDefault = false),
+            count = count,
+        )
+
+    private class FakeTagRepository : TagRepository {
+        val tagsWithCounts = MutableStateFlow<List<TagWithCount>>(emptyList())
+
+        override fun observeTags(): Flow<List<Tag>> =
+            error("unused — VM only reads observeTagsWithCounts")
+        override fun observeTagsWithCounts(): Flow<List<TagWithCount>> = tagsWithCounts
+        override suspend fun getTags(): AppResult<List<Tag>> = error("unused")
+        override suspend fun addTag(tag: Tag): AppResult<Unit> = error("unused")
+        override suspend fun deleteTag(name: String): AppResult<Unit> = error("unused")
+    }
+
+    /**
+     * Minimal preferences fake — the autofill VM only reads
+     * `isAutofillCategoryFilterEnabled()`. Everything else throws so any
+     * accidental new dependency is loud rather than silent.
+     */
+    private class FakeAppPreferencesRepository : AppPreferencesRepository {
+        val categoryFilterEnabled = MutableStateFlow(false)
+        override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = categoryFilterEnabled
+        override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) {
+            categoryFilterEnabled.value = enabled
+        }
+
+        override fun isDarkTheme(): Flow<Boolean> = error("unused")
+        override suspend fun setDarkTheme(dark: Boolean) = error("unused")
+        override fun isBiometricEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setBiometricEnabled(enabled: Boolean) = error("unused")
+        override fun isScreenshotsEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setScreenshotsEnabled(enabled: Boolean) = error("unused")
+        override fun getBackgroundLockTimeout(): Flow<BackgroundLockTimeout> = error("unused")
+        override suspend fun setBackgroundLockTimeout(timeout: BackgroundLockTimeout) = error("unused")
+        override fun getInactivityLockTimeout(): Flow<InactivityLockTimeout> = error("unused")
+        override suspend fun setInactivityLockTimeout(timeout: InactivityLockTimeout) = error("unused")
+        override fun isMasterPasswordRecheckEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setMasterPasswordRecheckEnabled(enabled: Boolean) = error("unused")
+        override fun getMasterPasswordRecheckInterval(): Flow<MasterPasswordInterval> = error("unused")
+        override suspend fun setMasterPasswordRecheckInterval(interval: MasterPasswordInterval) = error("unused")
+        override fun getLastMasterPasswordTimestamp(): Flow<Long> = error("unused")
+        override suspend fun setLastMasterPasswordTimestamp(timestamp: Long) = error("unused")
+        override fun isShowFavourites(): Flow<Boolean> = error("unused")
+        override suspend fun setShowFavourites(show: Boolean) = error("unused")
+        override fun getCredentialSortOrder(): Flow<CredentialSortOrder> = error("unused")
+        override suspend fun setCredentialSortOrder(order: CredentialSortOrder) = error("unused")
+        override fun isHideTopBarOnScroll(): Flow<Boolean> = error("unused")
+        override suspend fun setHideTopBarOnScroll(enabled: Boolean) = error("unused")
+        override fun isVaultFooterVisible(): Flow<Boolean> = error("unused")
+        override suspend fun setVaultFooterVisible(visible: Boolean) = error("unused")
+        override fun getRecycleBinRetention(): Flow<RecycleBinRetention> = error("unused")
+        override suspend fun setRecycleBinRetention(retention: RecycleBinRetention) = error("unused")
+        override fun isRecycleBinEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setRecycleBinEnabled(enabled: Boolean) = error("unused")
+        override fun isRestoreLastScreenOnUnlock(): Flow<Boolean> = error("unused")
+        override suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean) = error("unused")
+        override fun isAutofillEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setAutofillEnabled(enabled: Boolean) = error("unused")
+        override fun getLockReasonContext(): Flow<String?> = error("unused")
+        override suspend fun getLockReasonContextDirect(): String? = error("unused")
+        override suspend fun setLockReasonContext(context: String?) = error("unused")
+        override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> = error("unused")
+    }
 
     private class FakeAuthRepository : AuthRepository {
         val unlocked = MutableStateFlow(false)

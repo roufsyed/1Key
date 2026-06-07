@@ -38,11 +38,18 @@ class AutofillSettingsViewModel @Inject constructor(
     val isAutofillEnabled: StateFlow<Boolean> = appPrefs.isAutofillEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val isCategoryFilterEnabled: StateFlow<Boolean> = appPrefs.isAutofillCategoryFilterEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _isSystemAutofillProvider = MutableStateFlow(querySystemProviderStatus())
     val isSystemAutofillProvider: StateFlow<Boolean> = _isSystemAutofillProvider.asStateFlow()
 
     fun setAutofillEnabled(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setAutofillEnabled(enabled) }
+    }
+
+    fun setCategoryFilterEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setAutofillCategoryFilterEnabled(enabled) }
     }
 
     /** Re-reads the OS-level provider status. Idempotent. */

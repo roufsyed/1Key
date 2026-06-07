@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,6 +20,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -217,7 +220,6 @@ private fun UnlockGate(
     // them, and the LaunchedEffect fires again on re-unlock.
     LaunchedEffect(isUnlocked) {
         if (isUnlocked) {
-            unlockViewModel.pendingComplete = true
             unlockViewModel.loadMatches()
             unlockViewModel.loadSnapshot()
         }
@@ -354,9 +356,21 @@ private fun SearchSurface(
 ) {
     val query by unlockViewModel.searchQuery.collectAsStateWithLifecycle()
     val resultsState by unlockViewModel.searchResults.collectAsStateWithLifecycle()
+    val availableTags by unlockViewModel.availableTags.collectAsStateWithLifecycle()
+    val selectedTag by unlockViewModel.selectedTag.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    // If the active tag disappears from the available-tags list (deleted in
+    // another instance, or the category-filter pref flipped off) drop the
+    // selection silently. Falls back to "All".
+    LaunchedEffect(availableTags, selectedTag) {
+        val tag = selectedTag
+        if (tag != null && availableTags.none { it.tag.name == tag }) {
+            unlockViewModel.onTagSelected(null)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -405,6 +419,13 @@ private fun SearchSurface(
                 }
             } else null,
         )
+        if (availableTags.isNotEmpty()) {
+            TagChipRow(
+                tags = availableTags,
+                selected = selectedTag,
+                onSelect = { unlockViewModel.onTagSelected(it) },
+            )
+        }
         when (val s = resultsState) {
             AutofillUnlockViewModel.SearchState.Idle,
             AutofillUnlockViewModel.SearchState.Loading -> {
@@ -416,8 +437,7 @@ private fun SearchSurface(
             is AutofillUnlockViewModel.SearchState.Loaded -> {
                 if (s.credentials.isEmpty()) {
                     Text(
-                        text = if (query.isBlank()) "Nothing saved yet."
-                        else "No credentials match \"$query\".",
+                        text = emptyResultsCopy(query, selectedTag),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -543,3 +563,48 @@ private fun CredentialRow(
     }
 }
 
+/**
+ * Horizontally-scrolling filter chips for the autofill search screen — only
+ * rendered when the user has opted into the category filter AND has at least
+ * one tag. Single-select with tap-again-to-clear semantics: re-tapping the
+ * active chip returns to "All" (the clear-filter state).
+ */
+@Composable
+private fun TagChipRow(
+    tags: List<com.onekey.core.domain.model.TagWithCount>,
+    selected: String?,
+    onSelect: (String?) -> Unit,
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 2.dp),
+    ) {
+        item(key = "__all__") {
+            FilterChip(
+                selected = selected == null,
+                onClick = { onSelect(null) },
+                label = { Text("All") },
+                colors = FilterChipDefaults.filterChipColors(),
+            )
+        }
+        items(tags, key = { it.tag.name }) { tagWithCount ->
+            val isActive = selected == tagWithCount.tag.name
+            FilterChip(
+                selected = isActive,
+                onClick = { onSelect(if (isActive) null else tagWithCount.tag.name) },
+                label = { Text("${tagWithCount.tag.name} (${tagWithCount.count})") },
+                colors = FilterChipDefaults.filterChipColors(),
+            )
+        }
+    }
+}
+
+private fun emptyResultsCopy(query: String, tag: String?): String {
+    val q = query.trim()
+    return when {
+        q.isBlank() && tag == null -> "Nothing saved yet."
+        q.isBlank() && tag != null -> "No credentials tagged $tag."
+        tag == null -> "No credentials match \"$q\"."
+        else -> "No \"$q\" in $tag."
+    }
+}

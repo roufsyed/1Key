@@ -5,14 +5,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.TagWithCount
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.domain.repository.TagRepository
 import com.onekey.feature.autofill.domain.HostExtractor
 import com.onekey.feature.autofill.domain.PackageMatcher
 import com.onekey.feature.autofill.domain.ParsedFields
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -20,6 +24,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -49,8 +54,8 @@ import javax.inject.Inject
  *    surfaces the user's explicit cross-origin intent before any plaintext
  *    leaves 1Key's UID.
  *
- *  - Persists `pendingComplete`, `searchQuery`, and `startInSearch` into
- *    [SavedStateHandle] so process-death recovery preserves user input.
+ *  - Persists `searchQuery` and `startInSearch` into [SavedStateHandle] so
+ *    process-death recovery preserves user input.
  *
  * Threading invariant — **only** call the public `unlockWith*` methods on
  * `AuthViewModel` from this surface. Never the `verifyMasterPasswordForPinChange`
@@ -64,6 +69,8 @@ class AutofillUnlockViewModel @Inject constructor(
     private val packageMatcher: PackageMatcher,
     private val credentialRepository: CredentialRepository,
     private val authRepository: AuthRepository,
+    private val tagRepository: TagRepository,
+    private val appPreferences: AppPreferencesRepository,
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -87,14 +94,6 @@ class AutofillUnlockViewModel @Inject constructor(
     val startInSearch: Boolean =
         savedState.get<Boolean>(AutofillUnlockActivity.EXTRA_START_IN_SEARCH) ?: false
 
-    /**
-     * `pendingComplete` survives process death via SavedStateHandle. Kept for
-     * downstream observers; today no auto-pick path consumes it.
-     */
-    var pendingComplete: Boolean
-        get() = savedState.get<Boolean>(KEY_PENDING_COMPLETE) ?: false
-        set(value) { savedState[KEY_PENDING_COMPLETE] = value }
-
     // ── exact-host matches ──────────────────────────────────────────────────
 
     sealed class MatchState {
@@ -117,6 +116,31 @@ class AutofillUnlockViewModel @Inject constructor(
     /** Live query backed by SavedStateHandle so it survives process death. */
     val searchQuery: StateFlow<String> =
         savedState.getStateFlow(KEY_SEARCH_QUERY, "")
+
+    /**
+     * Active tag filter, `null` for "All". SavedStateHandle-backed so a
+     * tag the user picked survives process death exactly like the query.
+     */
+    val selectedTag: StateFlow<String?> =
+        savedState.getStateFlow<String?>(KEY_SELECTED_TAG, null)
+
+    /**
+     * Tags + usage counts surfaced as filter chips in the search screen.
+     * Empty when the category-filter pref is off — the activity uses that as
+     * its hide-the-row signal so off-by-default users see no chip strip.
+     * Eagerly stated: the autofill activity is short-lived, the upstream tag
+     * query is cheap, and a deterministic value at construction simplifies
+     * both Compose collection and unit testing.
+     */
+    val availableTags: StateFlow<List<TagWithCount>> = appPreferences
+        .isAutofillCategoryFilterEnabled()
+        .distinctUntilChanged()
+        .let { enabledFlow ->
+            combine(enabledFlow, tagRepository.observeTagsWithCounts()) { on, tags ->
+                if (!on) emptyList() else tags
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _searchResults = MutableStateFlow<SearchState>(SearchState.Idle)
     val searchResults: StateFlow<SearchState> = _searchResults.asStateFlow()
@@ -163,16 +187,31 @@ class AutofillUnlockViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
+        // When the category-filter preference is disabled, any retained tag
+        // selection is meaningless (there's no chip row to clear it from).
+        // Drop it so re-enabling the pref starts fresh.
+        appPreferences.isAutofillCategoryFilterEnabled()
+            .distinctUntilChanged()
+            .onEach { enabled ->
+                if (!enabled && savedState.get<String?>(KEY_SELECTED_TAG) != null) {
+                    savedState[KEY_SELECTED_TAG] = null
+                }
+            }
+            .launchIn(viewModelScope)
+
         // Search pipeline: cross-product the snapshot with the debounced
-        // query. Skips when locked (snapshot is null). 150ms is the same feel
-        // as the vault search.
+        // query and the tag selection. Tag changes apply immediately — they
+        // are discrete user taps, not stream-typed keystrokes. Query keeps
+        // the 150ms debounce so rapid typing doesn't thrash the filter.
         val parsed = (initial as? InitialState.Ready)?.parsed
         combine(
             _snapshot,
             searchQuery.debounce(SEARCH_DEBOUNCE_MS).distinctUntilChanged(),
-        ) { snap, q ->
+            // selectedTag is a StateFlow — already distinct by contract.
+            selectedTag,
+        ) { snap, q, tag ->
             if (snap == null) SearchState.Idle
-            else SearchState.Loaded(filterSnapshot(snap, q, parsed))
+            else SearchState.Loaded(filterSnapshot(snap, q, parsed, tag))
         }
             .onEach { _searchResults.value = it }
             .launchIn(viewModelScope)
@@ -208,6 +247,14 @@ class AutofillUnlockViewModel @Inject constructor(
 
     fun onSearchQueryChanged(q: String) {
         savedState[KEY_SEARCH_QUERY] = q
+    }
+
+    /**
+     * Sets the active tag filter, or clears it (`null` ↔ "All"). The combine
+     * pipeline reacts immediately — tag changes are not debounced.
+     */
+    fun onTagSelected(tag: String?) {
+        savedState[KEY_SELECTED_TAG] = tag
     }
 
     /**
@@ -252,16 +299,28 @@ class AutofillUnlockViewModel @Inject constructor(
         snap: List<Credential>,
         rawQuery: String,
         parsed: ParsedFields?,
+        selectedTag: String?,
     ): List<Credential> {
         val q = rawQuery.trim().lowercase()
+        val tagPredicate: (Credential) -> Boolean = { c ->
+            selectedTag == null || selectedTag in c.tags
+        }
         if (q.isEmpty()) {
-            // Empty query: a small "starter" list of recent items so the user
-            // sees something useful. We don't expose the whole vault by
-            // default — that would be the social-engineering surface.
-            return snap
+            // Empty query: behaviour depends on whether the user asserted a
+            // tag filter. With "All" we show only a small recent-items
+            // starter (limits the social-engineering surface). With a tag
+            // selected the user has positively narrowed the set — show
+            // everything in it, alphabetical, no preview cap.
+            val active = snap.asSequence()
                 .filter { it.deletedAt == null }
-                .sortedByDescending { it.updatedAt }
-                .take(EMPTY_QUERY_PREVIEW)
+                .filter(tagPredicate)
+            return if (selectedTag == null) {
+                active.sortedByDescending { it.updatedAt }
+                    .take(EMPTY_QUERY_PREVIEW)
+                    .toList()
+            } else {
+                active.sortedBy { it.title.lowercase() }.toList()
+            }
         }
         val host = parsed?.webDomain
         val matchedHost = mutableListOf<Credential>()
@@ -269,6 +328,7 @@ class AutofillUnlockViewModel @Inject constructor(
         val matchedTitleOrUser = mutableListOf<Credential>()
         snap.forEach { c ->
             if (c.deletedAt != null) return@forEach
+            if (!tagPredicate(c)) return@forEach
             val credHost = HostExtractor.hostOf(c.url)
             val hostExact = host != null && credHost == host
             val hostContains = credHost != null && credHost.contains(q)
@@ -288,8 +348,8 @@ class AutofillUnlockViewModel @Inject constructor(
     }
 
     private companion object {
-        const val KEY_PENDING_COMPLETE = "autofill_pending_complete"
         const val KEY_SEARCH_QUERY = "autofill_search_query"
+        const val KEY_SELECTED_TAG = "autofill_selected_tag"
         const val SEARCH_DEBOUNCE_MS = 150L
         const val SEARCH_LIMIT = 50
         const val EMPTY_QUERY_PREVIEW = 8
