@@ -1,5 +1,6 @@
 package com.onekey.feature.autofill.presentation
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -26,25 +27,26 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import android.widget.Toast
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.lifecycleScope
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.presentation.lockaware.LocalUserActivityPing
 import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.core.presentation.theme.OneKeyTheme
+import com.onekey.core.presentation.util.BiometricPromptController
 import com.onekey.core.security.AutoLockManager
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -58,16 +60,21 @@ import javax.inject.Inject
  *  - On a missing or already-consumed token (process death recovery), the
  *    activity finishes silently. No error UI — the system has no save flow to
  *    "fail back to" once we're outside its bottom-sheet.
- *  - Locked vault: shows a focused master-password unlock pane (same shape as
- *    [AutofillUnlockActivity]). Biometric/PIN deferred to v1.1.
+ *  - Locked vault: routes through [AutofillLockedSurface], the same shared
+ *    biometric/PIN/master-password unlock surface used by [AutofillUnlockActivity].
  *  - Unlocked: searches for an existing credential at the same host/package
  *    with the same username; if found the primary action becomes "Update".
  *
  * Window flags:
- *  - `FLAG_SECURE` is set in `onCreate` and only cleared once the screenshots
- *    preference resolves to `true` — mirrors MainActivity. The save sheet
- *    inherently shows a plaintext password label, so it must not leak to
- *    Recent Apps.
+ *  - `FLAG_SECURE` is set unconditionally and never cleared. The user's
+ *    "Allow screenshots" preference does NOT extend to autofill surfaces —
+ *    these show the captured credential pair and the unlock affordances.
+ *  - `filterTouchesWhenObscured = true` defends against overlay tap-jacking
+ *    on the unlock and save-confirm controls.
+ *
+ * The [BiometricPromptController] is activity-scoped (a member field) so a
+ * configuration change cannot drop the cancel handle while the system
+ * prompt is showing; [onDestroy] and [onNewIntent] both cancel.
  */
 @AndroidEntryPoint
 class AutofillSaveActivity : FragmentActivity() {
@@ -78,6 +85,15 @@ class AutofillSaveActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val viewModel: AutofillSaveViewModel by viewModels()
 
+    /**
+     * Activity-scoped controller for the [androidx.biometric.BiometricPrompt].
+     * See [AutofillUnlockActivity.biometricController] — same rationale: a
+     * configuration change cannot drop the cancel handle, and the controller
+     * wraps the [AutoLockManager] inactivity-suppression pair so the idle
+     * timer doesn't relock the vault mid-prompt.
+     */
+    private var biometricController: BiometricPromptController? = null
+
     companion object {
         const val EXTRA_TOKEN = "com.onekey.autofill.SAVE_TOKEN"
     }
@@ -87,17 +103,37 @@ class AutofillSaveActivity : FragmentActivity() {
         autoLockManager.onUserActivity()
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // The save activity is `singleInstance` (manifest), so a second
+        // save request would re-enter this instance with a new token while
+        // the user is still on the prior flow. Cancel the prompt and finish
+        // cleanly — the framework starts a fresh task with the new extras.
+        biometricController?.cancel()
+        setResult(RESULT_CANCELED)
+        finish()
+    }
+
+    override fun onDestroy() {
+        biometricController?.cancel()
+        biometricController = null
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Default-secure-until-hydrated, mirrors MainActivity.
+        // FLAG_SECURE unconditionally — the save sheet displays the captured
+        // username and a masked password, plus surfaces master-password /
+        // PIN unlock fields. Consistent with [AutofillUnlockActivity], the
+        // user's "Allow screenshots" preference does NOT extend to autofill
+        // surfaces, which are short-lived and surface credential data.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        lifecycleScope.launch {
-            appPrefs.isScreenshotsEnabled().collect { enabled ->
-                if (enabled) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-                else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-            }
-        }
+
+        // Defense against overlay tap-jacking on the unlock affordances.
+        window.decorView.filterTouchesWhenObscured = true
+
+        biometricController = BiometricPromptController(this, autoLockManager)
 
         val token = intent?.getStringExtra(EXTRA_TOKEN)
         if (token.isNullOrEmpty()) {
@@ -117,6 +153,7 @@ class AutofillSaveActivity : FragmentActivity() {
                     SaveGate(
                         viewModel = viewModel,
                         authViewModel = authViewModel,
+                        biometricController = biometricController!!,
                         onFinish = {
                             setResult(RESULT_OK)
                             finish()
@@ -137,6 +174,7 @@ class AutofillSaveActivity : FragmentActivity() {
 private fun SaveGate(
     viewModel: AutofillSaveViewModel,
     authViewModel: AuthViewModel,
+    biometricController: BiometricPromptController,
     onFinish: () -> Unit,
     onAbort: () -> Unit,
 ) {
@@ -161,11 +199,33 @@ private fun SaveGate(
             CenteredText("Preparing…")
         }
         AutofillSaveViewModel.SaveState.MissingCapture -> {
-            LaunchedEffect(Unit) { onAbort() }
+            // Reached when: (a) the OS killed our process between the
+            // service's store(...) and the activity's hydrate, leaving the
+            // capture buffer empty on restore; or (b) a second app's save
+            // submission overwrote the slot during a slow unlock. Either way
+            // we have nothing to save — but silently finishing leaves the
+            // user confused. A short Toast tells them to retry; the dismiss
+            // path is otherwise unchanged.
+            val ctx = LocalContext.current
+            LaunchedEffect(Unit) {
+                Toast.makeText(
+                    ctx,
+                    "Save request expired — please try again.",
+                    Toast.LENGTH_LONG,
+                ).show()
+                onAbort()
+            }
         }
         is AutofillSaveViewModel.SaveState.Hydrated -> {
             if (!isUnlocked) {
-                LockedSavePane(authViewModel = authViewModel, onAbort = onAbort)
+                AutofillLockedSurface(
+                    target = state.capture.webDomain ?: state.capture.packageName,
+                    headlineText = "Unlock 1Key to save",
+                    submitButtonLabel = "Unlock and continue",
+                    authViewModel = authViewModel,
+                    biometricController = biometricController,
+                    onAbort = onAbort,
+                )
             } else {
                 ConfirmSavePane(
                     viewModel = viewModel,
@@ -188,90 +248,6 @@ private fun CenteredText(message: String) {
         Text(text = message, style = MaterialTheme.typography.bodyMedium)
     }
 }
-
-@Composable
-private fun LockedSavePane(
-    authViewModel: AuthViewModel,
-    onAbort: () -> Unit,
-) {
-    val state by authViewModel.state.collectAsStateWithLifecycle()
-    val lockoutMs by authViewModel.passwordLockoutUntilMs.collectAsStateWithLifecycle()
-    val now = remember { System.currentTimeMillis() }
-    val isLockedOut = lockoutMs?.let { it > now } == true
-    val isLoading = state is AuthUiState.Loading
-    val errorMessage = (state as? AuthUiState.Error)?.message
-
-    var password by remember { mutableStateOf("") }
-    var visible by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = "Unlock 1Key to save",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            LockAwareTextField(
-                value = password,
-                onValueChange = { password = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                singleLine = true,
-                enabled = !isLockedOut,
-                visualTransformation = if (visible) {
-                    androidx.compose.ui.text.input.VisualTransformation.None
-                } else {
-                    PasswordVisualTransformation()
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                label = { Text("Master password") },
-            )
-            errorMessage?.let { msg ->
-                Text(
-                    text = msg,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Button(
-                onClick = { authViewModel.unlockWithPassword(password.toCharArray()) },
-                enabled = !isLockedOut && !isLoading && password.isNotEmpty(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (isLoading) "Unlocking…" else "Unlock and continue")
-            }
-            TextButton(onClick = onAbort) { Text("Cancel") }
-            TextButton(onClick = { visible = !visible }) {
-                Text(if (visible) "Hide password" else "Show password")
-            }
-            if (isLockedOut) {
-                Text(
-                    text = "Too many wrong attempts. Try again later.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-    }
-}
-
 @Composable
 private fun ConfirmSavePane(
     viewModel: AutofillSaveViewModel,

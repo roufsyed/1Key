@@ -49,6 +49,14 @@ interface AppPreferencesRepository {
     suspend fun setAutofillEnabled(enabled: Boolean)
     /** Persistent lock-reason context — survives process restart so biometric stays paused. */
     fun getLockReasonContext(): Flow<String?>
+    /**
+     * Race-free read of the persisted lock-reason context. Reads `dataStore.data.first()`
+     * directly, bypassing the cached `prefs` StateFlow that the regular getters compose
+     * on. Required by [com.onekey.core.security.LockReasonStore.latest] so a concurrent
+     * read sees writes from a just-completed [setLockReasonContext] commit immediately,
+     * with no StateFlow-collector propagation lag.
+     */
+    suspend fun getLockReasonContextDirect(): String?
     suspend fun setLockReasonContext(context: String?)
     /**
      * Reads `biometric_enabled` and `lock_reason_context` from the same Preferences

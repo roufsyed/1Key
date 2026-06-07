@@ -51,6 +51,12 @@ import javax.inject.Inject
  *
  *  - Persists `pendingComplete`, `searchQuery`, and `startInSearch` into
  *    [SavedStateHandle] so process-death recovery preserves user input.
+ *
+ * Threading invariant — **only** call the public `unlockWith*` methods on
+ * `AuthViewModel` from this surface. Never the `verifyMasterPasswordForPinChange`
+ * or `verifyCurrentPin` paths: those use the in-vault [AuthAttemptsStore]
+ * (session-scoped, scoped to a different threat model) and would route a
+ * regular unlock failure through the wrong counter.
  */
 @OptIn(FlowPreview::class)
 @HiltViewModel

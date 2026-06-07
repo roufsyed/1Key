@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
@@ -193,6 +194,9 @@ class AppPreferencesRepositoryImpl @Inject constructor(
     override suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean) {
         dataStore.edit { it[KEY_RESTORE_LAST_SCREEN_ON_UNLOCK] = enabled }
     }
+
+    override suspend fun getLockReasonContextDirect(): String? =
+        dataStore.data.first()[KEY_LOCK_REASON_CONTEXT]
 
     override fun isAutofillEnabled(): Flow<Boolean> =
         prefs.map { it[KEY_AUTOFILL_ENABLED] ?: true }.distinctUntilChanged()

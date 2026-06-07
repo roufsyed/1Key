@@ -39,15 +39,21 @@ class LockReasonStore @Inject constructor(
     @ApplicationScope appScope: CoroutineScope,
 ) {
     val reason: StateFlow<LockReason?> = appPrefs.getLockReasonContext()
-        .map { ctx ->
-            when (ctx) {
-                null -> null
-                PIN_SENTINEL -> LockReason.TooManyFailedPinAttempts
-                BIOMETRIC_SENTINEL -> LockReason.TooManyFailedBiometricAttempts
-                else -> LockReason.TooManyFailedAttempts(ctx)
-            }
-        }
+        .map(::contextToReason)
         .stateIn(appScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Reads the current reason **directly from DataStore**, bypassing the
+     * [reason] StateFlow AND the cached `prefs` StateFlow that the regular
+     * getter composes on (which would have the same propagation lag).
+     * Used by security-critical unlock paths that must see writes from a
+     * concurrent [set] without waiting for the StateFlow collector on
+     * `appScope` to propagate the next emission. `set` awaits the DataStore
+     * commit, so any [latest] call sequenced after a `set` sees the new
+     * value with no race window.
+     */
+    suspend fun latest(): LockReason? =
+        contextToReason(appPrefs.getLockReasonContextDirect())
 
     /**
      * Suspends until the DataStore write commits. Callers MUST await this before triggering
@@ -68,6 +74,13 @@ class LockReasonStore @Inject constructor(
 
     suspend fun clear() {
         appPrefs.setLockReasonContext(null)
+    }
+
+    private fun contextToReason(ctx: String?): LockReason? = when (ctx) {
+        null -> null
+        PIN_SENTINEL -> LockReason.TooManyFailedPinAttempts
+        BIOMETRIC_SENTINEL -> LockReason.TooManyFailedBiometricAttempts
+        else -> LockReason.TooManyFailedAttempts(ctx)
     }
 
     private companion object {

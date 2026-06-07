@@ -392,8 +392,6 @@ class VaultViewModelTest {
         override suspend fun setRestoreLastScreenOnUnlock(enabled: Boolean) = error("unused")
         override fun isAutofillEnabled(): Flow<Boolean> = error("unused")
         override suspend fun setAutofillEnabled(enabled: Boolean) = error("unused")
-        override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = flowOf(false)
-        override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) = error("unused")
         override fun getLockReasonContext(): Flow<String?> = error("unused")
         override suspend fun getLockReasonContextDirect(): String? = error("unused")
         override suspend fun setLockReasonContext(context: String?) = error("unused")

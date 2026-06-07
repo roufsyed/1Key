@@ -14,6 +14,7 @@ import com.onekey.core.domain.usecase.SetupMasterPasswordUseCase
 import com.onekey.core.domain.usecase.UnlockVaultUseCase
 import com.onekey.core.security.AuthAttemptsStore
 import com.onekey.core.security.AutoLockManager
+import com.onekey.core.security.BiometricAttemptTracker
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import com.onekey.core.security.PasswordAttemptTracker
@@ -68,6 +69,7 @@ class AuthViewModel @Inject constructor(
     private val authAttemptsStore: AuthAttemptsStore,
     private val passwordAttemptTracker: PasswordAttemptTracker,
     private val pinAttemptTracker: PinAttemptTracker,
+    private val biometricAttemptTracker: BiometricAttemptTracker,
 ) : ViewModel() {
 
     fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
@@ -107,7 +109,17 @@ class AuthViewModel @Inject constructor(
     private val _events = MutableSharedFlow<AuthEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<AuthEvent> = _events.asSharedFlow()
 
-    private var biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
+    /**
+     * "X biometric attempts remaining" surface for the UI. Reads through
+     * [BiometricAttemptTracker] (DataStore-backed) so the count is shared
+     * across LockScreen and the autofill activities — preventing the
+     * "rotate between surfaces to triple the budget" attack that an
+     * in-memory ViewModel field would allow.
+     */
+    val biometricAttemptsRemaining: StateFlow<Int> = biometricAttemptTracker.failureCount
+        .map { (BiometricAttemptTracker.MAX_FAILURES - it).coerceAtLeast(0) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, BiometricAttemptTracker.MAX_FAILURES)
+
     // Local counter for the in-vault Settings→Change PIN current-PIN verification.
     // The vault is already unlocked here so the threat shape is different from
     // LockScreen PIN entry — a session-scoped counter is sufficient. (LockScreen
@@ -156,7 +168,13 @@ class AuthViewModel @Inject constructor(
             // Defense-in-depth: honor the lockout even if called programmatically while
             // the UI button is disabled. This stops automated callers from bypassing
             // the per-attempt Argon2id cost by retrying before the window expires.
-            val lockoutUntil = passwordLockoutUntilMs.value
+            //
+            // Read DataStore directly — the [passwordLockoutUntilMs] StateFlow lags
+            // a concurrent [recordFailure] DataStore commit (the StateFlow collector
+            // runs on `viewModelScope`, which is one dispatcher hop behind the write).
+            // A fresh `.first()` on the underlying Flow guarantees a current value
+            // with no race window.
+            val lockoutUntil = passwordAttemptTracker.lockoutUntilMs.first()
             if (lockoutUntil != null && System.currentTimeMillis() < lockoutUntil) {
                 password.fill(' ')
                 val remainingSecs = ((lockoutUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(1L)
@@ -172,9 +190,10 @@ class AuthViewModel @Inject constructor(
                 is AppResult.Success -> {
                     passwordAttemptTracker.reset()
                     // Master password is the canonical "user has proved identity" signal.
-                    // Reset the PIN tracker too so the user isn't carrying lockout state
-                    // forward into the next session.
+                    // Reset the PIN AND biometric trackers too so the user isn't carrying
+                    // lockout state forward into the next session.
                     pinAttemptTracker.reset()
+                    biometricAttemptTracker.reset()
                     appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
                     // Successful master-password proof: release the biometric block set
                     // by a prior too-many-failures auto-lock.
@@ -197,7 +216,12 @@ class AuthViewModel @Inject constructor(
             // field while the lockout window is active, but the repository must refuse
             // independently — otherwise an automated caller (or a future code path that
             // bypasses the UI) could brute-force at full Argon2id throughput.
-            val lockoutUntil = pinLockoutUntilMs.value
+            //
+            // Read DataStore directly via `.first()` — the [pinLockoutUntilMs]
+            // StateFlow lags a concurrent [recordFailure] commit, which would let a
+            // fast retry slip through the gap on a fresh-per-Activity VM whose
+            // StateFlow seed is `null` until the first upstream emission lands.
+            val lockoutUntil = pinAttemptTracker.lockoutUntilMs.first()
             if (lockoutUntil != null && System.currentTimeMillis() < lockoutUntil) {
                 pin.fill(' ')
                 val remainingSecs = ((lockoutUntil - System.currentTimeMillis()) / 1000).coerceAtLeast(1L)
@@ -248,12 +272,39 @@ class AuthViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Unlocks the vault using a successful biometric authentication that the caller
+     * has already obtained via [androidx.biometric.BiometricPrompt].
+     *
+     * Threat-model note — **biometric is a SOFT GATE**, not a cryptographic one.
+     * The wrap key in `AuthRepositoryImpl.unlockWithBiometric` is wrapped with
+     * `setUserAuthenticationRequired(false)` (`CryptoManager.kt`), which means the
+     * Keystore will unwrap it any time the calling process can load it — no
+     * `CryptoObject` is bound to the BiometricPrompt. We rely on the prompt's UX
+     * confirmation, the lock-reason gate, and the [BiometricAttemptTracker] to
+     * approximate the security a hardware-bound key would provide.
+     *
+     * Future upgrade: if this ever moves to `setUserAuthenticationRequired(true)`
+     * plus a `BiometricPrompt.CryptoObject`, callers MUST also handle
+     * [java.security.KeyPermanentlyInvalidatedException], which the OS throws when
+     * the user enrols a new fingerprint/face after vault setup. Until then, that
+     * exception cannot fire on the current path and no catch is needed.
+     */
     fun unlockWithBiometric() {
         viewModelScope.launch {
             // Defensive — if a stale BiometricPrompt completes after we've already locked
             // out for too-many-failures, refuse the unlock. The button is hidden on
             // LockScreen when lockReason is set, but the in-flight prompt can still fire.
-            if (lockReasonStore.reason.value != null) {
+            //
+            // Use [LockReasonStore.latest] (DataStore-direct read), NOT `reason.value`
+            // (the StateFlow). The store's `set` is suspend and commits to DataStore;
+            // the StateFlow collector on `appScope` propagates the new value
+            // *asynchronously*. A concurrent [recordBiometricFailure] that just hit
+            // the 3-strike threshold could land in DataStore before this method runs
+            // but not yet be visible in `reason.value` — leaving a race window where
+            // a fast biometric success unlocks the vault despite the just-set reason.
+            // `.latest()` closes that window.
+            if (lockReasonStore.latest() != null) {
                 _state.value = AuthUiState.Error(
                     "Use your master password — biometric is paused after recent failures."
                 )
@@ -262,7 +313,7 @@ class AuthViewModel @Inject constructor(
             _state.value = AuthUiState.Loading
             _state.value = when (val result = authRepository.unlockWithBiometric()) {
                 is AppResult.Success -> {
-                    biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
+                    biometricAttemptTracker.reset()
                     AuthUiState.Unlocked
                 }
                 is AppResult.Error -> AuthUiState.Error(result.message ?: "Biometric unlock failed")
@@ -281,22 +332,34 @@ class AuthViewModel @Inject constructor(
             // Once we've already escalated to a lock reason, additional failures from a
             // still-visible BiometricPrompt are noise — the user is in master-password-only
             // mode and the count is meaningless. Don't decrement past the threshold.
-            if (lockReasonStore.reason.value != null) return@launch
+            // Read DataStore directly for the same reason `unlockWithBiometric` does.
+            if (lockReasonStore.latest() != null) return@launch
 
-            biometricAttemptsRemaining--
-            if (biometricAttemptsRemaining <= 0) {
-                biometricAttemptsRemaining = MAX_BIOMETRIC_ATTEMPTS
+            val cumulative = biometricAttemptTracker.recordFailure()
+            if (cumulative >= BiometricAttemptTracker.MAX_FAILURES) {
+                // Set the lock reason BEFORE locking so any concurrent reader of
+                // [LockReasonStore.latest] post-lock sees the new value. Both
+                // primitives are DataStore-backed and `set` is suspend, so this
+                // sequence is race-free for downstream readers.
+                //
+                // Do NOT reset the tracker here. Matches PinAttemptTracker semantics:
+                // the persistent record of "user crossed the threshold" must survive
+                // until a successful master-password proof clears it. Resetting at
+                // threshold would let a forced restart show "3 attempts remaining"
+                // again and (with the lock-reason gating) silently waste real budget
+                // on every retry burst.
                 lockReasonStore.set(LockReason.TooManyFailedBiometricAttempts)
                 authRepository.lock()
                 _state.value = AuthUiState.Error(
                     "Too many wrong biometric attempts — please use your master password."
                 )
             } else {
+                val remaining = BiometricAttemptTracker.MAX_FAILURES - cumulative
                 _state.value = AuthUiState.Error(
-                    if (biometricAttemptsRemaining == 1)
+                    if (remaining == 1)
                         "Wrong biometric — 1 attempt remaining."
                     else
-                        "Wrong biometric — $biometricAttemptsRemaining attempts remaining."
+                        "Wrong biometric — $remaining attempts remaining."
                 )
             }
         }

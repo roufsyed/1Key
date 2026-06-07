@@ -42,6 +42,7 @@ import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.presentation.lockaware.LocalUserActivityPing
 import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.core.presentation.theme.OneKeyTheme
+import com.onekey.core.presentation.util.BiometricPromptController
 import com.onekey.core.security.AutoLockManager
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
@@ -89,6 +90,17 @@ class AutofillUnlockActivity : FragmentActivity() {
     private val authViewModel: AuthViewModel by viewModels()
     private val viewModel: AutofillUnlockViewModel by viewModels()
 
+    /**
+     * Activity-scoped controller for the [androidx.biometric.BiometricPrompt].
+     * Held here (not inside Compose state) so a configuration change cannot
+     * drop the cancel handle while the system prompt is still showing. The
+     * controller also wraps the [AutoLockManager] inactivity-suppression
+     * pair so the idle timer doesn't relock the vault under a long-held
+     * prompt. Built lazily in [onCreate]; cancelled in [onDestroy] and
+     * [onNewIntent].
+     */
+    private var biometricController: BiometricPromptController? = null
+
     companion object {
         const val EXTRA_PARSED_FIELDS = "com.onekey.autofill.PARSED_FIELDS"
         const val EXTRA_START_IN_SEARCH = "com.onekey.autofill.START_IN_SEARCH"
@@ -108,8 +120,22 @@ class AutofillUnlockActivity : FragmentActivity() {
         // resolving search results against it would deliver a Dataset bound
         // to the wrong AutofillIds. Finishing forces the framework to start
         // a fresh task with the new extras.
+        //
+        // Cancel any in-flight biometric prompt FIRST so the dismissed
+        // callback fires while the activity is still alive — otherwise the
+        // BiometricFragment's callback can post into a destroyed lifecycle.
+        biometricController?.cancel()
         setResult(RESULT_CANCELED)
         finish()
+    }
+
+    override fun onDestroy() {
+        // Cancel any active biometric prompt and release the inactivity
+        // suppression. Idempotent — `cancel()` is a no-op if the prompt
+        // already terminated.
+        biometricController?.cancel()
+        biometricController = null
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -119,6 +145,15 @@ class AutofillUnlockActivity : FragmentActivity() {
         // entries via search. Keep it secure regardless of the user's
         // "Allow screenshots" preference (which was scoped to the main UI).
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+
+        // Defense against overlay tap-jacking. The autofill picker can route
+        // a credential into a different app via the dataset return; a fake
+        // overlay covering "Cancel" or "Use master password" would let an
+        // attacker steer that. The flag prevents touches with an obscured
+        // window from being delivered to the underlying view.
+        window.decorView.filterTouchesWhenObscured = true
+
+        biometricController = BiometricPromptController(this, autoLockManager)
 
         if (viewModel.initial is AutofillUnlockViewModel.InitialState.Invalid) {
             // Missing or malformed extras — finish quietly. The framework
@@ -139,6 +174,7 @@ class AutofillUnlockActivity : FragmentActivity() {
                         parsed = (viewModel.initial as AutofillUnlockViewModel.InitialState.Ready).parsed,
                         authViewModel = authViewModel,
                         unlockViewModel = viewModel,
+                        biometricController = biometricController!!,
                         startInSearch = viewModel.startInSearch,
                         onResolve = { credential ->
                             val dataset = datasetBuilder.buildCredentialDataset(
@@ -168,6 +204,7 @@ private fun UnlockGate(
     parsed: ParsedFields,
     authViewModel: AuthViewModel,
     unlockViewModel: AutofillUnlockViewModel,
+    biometricController: BiometricPromptController,
     startInSearch: Boolean,
     onResolve: (Credential) -> Unit,
     onAbort: () -> Unit,
@@ -191,7 +228,14 @@ private fun UnlockGate(
     var inSearchMode by rememberSaveable(startInSearch) { mutableStateOf(startInSearch) }
 
     when {
-        !isUnlocked -> LockedSurface(parsed = parsed, authViewModel = authViewModel, onAbort = onAbort)
+        !isUnlocked -> AutofillLockedSurface(
+            target = parsed.webDomain ?: parsed.packageName,
+            headlineText = "Unlock 1Key to fill",
+            submitButtonLabel = "Unlock and fill",
+            authViewModel = authViewModel,
+            biometricController = biometricController,
+            onAbort = onAbort,
+        )
         crossHostFor != null -> CrossHostConfirmSurface(
             parsed = parsed,
             credential = crossHostFor!!,
@@ -224,105 +268,6 @@ private fun UnlockGate(
             onOpenSearch = { inSearchMode = true },
             onAbort = onAbort,
         )
-    }
-}
-
-@Composable
-private fun LockedSurface(
-    parsed: ParsedFields,
-    authViewModel: AuthViewModel,
-    onAbort: () -> Unit,
-) {
-    val state by authViewModel.state.collectAsStateWithLifecycle()
-    val lockoutMs by authViewModel.passwordLockoutUntilMs.collectAsStateWithLifecycle()
-    val now = remember { System.currentTimeMillis() }
-    val isLockedOut = lockoutMs?.let { it > now } == true
-    val isLoading = state is AuthUiState.Loading
-
-    var password by remember { mutableStateOf("") }
-    var visible by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
-    val errorMessage = (state as? AuthUiState.Error)?.message
-
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = "Unlock 1Key to fill",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            val target = parsed.webDomain ?: parsed.packageName
-            Text(
-                text = "for $target",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            LockAwareTextField(
-                value = password,
-                onValueChange = { password = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-                singleLine = true,
-                enabled = !isLockedOut,
-                visualTransformation = if (visible) {
-                    androidx.compose.ui.text.input.VisualTransformation.None
-                } else {
-                    PasswordVisualTransformation()
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                label = { Text("Master password") },
-            )
-            errorMessage?.let { msg ->
-                Text(
-                    text = msg,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            Button(
-                onClick = {
-                    authViewModel.unlockWithPassword(password.toCharArray())
-                },
-                enabled = !isLockedOut && !isLoading && password.isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (isLoading) "Unlocking…" else "Unlock and fill")
-            }
-            TextButton(onClick = onAbort) {
-                Text("Cancel")
-            }
-            if (isLockedOut) {
-                Text(
-                    text = "Too many wrong attempts. Try again later.",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            // `visible` toggle is intentionally inline — the dedicated
-            // SecurePasswordTextField wrapper used elsewhere requires richer
-            // scaffolding; for this short-lived activity a plain
-            // LockAwareTextField + PasswordVisualTransformation is sufficient.
-            TextButton(onClick = { visible = !visible }) {
-                Text(if (visible) "Hide password" else "Show password")
-            }
-        }
     }
 }
 
@@ -597,3 +542,4 @@ private fun CredentialRow(
         )
     }
 }
+
