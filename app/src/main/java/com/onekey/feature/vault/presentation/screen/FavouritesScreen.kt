@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
+import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.onekey.feature.vault.presentation.viewmodel.FavouritesViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -43,7 +44,7 @@ fun FavouritesScreen(
     onCredentialClick: (String) -> Unit,
     viewModel: FavouritesViewModel = hiltViewModel(),
 ) {
-    val favorites by viewModel.credentials.collectAsStateWithLifecycle()
+    val listState by viewModel.listState.collectAsStateWithLifecycle()
     val selectedIds by viewModel.selectedIds.collectAsStateWithLifecycle()
     val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
     val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
@@ -55,7 +56,7 @@ fun FavouritesScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val listState = rememberLazyListState()
+    val lazyListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
     // Top bar collapses on scroll except during selection mode, where action buttons
@@ -90,7 +91,7 @@ fun FavouritesScreen(
     }
 
     LaunchedEffect(Unit) {
-        snapshotFlow { sortOrder }.drop(1).collect { listState.scrollToItem(0) }
+        snapshotFlow { sortOrder }.drop(1).collect { lazyListState.scrollToItem(0) }
     }
 
     BackHandler(enabled = isSelectionMode) {
@@ -167,72 +168,77 @@ fun FavouritesScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        val favList = favorites
-        if (favList == null) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
-            return@Scaffold
-        }
-
-        if (favList.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No favourites yet", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        "Open a credential and tap the star to add it here",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        when (val s = listState) {
+            CredentialListState.Locked,
+            CredentialListState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize().padding(padding),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
             }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-            ) {
-                val showIndexer = sortOrder == CredentialSortOrder.ALPHABETICAL
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                ) {
-                    items(
-                        items = favList,
-                        key = { it.id },
-                    ) { credential ->
-                        CredentialCard(
-                            credential = credential,
-                            isSelected = credential.id in selectedIds,
-                            onClick = {
-                                if (isSelectionMode) viewModel.toggleSelection(credential.id)
-                                else onCredentialClick(credential.id)
-                            },
-                            onLongClick = { viewModel.toggleSelection(credential.id) },
-                            onTagClick = {},
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            CredentialListState.Bypassed -> {
+                VaultTooLargeState(modifier = Modifier.padding(padding))
+            }
+            is CredentialListState.Loaded -> {
+                if (s.credentials.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("No favourites yet", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Open a credential and tap the star to add it here",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                    ) {
+                        val showIndexer = sortOrder == CredentialSortOrder.ALPHABETICAL
+                        LazyColumn(
+                            state = lazyListState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier),
+                            contentPadding = PaddingValues(vertical = 8.dp),
+                        ) {
+                            items(
+                                items = s.credentials,
+                                key = { it.id },
+                            ) { credential ->
+                                CredentialCard(
+                                    credential = credential,
+                                    isSelected = credential.id in selectedIds,
+                                    onClick = {
+                                        if (isSelectionMode) viewModel.toggleSelection(credential.id)
+                                        else onCredentialClick(credential.id)
+                                    },
+                                    onLongClick = { viewModel.toggleSelection(credential.id) },
+                                    onTagClick = {},
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                            }
+                        }
 
-                if (showIndexer) {
-                    AlphabetIndexer(
-                        letterIndex = letterIndex,
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        onLetterClick = { pos ->
-                            scope.launch { listState.scrollToItem(pos) }
-                        },
-                    )
+                        if (showIndexer) {
+                            AlphabetIndexer(
+                                letterIndex = letterIndex,
+                                modifier = Modifier.align(Alignment.CenterEnd),
+                                onLetterClick = { pos ->
+                                    scope.launch { lazyListState.scrollToItem(pos) }
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -186,25 +186,6 @@ class CredentialRepositoryImpl @Inject constructor(
             else dao.observeFavorites().map { list -> list.toDomainListSafe() }
         }.flowOn(Dispatchers.Default)
 
-    override fun observeFavoritesPaged(sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
-        keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(PagingData.empty())
-            else if (sortOrder != CredentialSortOrder.ALPHABETICAL) {
-                val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY ${sortOrder.dateOrderBy()}",
-                )
-                Pager(
-                    config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false),
-                    pagingSourceFactory = { dao.favoritesPagingSourceRaw(sql) },
-                ).flow.map { pagingData -> pagingData.toDomainPaging() }
-            } else {
-                // Alphabetical favourites - decrypt and sort by title in memory.
-                dao.observeFavorites().map { entities ->
-                    PagingData.from(entities.toDomainListSafe().sortedWith(sortOrder.comparator()))
-                }
-            }
-        }.flowOn(Dispatchers.Default)
-
     override fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
@@ -226,30 +207,6 @@ class CredentialRepositoryImpl @Inject constructor(
             if (!unlocked) flowOf(emptyList())
             else dao.observeFavorites().map { list ->
                 list.toDomainListSafe().sortedWith(sortOrder.comparator())
-            }
-        }.flowOn(Dispatchers.Default)
-
-    // The alphabet observers used to project the plaintext `title` column directly
-    // from SQL. After H1 (DB v13), v2+ rows have an empty plaintext title, so the
-    // path now decrypts the full row and projects to titles in memory. Cost is
-    // bounded by vault size - the alphabet scrollbar already shows every row.
-    override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
-        keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(emptyList())
-            else dao.observeAllForAlphabet(tag).map { entities ->
-                entities.toDomainListSafe()
-                    .map { it.title }
-                    .sortedBy { it.lowercase() }
-            }
-        }.flowOn(Dispatchers.Default)
-
-    override fun observeFavoriteTitlesAlphabetical(): Flow<List<String>> =
-        keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(emptyList())
-            else dao.observeFavoritesForAlphabet().map { entities ->
-                entities.toDomainListSafe()
-                    .map { it.title }
-                    .sortedBy { it.lowercase() }
             }
         }.flowOn(Dispatchers.Default)
 

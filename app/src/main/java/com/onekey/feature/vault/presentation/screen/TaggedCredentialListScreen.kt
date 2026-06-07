@@ -34,7 +34,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
+import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
+import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.onekey.feature.vault.presentation.viewmodel.TaggedCredentialListViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -48,7 +50,8 @@ fun TaggedCredentialListScreen(
     onAddCredential: (type: CredentialType, initialTag: String) -> Unit,
     viewModel: TaggedCredentialListViewModel = hiltViewModel(),
 ) {
-    val credentials by viewModel.credentials.collectAsStateWithLifecycle()
+    val listState by viewModel.listState.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedIds by viewModel.selectedIds.collectAsStateWithLifecycle()
     val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
     val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
@@ -56,6 +59,7 @@ fun TaggedCredentialListScreen(
     val binEnabled by viewModel.isRecycleBinEnabled.collectAsStateWithLifecycle()
     val letterIndex by viewModel.letterIndex.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
+    val isBypassed = listState is CredentialListState.Bypassed
 
     var showSortMenu by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -64,7 +68,7 @@ fun TaggedCredentialListScreen(
     // resolveAddTarget below - no sheet, no extra tap.
     var showAddSheet by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
-    val listState = rememberLazyListState()
+    val lazyListState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
     // Top bar collapses on scroll to give the list more room. canScroll is gated on
@@ -103,7 +107,7 @@ fun TaggedCredentialListScreen(
     }
 
     LaunchedEffect(Unit) {
-        snapshotFlow { sortOrder }.drop(1).collect { listState.scrollToItem(0) }
+        snapshotFlow { sortOrder }.drop(1).collect { lazyListState.scrollToItem(0) }
     }
 
     BackHandler(enabled = isSelectionMode) {
@@ -210,65 +214,117 @@ fun TaggedCredentialListScreen(
             }
         },
     ) { padding ->
-        val credList = credentials
-        if (credList == null) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
-            return@Scaffold
-        }
-
-        if (credList.isEmpty()) {
-            val (title, subtitle) = emptyTagCopy(viewModel.rawTag, viewModel.displayName)
-            EmptyVaultState(
-                title = title,
-                subtitle = subtitle,
-                icon = tagIcon(viewModel.displayName),
-                modifier = Modifier.padding(padding),
-            )
-            return@Scaffold
-        }
-
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            val showIndexer = sortOrder == CredentialSortOrder.ALPHABETICAL
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier),
-                contentPadding = PaddingValues(vertical = 8.dp),
-            ) {
-                items(
-                    items = credList,
-                    key = { it.id },
-                ) { credential ->
-                    CredentialCard(
-                        credential = credential,
-                        isSelected = credential.id in selectedIds,
-                        onClick = {
-                            if (isSelectionMode) viewModel.toggleSelection(credential.id)
-                            else onCredentialClick(credential.id)
-                        },
-                        onLongClick = { viewModel.toggleSelection(credential.id) },
-                        onTagClick = {},
-                    )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                }
-            }
-
-            if (showIndexer) {
-                AlphabetIndexer(
-                    letterIndex = letterIndex,
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    onLetterClick = { pos ->
-                        scope.launch { listState.scrollToItem(pos) }
-                    },
+            // Search bar lives above the result surface so it stays visible
+            // across the Locked / Loading / Loaded / Bypassed transitions.
+            // Hidden during selection mode (action bar takes precedence) and
+            // disabled in Bypassed (snapshot filtering is off in that branch).
+            if (!isSelectionMode) {
+                LockAwareTextField(
+                    value = searchQuery,
+                    onValueChange = viewModel::setSearchQuery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    singleLine = true,
+                    enabled = !isBypassed,
+                    placeholder = { Text("Search in ${viewModel.displayName}") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = if (searchQuery.isNotEmpty() && !isBypassed) {
+                        {
+                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear search")
+                            }
+                        }
+                    } else null,
                 )
+            }
+            when (val s = listState) {
+                CredentialListState.Locked,
+                CredentialListState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator() }
+                }
+                CredentialListState.Bypassed -> {
+                    VaultTooLargeState()
+                }
+                is CredentialListState.Loaded -> {
+                    if (s.credentials.isEmpty()) {
+                        if (searchQuery.isNotBlank()) {
+                            // Empty under an active search: distinct copy from the
+                            // tag-is-genuinely-empty case so the user knows the
+                            // search filtered the tag, not that the tag has nothing.
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        "No matches for \"$searchQuery\"",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        "Try a different search term",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        } else {
+                            val (title, subtitle) = emptyTagCopy(viewModel.rawTag, viewModel.displayName)
+                            EmptyVaultState(
+                                title = title,
+                                subtitle = subtitle,
+                                icon = tagIcon(viewModel.displayName),
+                            )
+                        }
+                    } else {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            val showIndexer = sortOrder == CredentialSortOrder.ALPHABETICAL
+                            LazyColumn(
+                                state = lazyListState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier),
+                                contentPadding = PaddingValues(vertical = 8.dp),
+                            ) {
+                                items(
+                                    items = s.credentials,
+                                    key = { it.id },
+                                ) { credential ->
+                                    CredentialCard(
+                                        credential = credential,
+                                        isSelected = credential.id in selectedIds,
+                                        onClick = {
+                                            if (isSelectionMode) viewModel.toggleSelection(credential.id)
+                                            else onCredentialClick(credential.id)
+                                        },
+                                        onLongClick = { viewModel.toggleSelection(credential.id) },
+                                        onTagClick = {},
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                                }
+                            }
+
+                            if (showIndexer) {
+                                AlphabetIndexer(
+                                    letterIndex = letterIndex,
+                                    modifier = Modifier.align(Alignment.CenterEnd),
+                                    onLetterClick = { pos ->
+                                        scope.launch { lazyListState.scrollToItem(pos) }
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

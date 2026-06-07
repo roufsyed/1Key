@@ -40,11 +40,28 @@ interface CredentialRepository {
     fun observeCountForTag(tag: String): Flow<Int>
     fun observeFavoriteCount(): Flow<Int>
     fun observeFavorites(): Flow<List<Credential>>
-    fun observeFavoritesPaged(sortOrder: CredentialSortOrder = CredentialSortOrder.NEWEST_FIRST): Flow<PagingData<Credential>>
+
+    /**
+     * Per-screen decrypt-all path. Replaced in production by the shared
+     * [com.onekey.core.data.snapshot.VaultSnapshotStore], which keeps a hot
+     * lean projection (no password / notes / OTP secret) while the vault is
+     * unlocked. Test fakes still override this for compile compatibility -
+     * the production graph has zero callers.
+     */
+    @Deprecated(
+        message = "Use VaultSnapshotStore via @SnapshotStateFlow with client-side filter + sort. " +
+            "Snapshot keeps a hot lean projection while unlocked; full Credential is fetched on demand by id.",
+        level = DeprecationLevel.WARNING,
+    )
     fun observeCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<List<Credential>>
+
+    /** See [observeCredentials] - same deprecation rationale. */
+    @Deprecated(
+        message = "Use VaultSnapshotStore via @SnapshotStateFlow filtered by isFavorite + client-side sort. " +
+            "Snapshot path holds no password / notes / OTP secret in VM-local state.",
+        level = DeprecationLevel.WARNING,
+    )
     fun observeFavoritesSorted(sortOrder: CredentialSortOrder): Flow<List<Credential>>
-    fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
-    fun observeFavoriteTitlesAlphabetical(): Flow<List<String>>
     /**
      * Time-based OTP enrolments (TOTP, Steam Guard) - anything that rotates on a
      * clock. Drives the per-second recompute loop in TwoFaListViewModel.
