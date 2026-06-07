@@ -1,5 +1,7 @@
 package com.onekey.core.di
 
+import com.onekey.core.data.snapshot.SnapshotState
+import com.onekey.core.data.snapshot.VaultSnapshotStore
 import com.onekey.core.security.CredentialCipherMigrator
 import dagger.Module
 import dagger.Provides
@@ -47,4 +49,23 @@ object SnapshotModule {
     @MigrationStatusFlow
     fun provideMigrationStatusFlow(migrator: CredentialCipherMigrator): StateFlow<Boolean> =
         migrator.isMigrating
+
+    /**
+     * Re-publishes [VaultSnapshotStore.state] under the [SnapshotStateFlow]
+     * qualifier so search/list ViewModels depend on a `StateFlow<SnapshotState>`
+     * contract rather than the concrete store. Same testability rationale as
+     * [provideMigrationStatusFlow] — a unit test passes a
+     * `MutableStateFlow<SnapshotState>` and drives transitions directly
+     * without standing up DAO + key holder + decryptor.
+     *
+     * `@JvmSuppressWildcards`: `SnapshotState` is a sealed interface, so the
+     * Kotlin compiler emits `StateFlow<? extends SnapshotState>` in Java. Hilt
+     * treats that as a distinct binding from the consumer's
+     * `StateFlow<SnapshotState>`; suppressing wildcards aligns the two.
+     */
+    @Provides
+    @Singleton
+    @SnapshotStateFlow
+    fun provideSnapshotStateFlow(store: VaultSnapshotStore): StateFlow<@JvmSuppressWildcards SnapshotState> =
+        store.state
 }

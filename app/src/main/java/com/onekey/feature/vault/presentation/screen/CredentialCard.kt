@@ -17,13 +17,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.onekey.core.data.snapshot.SnapshotCredential
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.presentation.util.toRelativeTime
 
 /**
  * Flat list row for a credential — sibling of the home tag rows. No card chrome, no
  * elevation; the divider strip below each row (provided by callers) gives the list its
- * separation. Leading icon reflects credential type so the row is scannable at a glance.
+ * separation. Leading icon reflects the credential's first tag so the row is scannable.
  */
 @Composable
 internal fun CredentialCard(
@@ -32,9 +33,57 @@ internal fun CredentialCard(
     onTagClick: (String) -> Unit,
     isSelected: Boolean = false,
     onLongClick: () -> Unit = {},
+) = CredentialCardImpl(
+    title = credential.title,
+    username = credential.username,
+    tags = credential.tags,
+    isFavorite = credential.isFavorite,
+    updatedAt = credential.updatedAt,
+    onClick = onClick,
+    onTagClick = onTagClick,
+    isSelected = isSelected,
+    onLongClick = onLongClick,
+)
+
+/**
+ * Overload for the lean [SnapshotCredential] projection used by the snapshot-backed
+ * search surface. The card needs only title/username/tags/isFavorite/updatedAt —
+ * the snapshot intentionally omits password, notes, OTP secret, and custom fields,
+ * so a list-row composable cannot accidentally render any of those.
+ */
+@Composable
+internal fun CredentialCard(
+    credential: SnapshotCredential,
+    onClick: () -> Unit,
+    onTagClick: (String) -> Unit,
+    isSelected: Boolean = false,
+    onLongClick: () -> Unit = {},
+) = CredentialCardImpl(
+    title = credential.title,
+    username = credential.username,
+    tags = credential.tags,
+    isFavorite = credential.isFavorite,
+    updatedAt = credential.updatedAt,
+    onClick = onClick,
+    onTagClick = onTagClick,
+    isSelected = isSelected,
+    onLongClick = onLongClick,
+)
+
+@Composable
+private fun CredentialCardImpl(
+    title: String,
+    username: String,
+    tags: List<String>,
+    isFavorite: Boolean,
+    updatedAt: Long,
+    onClick: () -> Unit,
+    onTagClick: (String) -> Unit,
+    isSelected: Boolean,
+    onLongClick: () -> Unit,
 ) {
     // Computed once per unique updatedAt value; avoids DateTimeFormatter work on every recomposition.
-    val relativeTime = remember(credential.updatedAt) { credential.updatedAt.toRelativeTime() }
+    val relativeTime = remember(updatedAt) { updatedAt.toRelativeTime() }
 
     val containerColor = if (isSelected)
         MaterialTheme.colorScheme.primaryContainer
@@ -57,7 +106,7 @@ internal fun CredentialCard(
             imageVector = if (isSelected)
                 Icons.Default.CheckCircle
             else
-                tagIcon(credential.tags.firstOrNull() ?: ""),
+                tagIcon(tags.firstOrNull() ?: ""),
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(if (isSelected) 24.dp else 22.dp),
@@ -67,13 +116,13 @@ internal fun CredentialCard(
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    credential.title,
+                    title,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                if (credential.isFavorite) {
+                if (isFavorite) {
                     Icon(
                         Icons.Default.Favorite,
                         contentDescription = null,
@@ -83,9 +132,9 @@ internal fun CredentialCard(
                 }
             }
 
-            if (credential.username.isNotEmpty()) {
+            if (username.isNotEmpty()) {
                 Text(
-                    credential.username,
+                    username,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -93,8 +142,8 @@ internal fun CredentialCard(
                 )
             }
 
-            val hasTime = credential.updatedAt > 0L
-            val hasTags = credential.tags.isNotEmpty()
+            val hasTime = updatedAt > 0L
+            val hasTags = tags.isNotEmpty()
             if (hasTime || hasTags) {
                 Spacer(Modifier.height(2.dp))
                 Row(
@@ -108,12 +157,12 @@ internal fun CredentialCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    credential.tags.take(2).forEach { tag ->
+                    tags.take(2).forEach { tag ->
                         TagPill(text = tag, onClick = { onTagClick(tag) })
                     }
-                    if (credential.tags.size > 2) {
+                    if (tags.size > 2) {
                         Text(
-                            "+${credential.tags.size - 2}",
+                            "+${tags.size - 2}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -149,4 +198,3 @@ private fun TagPill(text: String, onClick: () -> Unit) {
         )
     }
 }
-

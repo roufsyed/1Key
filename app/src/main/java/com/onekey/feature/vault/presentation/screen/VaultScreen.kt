@@ -4,7 +4,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -25,9 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.paging.LoadState
-import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.compose.itemKey
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.onekey.core.presentation.lockaware.LockAwareTextField
@@ -55,8 +51,7 @@ fun VaultScreen(
     val isVaultFooterVisible by viewModel.isVaultFooterVisible.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
-    // Always collected unconditionally to satisfy Compose snapshot rules.
-    val searchResults = viewModel.searchResults.collectAsLazyPagingItems()
+    val searchState by viewModel.searchResults.collectAsStateWithLifecycle()
 
     // rememberSaveable so a rotation mid-search doesn't collapse the search bar back into
     // the list (the searchQuery itself lives in the VM and is unaffected) and so the
@@ -161,27 +156,9 @@ fun VaultScreen(
         if (isSearchActive) {
             SearchResultsContent(
                 query = searchQuery,
-                isLoading = searchResults.loadState.refresh is LoadState.Loading,
-                isEmpty = searchResults.loadState.refresh is LoadState.NotLoading
-                    && searchResults.itemCount == 0
-                    && searchQuery.isNotEmpty(),
+                state = searchState,
                 padding = padding,
-                results = {
-                    items(
-                        count = searchResults.itemCount,
-                        key = searchResults.itemKey { it.id },
-                    ) { index ->
-                        val credential = searchResults[index]
-                        if (credential != null) {
-                            CredentialCard(
-                                credential = credential,
-                                onClick = { onCredentialClick(credential.id) },
-                                onTagClick = {},
-                            )
-                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                        }
-                    }
-                },
+                onCredentialClick = onCredentialClick,
             )
         } else {
             LazyColumn(
@@ -353,64 +330,99 @@ private val NEW_CREDENTIAL_TYPE_ORDER = listOf(
 @Composable
 private fun SearchResultsContent(
     query: String,
-    isLoading: Boolean,
-    isEmpty: Boolean,
+    state: VaultViewModel.SearchState,
     padding: PaddingValues,
-    results: LazyListScope.() -> Unit,
+    onCredentialClick: (String) -> Unit,
 ) {
-    when {
-        query.isBlank() -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "Type to search credentials…",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+    // Blank-query short-circuit: react to the raw query value rather than wait
+    // for the VM's debounced flow, so clearing the field collapses back to the
+    // hint immediately instead of showing the previous results for 150 ms.
+    if (query.isBlank()) {
+        CenteredHint(padding, "Type to search credentials…")
+        return
+    }
+    when (state) {
+        is VaultViewModel.SearchState.Idle -> {
+            // Reached with a non-blank query only when the snapshot reports
+            // Locked — which can only happen during the lock-screen overlay
+            // transition. Show the spinner so an in-flight transition reads
+            // as "settling" rather than "nothing to search".
+            CenteredSpinner(padding)
         }
-        isLoading -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
-            }
+        is VaultViewModel.SearchState.Loading -> {
+            CenteredSpinner(padding)
         }
-        isEmpty -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "No results for \u201c$query\u201d",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        "Try a different search term",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        is VaultViewModel.SearchState.Bypassed -> {
+            CenteredHint(
+                padding,
+                "Vault is very large \u2014 fast search is disabled. Use All Items to browse.",
+            )
+        }
+        is VaultViewModel.SearchState.Loaded -> {
+            if (state.credentials.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "No results for \u201c$query\u201d",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            "Try a different search term",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.padding(padding),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                ) {
+                    items(items = state.credentials, key = { it.id }) { credential ->
+                        CredentialCard(
+                            credential = credential,
+                            onClick = { onCredentialClick(credential.id) },
+                            onTagClick = {},
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    }
                 }
             }
         }
-        else -> {
-            LazyColumn(
-                modifier = Modifier.padding(padding),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                content = results,
-            )
-        }
+    }
+}
+
+@Composable
+private fun CenteredHint(padding: PaddingValues, text: String) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun CenteredSpinner(padding: PaddingValues) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(padding),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator()
     }
 }
 

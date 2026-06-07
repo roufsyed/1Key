@@ -29,3 +29,18 @@ annotation class SnapshotScope
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class MigrationStatusFlow
+
+/**
+ * Qualifier for the `StateFlow<com.onekey.core.data.snapshot.SnapshotState>`
+ * re-published from [com.onekey.core.data.snapshot.VaultSnapshotStore.state].
+ *
+ * Consumers (`VaultViewModel`, `AutofillUnlockViewModel` after PR2,
+ * `FavouritesViewModel`/`TaggedCredentialListViewModel` after PR4) depend on
+ * the state contract rather than the concrete store class. The qualifier
+ * keeps unit tests independent of the store: a test injects a
+ * `MutableStateFlow<SnapshotState>` directly and drives transitions
+ * synchronously, without instantiating a real DAO + key holder + decryptor.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class SnapshotStateFlow
