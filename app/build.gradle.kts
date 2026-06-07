@@ -158,6 +158,11 @@ dependencies {
     // can be exercised deterministically without real `delay`s slowing the
     // suite to a crawl.
     testImplementation(libs.kotlinx.coroutines.test)
+    // Deterministic emission counting + ordering assertions on cold/hot
+    // Flows. Required by VaultSnapshotStoreTest to assert that .conflate()
+    // collapses Room invalidation bursts (counts emissions in a fixed
+    // window without resorting to fragile sleep loops).
+    testImplementation(libs.turbine)
 
     // Custom lint rules. `lintChecks` puts the rules on this module's lint
     // classpath; AGP's lint task discovers them via the registry in the lint

@@ -22,6 +22,7 @@ mlkitBarcode = "17.3.0"
 mlkitTextRecognition = "16.0.1"
 junit = "4.13.2"
 robolectric = "4.13"
+turbine = "1.1.0"
 lint = "31.7.2"
 argon2kt = "1.6.0"
 securityCrypto = "1.1.0"
@@ -77,6 +78,7 @@ mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition"
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 # Custom lint rules
 lint-api = { group = "com.android.tools.lint", name = "lint-api", version.ref = "lint" }
 lint-checks = { group = "com.android.tools.lint", name = "lint-checks", version.ref = "lint" }

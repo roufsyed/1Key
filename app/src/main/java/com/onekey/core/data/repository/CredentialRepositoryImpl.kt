@@ -4,6 +4,9 @@ import androidx.paging.*
 import com.onekey.core.data.local.dao.CredentialDao
 import com.onekey.core.data.local.entity.CredentialEntity
 import com.onekey.core.data.local.entity.CustomFieldEntity
+import com.onekey.core.data.snapshot.CredentialDecryptor
+import com.onekey.core.data.snapshot.fieldAad
+import com.onekey.core.data.snapshot.titleAad
 import com.onekey.core.domain.model.*
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
@@ -11,7 +14,6 @@ import com.onekey.core.security.EncryptedData
 import com.onekey.core.security.HKDF_FIELD_KEY_INFO
 import com.onekey.core.security.HKDF_TITLE_KEY_INFO
 import com.onekey.core.security.VaultKeyHolder
-import javax.crypto.SecretKey
 import androidx.sqlite.db.SimpleSQLiteQuery
 import com.onekey.core.di.ApplicationScope
 import com.onekey.core.domain.model.CredentialSortOrder
@@ -31,6 +33,7 @@ class CredentialRepositoryImpl @Inject constructor(
     private val dao: CredentialDao,
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
+    private val decryptor: CredentialDecryptor,
     @ApplicationScope appScope: CoroutineScope,
 ) : CredentialRepository {
 
@@ -94,7 +97,7 @@ class CredentialRepositoryImpl @Inject constructor(
     override fun observeCredential(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) emptyFlow()
-            else dao.observeById(id).map { it?.toDomainOrNull() }
+            else dao.observeById(id).map { it?.let(decryptor::decryptOrNull) }
         }
             .flowOn(Dispatchers.Default)
             .distinctUntilChanged()
@@ -102,13 +105,14 @@ class CredentialRepositoryImpl @Inject constructor(
     override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) emptyFlow()
-            else dao.observeByIdIncludingDeleted(id).map { it?.toDomainOrNull() }
+            else dao.observeByIdIncludingDeleted(id).map { it?.let(decryptor::decryptOrNull) }
         }
             .flowOn(Dispatchers.Default)
             .distinctUntilChanged()
 
     override suspend fun getCredential(id: String): AppResult<Credential> = runCatchingResult {
-        dao.getById(id)?.toDomain() ?: throw NoSuchElementException("Credential $id not found")
+        dao.getById(id)?.let { decryptor.decrypt(it) }
+            ?: throw NoSuchElementException("Credential $id not found")
     }
 
     override suspend fun saveCredential(credential: Credential): AppResult<Unit> = runCatchingResult {
@@ -155,11 +159,11 @@ class CredentialRepositoryImpl @Inject constructor(
         // caller (export, import dedupe) instead of silently dropping rows. Long-lived
         // observers use the per-row safe path because a transient throw there poisons
         // the StateFlow; here a throw is just a normal error to the user.
-        dao.getAll().map { it.toDomain() }
+        dao.getAll().map { decryptor.decrypt(it) }
     }
 
     override suspend fun getAllInRecycleBin(): AppResult<List<Credential>> = runCatchingResult {
-        dao.getAllInRecycleBin().map { it.toDomain() }
+        dao.getAllInRecycleBin().map { decryptor.decrypt(it) }
     }
 
     override suspend fun importCredentials(credentials: List<Credential>): AppResult<Int> =
@@ -303,30 +307,24 @@ class CredentialRepositoryImpl @Inject constructor(
     }
 
     // ── Mapping ──────────────────────────────────────────────────────────────
+    //
+    // Decryption is delegated to [CredentialDecryptor]. The list/paging
+    // helpers below keep their "per-row failure stays local" semantics:
+    //
+    //   toDomainListSafe — drops corrupt rows via decryptor.decryptOrNull,
+    //   so the upstream Flow stays alive when one row's GCM tag verification
+    //   fails. Used by long-lived observers.
+    //
+    //   toDomainPaging — PagingData<T> requires T : Any, so we can't filter
+    //   out per-row failures. An unrecoverable decrypt error yields a
+    //   placeholder credential, keeping the Flow alive and visible.
 
-    /**
-     * Decrypts a list of entities, swallowing per-row failures. The race we're protecting
-     * against: vault locks while `toDomain()` is iterating a list emitted by Room. Once
-     * the lock fires, `keyHolder.requireKey()` starts throwing partway through the loop;
-     * if the exception escapes the [map] block here, it propagates up the Flow chain and
-     * permanently kills the upstream `stateIn`, causing every subsequent observation to
-     * sit on stale or empty data until the process restarts.
-     */
     private fun List<CredentialEntity>.toDomainListSafe(): List<Credential> =
-        mapNotNull { it.toDomainOrNull() }
+        mapNotNull { decryptor.decryptOrNull(it) }
 
-    private fun CredentialEntity.toDomainOrNull(): Credential? =
-        runCatching { toDomain() }.getOrNull()
-
-    /**
-     * Decrypts entities for Paging. PagingData<T> requires T : Any so we can't filter
-     * out per-row failures the way the list helper does. Instead, an unrecoverable
-     * decrypt error yields a placeholder credential — visible in the list but harmless,
-     * and crucially the Flow stays alive so the StateFlow doesn't lock up.
-     */
     private fun PagingData<CredentialEntity>.toDomainPaging(): PagingData<Credential> =
         map { entity ->
-            runCatching { entity.toDomain() }.getOrElse { placeholderCredential(entity) }
+            runCatching { decryptor.decrypt(entity) }.getOrElse { placeholderCredential(entity) }
         }
 
     private fun placeholderCredential(entity: CredentialEntity): Credential = Credential(
@@ -349,89 +347,13 @@ class CredentialRepositoryImpl @Inject constructor(
         accessedAt = entity.accessedAt,
     )
 
-    private fun CredentialEntity.toDomain(): Credential {
-        val vaultKey = keyHolder.requireKey()
-        // v0 rows: encrypted with the raw vault key, no AAD (legacy, pre-DB-v12).
-        // v1 rows: encrypted with the HKDF-derived field subkey, AAD = ("1k:v1|<id>|<field>"),
-        //          title still plaintext.
-        // v2 rows: as v1, plus title encrypted under the title subkey with AAD
-        //          "1k:v2|<id>|title". Plaintext `title` column is empty.
-        val cipherKey = if (cipherVersion >= 1) crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO) else vaultKey
-
-        fun decryptField(ct: ByteArray, iv: ByteArray, fieldName: String): String {
-            val aad = if (cipherVersion >= 1) fieldAad(id, fieldName) else null
-            return crypto.decrypt(EncryptedData(ct, iv), cipherKey, aad).toString(Charsets.UTF_8)
-        }
-
-        val resolvedTitle = if (cipherVersion >= 2 && titleEncrypted != null && ivTitle != null) {
-            val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
-            crypto.decrypt(EncryptedData(titleEncrypted, ivTitle), titleKey, titleAad(id))
-                .toString(Charsets.UTF_8)
-        } else {
-            title
-        }
-
-        return Credential(
-            id = id,
-            title = resolvedTitle,
-            username = decryptField(usernameEncrypted, ivUsername, "username"),
-            password = decryptField(passwordEncrypted, ivPassword, "password"),
-            url = if (urlEncrypted != null && ivUrl != null)
-                decryptField(urlEncrypted, ivUrl, "url")
-            else url,
-            notes = decryptField(notesEncrypted, ivNotes, "notes"),
-            otpParams = decryptOtpParams(cipherKey),
-            tags = tags,
-            customFields = customFields.mapIndexed { idx, cf ->
-                CustomField(
-                    key = if (cf.keyEncrypted != null && cf.keyIv != null)
-                        decryptField(cf.keyEncrypted, cf.keyIv, "cf|$idx|k")
-                    else cf.key,
-                    value = decryptField(cf.valueEncrypted, cf.iv, "cf|$idx|v"),
-                    isSensitive = cf.isSensitive,
-                )
-            },
-            isFavorite = isFavorite,
-            createdAt = createdAt,
-            updatedAt = updatedAt,
-            type = CredentialType.fromNameOrDefault(type),
-            deletedAt = deletedAt,
-            // Pre-MIGRATION_10_11 rows can technically still be null here for
-            // a brief window if the migration hasn't completed before a query
-            // runs. Fall back to `updatedAt` so the UI always has something
-            // to render — matching the migration's backfill rule.
-            accessedAt = accessedAt ?: updatedAt,
-        )
-    }
-
-    /**
-     * Build an [OtpParams] from this entity's persisted columns, or null when no
-     * 2FA secret is enrolled. Unknown enum strings (e.g. an `otp_type` written by a
-     * future schema and read back after a downgrade) collapse to TOTP / SHA-1 via
-     * [OtpType.fromNameOrDefault] / [OtpAlgorithm.fromNameOrDefault] so the read
-     * path never throws — the worst case is a code the user re-enrolls, never a
-     * crash. Out-of-range digits or non-positive period from a corrupt row also
-     * fall back to defaults rather than failing OtpParams.init's `require()` and
-     * killing the entire flow emission.
-     */
-    private fun CredentialEntity.decryptOtpParams(cipherKey: SecretKey): OtpParams? {
-        if (totpSecretEncrypted == null || ivTotp == null) return null
-        val aad = if (cipherVersion >= 1) fieldAad(id, "totp") else null
-        val secret = crypto.decrypt(EncryptedData(totpSecretEncrypted, ivTotp), cipherKey, aad)
-            .toString(Charsets.UTF_8)
-        val safeDigits = totpDigits.takeIf { it in OtpParams.MIN_DIGITS..OtpParams.MAX_DIGITS }
-            ?: OtpParams.DEFAULT_DIGITS
-        val safePeriod = totpPeriod.takeIf { it > 0L } ?: OtpParams.DEFAULT_PERIOD_SECONDS
-        val type = OtpType.fromNameOrDefault(otpType)
-        return OtpParams(
-            type = type,
-            secret = secret,
-            algorithm = OtpAlgorithm.fromNameOrDefault(totpAlgorithm),
-            digits = safeDigits,
-            period = safePeriod,
-            counter = if (type == OtpType.HOTP) hotpCounter?.coerceAtLeast(0L) ?: 0L else 0L,
-        )
-    }
+    // The per-row decrypt body that used to live here as `CredentialEntity.toDomain()`
+    // now lives in [CredentialDecryptor] (`core/data/snapshot/CredentialDecryptor.kt`).
+    // It is the single source of truth for read-path decryption — used here for
+    // single-row paths (getCredential, observeCredential, toDomainPaging fallback)
+    // AND by [com.onekey.core.data.snapshot.VaultSnapshotStore] for the bulk lean
+    // path. Keeping one decryptor avoids drift between AAD shapes and OTP-defaults
+    // fallback rules.
 
     private fun Credential.toEntity(): CredentialEntity {
         val vaultKey = keyHolder.requireKey()
@@ -501,10 +423,4 @@ class CredentialRepositoryImpl @Inject constructor(
             cipherVersion = 2,
         )
     }
-
-    private fun fieldAad(credentialId: String, field: String): ByteArray =
-        "1k:v1|$credentialId|$field".toByteArray(Charsets.UTF_8)
-
-    private fun titleAad(credentialId: String): ByteArray =
-        "1k:v2|$credentialId|title".toByteArray(Charsets.UTF_8)
 }

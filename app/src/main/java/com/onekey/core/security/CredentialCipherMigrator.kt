@@ -9,6 +9,9 @@ import com.onekey.core.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.yield
@@ -51,13 +54,59 @@ class CredentialCipherMigrator @Inject constructor(
 
     private var job: Job? = null
 
+    private val _isMigrating = MutableStateFlow(false)
+
+    /**
+     * True while [migrateAll]'s row/history loops are active. Used by
+     * [com.onekey.core.data.snapshot.VaultSnapshotStore] to gate the upstream
+     * `dao.observeListRaw` subscription — while a migration is rewriting
+     * legacy rows, every per-batch `upsert` fires a Room invalidation that
+     * would trigger the snapshot to re-decrypt the entire vault. By
+     * suppressing the snapshot's subscription during migration, the storm
+     * is eliminated entirely (one re-decrypt at the end vs. ~N/BATCH_SIZE).
+     *
+     * Emits `false` on construction, `true` while [migrateAll] runs, `false`
+     * when it completes or is cancelled (via the [collectLatest] re-emit on
+     * lock — the previous job's `finally` flips it back).
+     */
+    val isMigrating: StateFlow<Boolean> = _isMigrating.asStateFlow()
+
     fun start() {
         appScope.launch {
             keyHolder.isUnlocked.collectLatest { unlocked ->
                 job?.cancel()
                 job = null
                 if (unlocked) {
-                    job = appScope.launch(Dispatchers.Default) { migrateAll() }
+                    // Flip the flag BEFORE launching the migration
+                    // coroutine. This narrows but does NOT eliminate the
+                    // race against [com.onekey.core.data.snapshot.VaultSnapshotStore]'s
+                    // own coordinator: both observe `keyHolder.isUnlocked`
+                    // via independent collectors, so whichever resumes
+                    // first on the unlock tick wins. The snapshot may
+                    // observe (unlocked=true, migrating=false) for one
+                    // coordinator pass, subscribe to `dao.observeListRaw`,
+                    // and start one decrypt pass before this collector
+                    // resumes and flips the flag. The flag flip then
+                    // cancels the snapshot's upstream and the snapshot
+                    // settles on Loading. Net cost: at most one wasted
+                    // partial decrypt on the unlock-immediately-followed-
+                    // by-migration path. Re-decryption is idempotent and
+                    // safe — the snapshot eventually settles on the
+                    // correct Loaded(...) after migration completes.
+                    _isMigrating.value = true
+                    job = appScope.launch(Dispatchers.Default) {
+                        try {
+                            migrateAll()
+                        } finally {
+                            _isMigrating.value = false
+                        }
+                    }
+                } else {
+                    // Belt-and-suspenders: ensure the flag is false whenever
+                    // a previous job was cancelled before its finally block
+                    // ran. In practice the finally fires, but resetting here
+                    // guarantees consistency at the collectLatest level.
+                    _isMigrating.value = false
                 }
             }
         }
