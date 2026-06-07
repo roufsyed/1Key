@@ -44,3 +44,17 @@ annotation class MigrationStatusFlow
 @Qualifier
 @Retention(AnnotationRetention.RUNTIME)
 annotation class SnapshotStateFlow
+
+/**
+ * Qualifier for [kotlinx.coroutines.Dispatchers.Default] used by CPU-bound
+ * `.flowOn(...)` hand-offs in ViewModels (filter / sort loops, URI parsing).
+ *
+ * Provided as a qualifier rather than a hardcoded `Dispatchers.Default` call
+ * so unit tests can inject a `StandardTestDispatcher` / `UnconfinedTestDispatcher`
+ * and `runTest { advanceTimeBy(...) }` will propagate virtual time across the
+ * `flowOn` boundary. With a hardcoded `Dispatchers.Default` the upstream work
+ * lands on real threads and `advanceUntilIdle()` cannot await it.
+ */
+@Qualifier
+@Retention(AnnotationRetention.RUNTIME)
+annotation class DefaultDispatcher

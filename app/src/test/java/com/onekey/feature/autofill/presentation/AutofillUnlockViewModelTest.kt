@@ -4,10 +4,13 @@ import android.app.Application
 import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
 import androidx.paging.PagingData
+import com.onekey.core.data.snapshot.SnapshotCredential
+import com.onekey.core.data.snapshot.SnapshotState
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.BackgroundLockTimeout
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialSortOrder
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
@@ -27,7 +30,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
-import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -47,16 +49,21 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Behavioural locks for [AutofillUnlockViewModel]:
+ * Behavioural locks for [AutofillUnlockViewModel] after the snapshot-store
+ * convergence. The VM derives `searchResults` from a shared
+ * `StateFlow<SnapshotState>` (`@SnapshotStateFlow`) rather than its own
+ * decrypt-all-on-unlock cache, so tests drive the snapshot directly via a
+ * `MutableStateFlow<SnapshotState>`. Highlights:
  *
- *  - seeds search query from the form host the first time we enter search mode,
- *  - preserves the query across "re-creation" (SavedStateHandle survival),
- *  - debounces typing through a single repository fetch,
- *  - clears the decrypted snapshot when the vault is observed locked, and
- *    re-fetches on re-unlock,
- *  - routes cross-host picks through [crossHostFor] before fill, while
- *    exact-host picks short-circuit straight to resolve,
- *  - never flips the auto-pick path into "fill anyway" without confirmation.
+ *  - seed search query from the form host on first entry,
+ *  - debounce typing through a single filter pass,
+ *  - lock collapses search results to Idle (via snapshot store's sync hook)
+ *    and asynchronously clears `_matches` (full Credential from PackageMatcher)
+ *    plus `_crossHostFor` (lean SnapshotCredential),
+ *  - cross-host policy: same-host fills immediately, mismatched routes through
+ *    `crossHostFor` confirm pane, native-app fills always route through confirm,
+ *  - Snapshot Loading / Bypassed states render distinct UI without ever
+ *    flashing "no results" during the transient first-decrypt window.
  *
  * Robolectric is needed because [ParsedFields] is `@Parcelize` and gets read
  * out of a real [Bundle] inside the VM. `application = Application::class`
@@ -69,26 +76,28 @@ import org.robolectric.annotation.Config
 class AutofillUnlockViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private lateinit var scope: TestScope
     private lateinit var auth: FakeAuthRepository
     private lateinit var repo: FakeCredentialRepository
     private lateinit var tags: FakeTagRepository
     private lateinit var prefs: FakeAppPreferencesRepository
     private lateinit var matcher: PackageMatcher
+    private lateinit var snapshot: MutableStateFlow<SnapshotState>
 
     @Before fun setup() {
         Dispatchers.setMain(testDispatcher)
-        scope = TestScope(testDispatcher)
         auth = FakeAuthRepository()
         repo = FakeCredentialRepository()
         tags = FakeTagRepository()
         prefs = FakeAppPreferencesRepository()
         matcher = PackageMatcher(repo)
+        snapshot = MutableStateFlow(SnapshotState.Locked)
     }
 
     @After fun teardown() {
         Dispatchers.resetMain()
     }
+
+    // ── initial state ────────────────────────────────────────────────────────
 
     @Test fun initial_is_Invalid_when_extra_missing() {
         val vm = buildVm(parsed = null)
@@ -100,9 +109,10 @@ class AutofillUnlockViewModelTest {
         assertTrue(vm.initial is AutofillUnlockViewModel.InitialState.Ready)
     }
 
+    // ── search-query seeding (SavedStateHandle) ──────────────────────────────
+
     @Test fun search_query_seeded_with_webDomain_when_startInSearch() = runTest(testDispatcher) {
         val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"), startInSearch = true)
-        // Seeding runs in `init {}` and is observable immediately.
         assertEquals("mail.google.com", vm.searchQuery.value)
     }
 
@@ -112,7 +122,7 @@ class AutofillUnlockViewModelTest {
     }
 
     @Test fun search_query_not_seeded_when_already_persisted() = runTest(testDispatcher) {
-        // Simulate process death - SavedStateHandle re-creation pre-loaded
+        // Simulate process death: SavedStateHandle re-creation pre-loaded
         // with a prior query the user typed.
         val saved = SavedStateHandle(
             mapOf(
@@ -121,7 +131,7 @@ class AutofillUnlockViewModelTest {
                 "autofill_search_query" to "github",
             )
         )
-        val vm = AutofillUnlockViewModel(matcher, repo, auth, tags, prefs, saved)
+        val vm = AutofillUnlockViewModel(matcher, auth, snapshot, tags, prefs, testDispatcher, saved)
         assertEquals("github typed by the user must outlive the seed", "github", vm.searchQuery.value)
     }
 
@@ -130,29 +140,121 @@ class AutofillUnlockViewModelTest {
         assertEquals("", vm.searchQuery.value)
     }
 
-    @Test fun snapshot_loads_once_when_unlocked() = runTest(testDispatcher) {
-        repo.allCredentials = listOf(credential("1", "GitHub", "u", "https://github.com"))
+    // ── snapshot-state mapping ──────────────────────────────────────────────
+
+    @Test fun snapshot_Locked_collapses_searchResults_to_Idle_preserving_query() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Loaded(listOf(snap("1", "GitHub", url = "https://github.com")))
         val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
+        vm.onSearchQueryChanged("git")
         advanceUntilIdle()
-        // Second call is a no-op while the cache is populated.
-        repo.getAllCalls = 0
-        vm.loadSnapshot()
+        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Loaded)
+
+        // Snapshot store's sync hook flips Locked on the lock() caller's thread.
+        snapshot.value = SnapshotState.Locked
         advanceUntilIdle()
-        assertEquals(0, repo.getAllCalls)
+        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Idle)
+        // Query MUST be preserved across the relock so the user doesn't retype.
+        assertEquals("git", vm.searchQuery.value)
     }
 
+    @Test fun snapshot_Loading_with_active_query_yields_Loading() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Loading
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
+        vm.onSearchQueryChanged("g")
+        advanceUntilIdle()
+        // CRITICAL: never flash Loaded(emptyList()) during first-decrypt.
+        assertTrue(
+            "Loading state must surface a spinner, not the empty-list state",
+            vm.searchResults.value is AutofillUnlockViewModel.SearchState.Loading,
+        )
+    }
+
+    @Test fun snapshot_Bypassed_yields_Bypassed() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Bypassed
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
+        vm.onSearchQueryChanged("g")
+        advanceUntilIdle()
+        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Bypassed)
+    }
+
+    @Test fun snapshot_Loaded_with_nonblank_query_no_match_yields_Loaded_empty() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Loaded(listOf(snap("1", "GitHub", url = "https://github.com")))
+        val vm = buildVm(parsed = parsed(webDomain = "evil.example.com"), startInSearch = true)
+        vm.onSearchQueryChanged("xyz")
+        advanceUntilIdle()
+        val state = vm.searchResults.value
+        assertTrue("must be Loaded(empty), NOT Idle", state is AutofillUnlockViewModel.SearchState.Loaded)
+        assertEquals(0, (state as AutofillUnlockViewModel.SearchState.Loaded).credentials.size)
+    }
+
+    @Test fun snapshot_Loaded_to_Locked_to_Loaded_re_emits_results() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Loaded(listOf(snap("1", "GitHub", url = "https://github.com")))
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
+        vm.onSearchQueryChanged("git")
+        advanceUntilIdle()
+        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Loaded)
+
+        snapshot.value = SnapshotState.Locked
+        advanceUntilIdle()
+        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Idle)
+
+        snapshot.value = SnapshotState.Loaded(listOf(snap("1", "GitHub", url = "https://github.com")))
+        advanceUntilIdle()
+        val state = vm.searchResults.value
+        assertTrue(state is AutofillUnlockViewModel.SearchState.Loaded)
+        assertEquals(1, (state as AutofillUnlockViewModel.SearchState.Loaded).credentials.size)
+    }
+
+    @Test fun vm_passes_through_active_only_snapshot_contract() = runTest(testDispatcher) {
+        // SnapshotState.Loaded is contractually active-only (the snapshot store
+        // applies `deleted_at IS NULL` upstream). The VM must NOT re-filter:
+        // anything it sees in the Loaded list goes into results unchanged.
+        snapshot.value = SnapshotState.Loaded(listOf(snap("alive", "GitHub", url = "https://github.com")))
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
+        vm.onSearchQueryChanged("github")
+        advanceUntilIdle()
+        val ids = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
+            .credentials.map { it.id }
+        assertEquals(listOf("alive"), ids)
+    }
+
+    // ── auth-lock clears VM-local plaintext (crossHostFor) ──────────────────
+
+    @Test fun auth_lock_clears_crossHostFor() = runTest(testDispatcher) {
+        // Seed crossHostFor via a cross-host search tap on the active form.
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"))
+        val crossHost = snap("x", "Mismatched", url = "https://example.com")
+        val fillNow = vm.resolveSearchCandidate(crossHost)
+        assertFalse(fillNow)
+        assertNotNull(vm.crossHostFor.value)
+
+        // Lock fires. The VM's auth observer must clear _crossHostFor so the
+        // PII (title/url) doesn't linger in the next unlock cycle.
+        auth.unlocked.value = false
+        advanceUntilIdle()
+        assertNull(vm.crossHostFor.value)
+    }
+
+    // Note: a dedicated `_matches`-clear-on-lock unit test isn't here because
+    // PackageMatcher.findMatches hops to `Dispatchers.Default` internally,
+    // so awaiting a Loaded state would race the lock signal under
+    // `runTest(testDispatcher)`. The clear is in the SAME `onEach { if
+    // (!unlocked) { ... } }` block that [auth_lock_clears_crossHostFor]
+    // exercises; the matches write is structurally inseparable from the
+    // crossHostFor write. A future PR that injects PackageMatcher's
+    // dispatcher (or converges it onto the snapshot) restores virtual-time
+    // determinism and a direct test becomes feasible.
+
+    // ── debounce + filter ────────────────────────────────────────────────────
+
     @Test fun debounce_collapses_rapid_typing_into_one_emission() = runTest(testDispatcher) {
-        repo.allCredentials = listOf(
-            credential("1", "Google", "alice", "https://google.com"),
-            credential("2", "Gmail", "bob", "https://accounts.google.com"),
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("1", "Google", "alice", "https://google.com"),
+                snap("2", "Gmail", "bob", "https://accounts.google.com"),
+            )
         )
         val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
-        advanceUntilIdle()
-
         // Rapid burst of keystrokes well within the 150 ms debounce window.
         vm.onSearchQueryChanged("g")
         advanceTimeBy(20)
@@ -161,117 +263,25 @@ class AutofillUnlockViewModelTest {
         vm.onSearchQueryChanged("goo")
         advanceTimeBy(20)
         vm.onSearchQueryChanged("googl")
-        // Still inside debounce - results haven't refreshed for the new query yet.
         advanceTimeBy(50)
         vm.onSearchQueryChanged("google")
         advanceUntilIdle()
-        // After idle, the latest query is what's reflected.
         val results = vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded
-        // Both credentials contain "google" - host substring band.
+        // Both credentials contain "google" in their host (substring band).
         assertEquals(2, results.credentials.size)
     }
 
-    @Test fun lock_clears_snapshot_and_search_results() = runTest(testDispatcher) {
-        repo.allCredentials = listOf(credential("1", "GitHub", "u", "https://github.com"))
-        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
-        vm.onSearchQueryChanged("git")
-        advanceUntilIdle()
-        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Loaded)
-
-        // Vault locks (auto-lock fires).
-        auth.unlocked.value = false
-        advanceUntilIdle()
-        assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Idle)
-        // Query is preserved - the user shouldn't have to retype after re-unlock.
-        assertEquals("git", vm.searchQuery.value)
-    }
-
-    @Test fun relock_then_unlock_refetches_snapshot() = runTest(testDispatcher) {
-        repo.allCredentials = listOf(credential("1", "GitHub", "u", "https://github.com"))
-        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
-        advanceUntilIdle()
-        val before = repo.getAllCalls
-
-        auth.unlocked.value = false
-        advanceUntilIdle()
-        auth.unlocked.value = true
-        vm.loadSnapshot()
-        advanceUntilIdle()
-        assertTrue("snapshot must re-fetch after relock", repo.getAllCalls > before)
-    }
-
-    @Test fun resolveCandidate_short_circuits_for_exact_match_list() = runTest(testDispatcher) {
-        val vm = buildVm(parsed = parsed(webDomain = "github.com"))
-        val ok = vm.resolveCandidate(
-            credential("1", "GitHub", "u", "https://other-domain.example"),
-            fromExactMatchList = true,
-        )
-        assertTrue(ok)
-        assertNull("Exact-list path must never set crossHostFor", vm.crossHostFor.value)
-    }
-
-    @Test fun resolveCandidate_short_circuits_for_same_host_search_result() = runTest(testDispatcher) {
-        val vm = buildVm(parsed = parsed(webDomain = "github.com"))
-        val ok = vm.resolveCandidate(
-            credential("1", "GitHub", "u", "https://github.com/login"),
-            fromExactMatchList = false,
-        )
-        assertTrue(ok)
-        assertNull(vm.crossHostFor.value)
-    }
-
-    @Test fun resolveCandidate_sets_crossHostFor_on_host_mismatch() = runTest(testDispatcher) {
-        val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"))
-        val cred = credential("1", "Google", "u", "https://accounts.google.com")
-        val ok = vm.resolveCandidate(cred, fromExactMatchList = false)
-        assertFalse("cross-host search picks must NOT auto-fill", ok)
-        assertSame(cred, vm.crossHostFor.value)
-    }
-
-    @Test fun resolveCandidate_treats_native_app_fills_as_cross_host() = runTest(testDispatcher) {
-        // No webDomain means no safe host comparison is possible. Every
-        // search-chosen credential should route through confirmation.
-        val vm = buildVm(parsed = parsed(webDomain = null, pkg = "com.acme.app"))
-        val ok = vm.resolveCandidate(
-            credential("1", "Acme", "u", "https://acme.example.com"),
-            fromExactMatchList = false,
-        )
-        assertFalse(ok)
-        assertNotNull(vm.crossHostFor.value)
-    }
-
-    @Test fun confirmCrossHost_returns_credential_and_clears() = runTest(testDispatcher) {
-        val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"))
-        val cred = credential("1", "Google", "u", "https://accounts.google.com")
-        vm.resolveCandidate(cred, fromExactMatchList = false)
-        val out = vm.confirmCrossHost()
-        assertSame(cred, out)
-        assertNull(vm.crossHostFor.value)
-    }
-
-    @Test fun cancelCrossHost_clears_without_returning_credential() = runTest(testDispatcher) {
-        val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"))
-        vm.resolveCandidate(
-            credential("1", "Google", "u", "https://accounts.google.com"),
-            fromExactMatchList = false,
-        )
-        vm.cancelCrossHost()
-        assertNull(vm.crossHostFor.value)
-    }
+    // ── filter ranking + ordering ───────────────────────────────────────────
 
     @Test fun search_ordering_exact_host_first_then_substring_then_title() = runTest(testDispatcher) {
-        repo.allCredentials = listOf(
-            credential("title-only", "Google Drive", "u", "https://drive.example.com"),
-            credential("substring", "Mail at Google", "u", "https://mail.google.com"),
-            credential("exact", "Accounts", "u", "https://accounts.google.com"),
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("title-only", "Google Drive", "u", "https://drive.example.com"),
+                snap("substring", "Mail at Google", "u", "https://mail.google.com"),
+                snap("exact", "Accounts", "u", "https://accounts.google.com"),
+            )
         )
         val vm = buildVm(parsed = parsed(webDomain = "accounts.google.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         vm.onSearchQueryChanged("google")
         advanceUntilIdle()
         val ids = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
@@ -283,12 +293,10 @@ class AutofillUnlockViewModelTest {
         // Twelve creds with descending updatedAt; verify only EMPTY_QUERY_PREVIEW (8)
         // make it into the empty-query preview list.
         val all = (1..12).map { n ->
-            credential("$n", "Title$n", "u", "https://site$n.example.com", updatedAt = n.toLong())
+            snap("$n", "Title$n", "u", "https://site$n.example.com", updatedAt = n.toLong())
         }
-        repo.allCredentials = all
+        snapshot.value = SnapshotState.Loaded(all)
         val vm = buildVm(parsed = parsed(webDomain = "site1.example.com"))
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         advanceUntilIdle()
         val preview = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded).credentials
         assertEquals(8, preview.size)
@@ -296,19 +304,55 @@ class AutofillUnlockViewModelTest {
         assertEquals("12", preview.first().id)
     }
 
-    @Test fun soft_deleted_credentials_are_excluded_from_search() = runTest(testDispatcher) {
-        repo.allCredentials = listOf(
-            credential("live", "GitHub", "u", "https://github.com"),
-            credential("trash", "GitHub Old", "u", "https://github.com", deletedAt = 1L),
+    // ── cross-host policy ────────────────────────────────────────────────────
+
+    @Test fun resolveSearchCandidate_returns_true_for_same_host() = runTest(testDispatcher) {
+        val vm = buildVm(parsed = parsed(webDomain = "github.com"))
+        val ok = vm.resolveSearchCandidate(snap("1", "GitHub", "u", "https://github.com/login"))
+        assertTrue(ok)
+        assertNull(vm.crossHostFor.value)
+    }
+
+    @Test fun resolveSearchCandidate_sets_crossHostFor_on_host_mismatch() = runTest(testDispatcher) {
+        val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"))
+        val cred = snap("1", "Google", "u", "https://accounts.google.com")
+        val ok = vm.resolveSearchCandidate(cred)
+        assertFalse("cross-host search picks must NOT auto-fill", ok)
+        assertSame(cred, vm.crossHostFor.value)
+    }
+
+    @Test fun resolveSearchCandidate_treats_native_app_fills_as_cross_host() = runTest(testDispatcher) {
+        // No webDomain means no safe host comparison is possible. Every
+        // search-chosen credential should route through confirmation.
+        val vm = buildVm(parsed = parsed(webDomain = null, pkg = "com.acme.app"))
+        val ok = vm.resolveSearchCandidate(snap("1", "Acme", "u", "https://acme.example.com"))
+        assertFalse(ok)
+        assertNotNull(vm.crossHostFor.value)
+    }
+
+    @Test fun confirmCrossHost_returns_snapshotCredential_without_clearing() = runTest(testDispatcher) {
+        // Read-without-clear: the cross-host pane stays mounted (with its
+        // `fetching` spinner) while the activity fetches the full Credential
+        // by id. The actual clear happens implicitly when the activity
+        // finishes after Dataset delivery and the VM is reclaimed; clearing
+        // here would unmount the pane and briefly expose SearchSurface.
+        val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"))
+        val cred = snap("1", "Google", "u", "https://accounts.google.com")
+        vm.resolveSearchCandidate(cred)
+        val out = vm.confirmCrossHost()
+        assertSame(cred, out)
+        assertSame(
+            "crossHostFor must remain set after confirm so the pane stays mounted",
+            cred,
+            vm.crossHostFor.value,
         )
-        val vm = buildVm(parsed = parsed(webDomain = "github.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
-        vm.onSearchQueryChanged("github")
-        advanceUntilIdle()
-        val results = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded)
-            .credentials.map { it.id }
-        assertEquals(listOf("live"), results)
+    }
+
+    @Test fun cancelCrossHost_clears_without_returning_credential() = runTest(testDispatcher) {
+        val vm = buildVm(parsed = parsed(webDomain = "mail.google.com"))
+        vm.resolveSearchCandidate(snap("1", "Google", "u", "https://accounts.google.com"))
+        vm.cancelCrossHost()
+        assertNull(vm.crossHostFor.value)
     }
 
     // ── tag filtering ────────────────────────────────────────────────────────
@@ -331,14 +375,14 @@ class AutofillUnlockViewModelTest {
 
     @Test fun tag_filter_narrows_results_by_membership() = runTest(testDispatcher) {
         prefs.categoryFilterEnabled.value = true
-        repo.allCredentials = listOf(
-            credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
-            credential("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
-            credential("3", "HSBC", "u", "https://hsbc.com", tags = listOf("Banking")),
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
+                snap("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
+                snap("3", "HSBC", "u", "https://hsbc.com", tags = listOf("Banking")),
+            )
         )
         val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         vm.onSearchQueryChanged("")
         vm.onTagSelected("Banking")
         advanceUntilIdle()
@@ -349,14 +393,14 @@ class AutofillUnlockViewModelTest {
 
     @Test fun tag_and_query_combine_with_AND_semantics() = runTest(testDispatcher) {
         prefs.categoryFilterEnabled.value = true
-        repo.allCredentials = listOf(
-            credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
-            credential("2", "Chase Cards", "u", "https://creditcards.chase.com", tags = listOf("Cards")),
-            credential("3", "HSBC", "u", "https://hsbc.com", tags = listOf("Banking")),
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
+                snap("2", "Chase Cards", "u", "https://creditcards.chase.com", tags = listOf("Cards")),
+                snap("3", "HSBC", "u", "https://hsbc.com", tags = listOf("Banking")),
+            )
         )
         val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         vm.onSearchQueryChanged("chase")
         vm.onTagSelected("Banking")
         advanceUntilIdle()
@@ -371,14 +415,14 @@ class AutofillUnlockViewModelTest {
 
     @Test fun tag_filter_preserves_exact_host_ordering() = runTest(testDispatcher) {
         prefs.categoryFilterEnabled.value = true
-        repo.allCredentials = listOf(
-            credential("title-only", "Drive at Acme", "u", "https://drive.example.com", tags = listOf("Work")),
-            credential("substring", "Mail at Acme", "u", "https://mail.acme.com", tags = listOf("Work")),
-            credential("exact", "Acme Login", "u", "https://accounts.acme.com", tags = listOf("Work")),
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("title-only", "Drive at Acme", "u", "https://drive.example.com", tags = listOf("Work")),
+                snap("substring", "Mail at Acme", "u", "https://mail.acme.com", tags = listOf("Work")),
+                snap("exact", "Acme Login", "u", "https://accounts.acme.com", tags = listOf("Work")),
+            )
         )
         val vm = buildVm(parsed = parsed(webDomain = "accounts.acme.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         vm.onTagSelected("Work")
         vm.onSearchQueryChanged("acme")
         advanceUntilIdle()
@@ -389,15 +433,15 @@ class AutofillUnlockViewModelTest {
 
     @Test fun tag_change_applies_to_results() = runTest(testDispatcher) {
         prefs.categoryFilterEnabled.value = true
-        repo.allCredentials = listOf(
-            credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
-            credential("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
+                snap("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
+            )
         )
-        // startInSearch = false so the query stays empty - we're asserting
-        // that the tag selection alone narrows the result list.
+        // startInSearch = false so the query stays empty: we're asserting that
+        // the tag selection alone narrows the result list.
         val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = false)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         advanceUntilIdle()
         vm.onTagSelected("Work")
         advanceUntilIdle()
@@ -409,7 +453,6 @@ class AutofillUnlockViewModelTest {
     @Test fun tag_selection_survives_process_death() = runTest(testDispatcher) {
         prefs.categoryFilterEnabled.value = true
         tags.tagsWithCounts.value = listOf(tagWithCount("Banking", 1))
-        // Re-creation simulated by seeding the SavedStateHandle.
         val vm = buildVm(
             parsed = parsed(webDomain = "chase.com"),
             seededSavedState = mapOf("autofill_selected_tag" to "Banking"),
@@ -418,7 +461,6 @@ class AutofillUnlockViewModelTest {
     }
 
     @Test fun pref_off_clears_retained_tag_selection() = runTest(testDispatcher) {
-        // User had Banking selected from a prior session; pref starts ON.
         prefs.categoryFilterEnabled.value = true
         val vm = buildVm(
             parsed = parsed(webDomain = "chase.com"),
@@ -427,22 +469,20 @@ class AutofillUnlockViewModelTest {
         advanceUntilIdle()
         assertEquals("Banking", vm.selectedTag.value)
 
-        // User toggles the pref off - retained selection becomes meaningless.
+        // User toggles the pref off: retained selection becomes meaningless.
         prefs.categoryFilterEnabled.value = false
         advanceUntilIdle()
         assertNull(vm.selectedTag.value)
     }
 
     @Test fun empty_query_with_active_tag_shows_all_tag_members_alphabetical() = runTest(testDispatcher) {
-        // Empty-query + tag = full tag listing (NO 8-item recent cap), sorted alphabetically.
-        // The starter preview cap only applies to the "All" empty-query case.
         prefs.categoryFilterEnabled.value = true
-        repo.allCredentials = (1..12).map { n ->
-            credential("$n", "Z${'a' + n - 1}", "u", "https://x$n.example.com", tags = listOf("Big"))
-        } + credential("noise", "Out of tag", "u", "https://elsewhere.example.com", tags = listOf("Other"))
+        val withTag = (1..12).map { n ->
+            snap("$n", "Z${'a' + n - 1}", "u", "https://x$n.example.com", tags = listOf("Big"))
+        }
+        val outOfTag = snap("noise", "Out of tag", "u", "https://elsewhere.example.com", tags = listOf("Other"))
+        snapshot.value = SnapshotState.Loaded(withTag + outOfTag)
         val vm = buildVm(parsed = parsed(webDomain = "x1.example.com"), startInSearch = true)
-        auth.unlocked.value = true
-        vm.loadSnapshot()
         vm.onSearchQueryChanged("")
         vm.onTagSelected("Big")
         advanceUntilIdle()
@@ -464,7 +504,7 @@ class AutofillUnlockViewModelTest {
             h[AutofillUnlockActivity.EXTRA_START_IN_SEARCH] = startInSearch
             seededSavedState.forEach { (k, v) -> h[k] = v }
         }
-        return AutofillUnlockViewModel(matcher, repo, auth, tags, prefs, saved)
+        return AutofillUnlockViewModel(matcher, auth, snapshot, tags, prefs, testDispatcher, saved)
     }
 
     private fun parsed(
@@ -479,20 +519,32 @@ class AutofillUnlockViewModelTest {
         webDomain = webDomain,
     )
 
+    /** Snapshot projection helper. Active-only by construction (no deletedAt). */
+    private fun snap(
+        id: String,
+        title: String,
+        username: String = "u",
+        url: String = "",
+        tags: List<String> = emptyList(),
+        updatedAt: Long = 0L,
+    ): SnapshotCredential = SnapshotCredential(
+        id = id, title = title, username = username, url = url, tags = tags,
+        isFavorite = false, type = CredentialType.LOGIN,
+        createdAt = 0L, updatedAt = updatedAt, accessedAt = null, hasOtp = false,
+    )
+
+    /** Used only by [auth_lock_clears_matches_and_crossHostFor] via PackageMatcher. */
     private fun credential(
         id: String,
         title: String,
         username: String,
         url: String,
-        updatedAt: Long = 0L,
-        deletedAt: Long? = null,
-        tags: List<String> = emptyList(),
     ): Credential = Credential(
         id = id, title = title, username = username, password = "p",
         url = url, notes = "", otpParams = null,
-        tags = tags, customFields = emptyList(),
-        createdAt = 0L, updatedAt = updatedAt,
-        deletedAt = deletedAt,
+        tags = emptyList(), customFields = emptyList(),
+        createdAt = 0L, updatedAt = 0L,
+        deletedAt = null,
     )
 
     private fun tagWithCount(name: String, count: Int): TagWithCount =
@@ -505,7 +557,7 @@ class AutofillUnlockViewModelTest {
         val tagsWithCounts = MutableStateFlow<List<TagWithCount>>(emptyList())
 
         override fun observeTags(): Flow<List<Tag>> =
-            error("unused - VM only reads observeTagsWithCounts")
+            error("unused: VM only reads observeTagsWithCounts")
         override fun observeTagsWithCounts(): Flow<List<TagWithCount>> = tagsWithCounts
         override suspend fun getTags(): AppResult<List<Tag>> = error("unused")
         override suspend fun addTag(tag: Tag): AppResult<Unit> = error("unused")
@@ -513,7 +565,7 @@ class AutofillUnlockViewModelTest {
     }
 
     /**
-     * Minimal preferences fake - the autofill VM only reads
+     * Minimal preferences fake: the autofill VM only reads
      * `isAutofillCategoryFilterEnabled()`. Everything else throws so any
      * accidental new dependency is loud rather than silent.
      */
@@ -581,14 +633,16 @@ class AutofillUnlockViewModelTest {
         override suspend fun clearAll(): AppResult<Unit> = error("unused")
     }
 
+    /**
+     * Only [PackageMatcher.findMatches] consumes this fake post-PR2. The VM
+     * itself no longer holds a [CredentialRepository] reference. `allCredentials`
+     * is the seed for the exact-host matcher path; everything else throws.
+     */
     private class FakeCredentialRepository : CredentialRepository {
         var allCredentials: List<Credential> = emptyList()
-        var getAllCalls: Int = 0
 
-        override suspend fun getAllCredentials(): AppResult<List<Credential>> {
-            getAllCalls++
-            return AppResult.Success(allCredentials)
-        }
+        override suspend fun getAllCredentials(): AppResult<List<Credential>> =
+            AppResult.Success(allCredentials)
 
         override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> = error("unused")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")

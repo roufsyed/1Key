@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -35,24 +36,27 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.data.snapshot.SnapshotCredential
+import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
+import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.presentation.lockaware.LocalUserActivityPing
 import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.core.presentation.theme.OneKeyTheme
 import com.onekey.core.presentation.util.BiometricPromptController
 import com.onekey.core.security.AutoLockManager
-import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.onekey.feature.autofill.domain.DatasetBuilder
 import com.onekey.feature.autofill.domain.HostExtractor
 import com.onekey.feature.autofill.domain.ParsedFields
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -64,7 +68,7 @@ import javax.inject.Inject
  *
  * Invariants:
  *  - `FLAG_SECURE` is set unconditionally and never cleared. The "Allow
- *    screenshots" preference does not extend to the autofill picker - the
+ *    screenshots" preference does not extend to the autofill picker: the
  *    picker surfaces arbitrary vault entries the user did not explicitly
  *    consent to expose to Recent Apps thumbnails or screen recorders.
  *  - The result Intent uses `AutofillManager.EXTRA_AUTHENTICATION_RESULT`
@@ -75,12 +79,16 @@ import javax.inject.Inject
  *    "auth aborted" and shows no error.
  *  - Cross-host fills (a credential picked via search whose stored host does
  *    not match the form's webDomain) go through an explicit confirmation
- *    pane. The exact-host policy in [PackageMatcher] prevents *automatic*
+ *    pane. The exact-host policy in `PackageMatcher` prevents *automatic*
  *    cross-host fills; the manual one is gated here so the user positively
  *    consents.
  *  - `onNewIntent` finishes the activity. The autofill `singleInstance` task
  *    would otherwise hold stale ParsedFields if the user re-triggers from a
  *    different field/app while the activity is in the background.
+ *  - Search results carry only [SnapshotCredential] (lean projection). The
+ *    full [Credential] is fetched by id on demand at Dataset-delivery time
+ *    via [credentialRepository] so password/notes/OTP-secret never enter
+ *    long-lived UI state.
  */
 @AndroidEntryPoint
 class AutofillUnlockActivity : FragmentActivity() {
@@ -89,6 +97,16 @@ class AutofillUnlockActivity : FragmentActivity() {
     @Inject lateinit var authRepository: AuthRepository
     @Inject lateinit var autoLockManager: AutoLockManager
     @Inject lateinit var datasetBuilder: DatasetBuilder
+
+    /**
+     * On-demand fetch path for the full [Credential] at Dataset-delivery
+     * time. The search surface consumes the lean [SnapshotCredential]
+     * projection; only the moment a Dataset is actually built do we need
+     * the password / notes / OTP secret. Fetching by id is a single Room
+     * point read plus one per-row decrypt, cheap relative to the
+     * decrypt-all the previous design required.
+     */
+    @Inject lateinit var credentialRepository: CredentialRepository
 
     private val authViewModel: AuthViewModel by viewModels()
     private val viewModel: AutofillUnlockViewModel by viewModels()
@@ -125,7 +143,7 @@ class AutofillUnlockActivity : FragmentActivity() {
         // a fresh task with the new extras.
         //
         // Cancel any in-flight biometric prompt FIRST so the dismissed
-        // callback fires while the activity is still alive - otherwise the
+        // callback fires while the activity is still alive: otherwise the
         // BiometricFragment's callback can post into a destroyed lifecycle.
         biometricController?.cancel()
         setResult(RESULT_CANCELED)
@@ -134,7 +152,7 @@ class AutofillUnlockActivity : FragmentActivity() {
 
     override fun onDestroy() {
         // Cancel any active biometric prompt and release the inactivity
-        // suppression. Idempotent - `cancel()` is a no-op if the prompt
+        // suppression. Idempotent: `cancel()` is a no-op if the prompt
         // already terminated.
         biometricController?.cancel()
         biometricController = null
@@ -159,7 +177,7 @@ class AutofillUnlockActivity : FragmentActivity() {
         biometricController = BiometricPromptController(this, autoLockManager)
 
         if (viewModel.initial is AutofillUnlockViewModel.InitialState.Invalid) {
-            // Missing or malformed extras - finish quietly. The framework
+            // Missing or malformed extras: finish quietly. The framework
             // shows no error; the chip just no-ops.
             setResult(RESULT_CANCELED)
             finish()
@@ -172,31 +190,72 @@ class AutofillUnlockActivity : FragmentActivity() {
                 val userActivityPing = remember(autoLockManager) {
                     { autoLockManager.onUserActivity() }
                 }
+                // Scope tied to the Composable's lifetime so an on-demand
+                // getCredential(id) coroutine is cancelled if the user
+                // navigates away or the activity finishes mid-fetch.
+                val activityScope = rememberCoroutineScope()
+                val parsed = (viewModel.initial as AutofillUnlockViewModel.InitialState.Ready).parsed
+
+                // Two distinct resolve paths:
+                //  * onResolveCredential: exact-host MatchesSurface already
+                //    holds the full Credential; just build the Dataset.
+                //  * onResolveSnapshot: search and cross-host pane both
+                //    carry only SnapshotCredential, so we fetch by id and
+                //    build the Dataset on success. AppResult.Error is
+                //    treated as "vault locked or row deleted between read
+                //    and fetch" => RESULT_CANCELED.
+                val onResolveCredential: (Credential) -> Unit = { credential ->
+                    deliverDataset(parsed, credential)
+                }
+                val onResolveSnapshot: (SnapshotCredential) -> Unit = { snap ->
+                    activityScope.launch {
+                        fetchAndDeliver(activityScope, parsed, snap.id)
+                    }
+                }
+
                 CompositionLocalProvider(LocalUserActivityPing provides userActivityPing) {
                     UnlockGate(
-                        parsed = (viewModel.initial as AutofillUnlockViewModel.InitialState.Ready).parsed,
+                        parsed = parsed,
                         authViewModel = authViewModel,
                         unlockViewModel = viewModel,
                         biometricController = biometricController!!,
                         startInSearch = viewModel.startInSearch,
-                        onResolve = { credential ->
-                            val dataset = datasetBuilder.buildCredentialDataset(
-                                (viewModel.initial as AutofillUnlockViewModel.InitialState.Ready).parsed,
-                                credential,
-                            )
-                            val data = Intent().putExtra(
-                                AutofillManager.EXTRA_AUTHENTICATION_RESULT,
-                                dataset,
-                            )
-                            setResult(RESULT_OK, data)
-                            finish()
-                        },
+                        onResolveCredential = onResolveCredential,
+                        onResolveSnapshot = onResolveSnapshot,
                         onAbort = {
                             setResult(RESULT_CANCELED)
                             finish()
                         },
                     )
                 }
+            }
+        }
+    }
+
+    /** Builds a Dataset from a full [Credential] and finishes RESULT_OK. */
+    private fun deliverDataset(parsed: ParsedFields, credential: Credential) {
+        val dataset = datasetBuilder.buildCredentialDataset(parsed, credential)
+        val data = Intent().putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, dataset)
+        setResult(RESULT_OK, data)
+        finish()
+    }
+
+    /**
+     * Fetches the full credential by id, then either delivers the Dataset or
+     * aborts on any error (most commonly: vault re-locked between snapshot
+     * read and tap, or the row was deleted concurrently). RESULT_CANCELED
+     * is the framework's "auth aborted" path: no Dataset, no error toast.
+     */
+    private suspend fun fetchAndDeliver(
+        @Suppress("UNUSED_PARAMETER") scope: CoroutineScope,
+        parsed: ParsedFields,
+        id: String,
+    ) {
+        when (val r = credentialRepository.getCredential(id)) {
+            is AppResult.Success -> deliverDataset(parsed, r.data)
+            is AppResult.Error -> {
+                setResult(RESULT_CANCELED)
+                finish()
             }
         }
     }
@@ -209,19 +268,20 @@ private fun UnlockGate(
     unlockViewModel: AutofillUnlockViewModel,
     biometricController: BiometricPromptController,
     startInSearch: Boolean,
-    onResolve: (Credential) -> Unit,
+    onResolveCredential: (Credential) -> Unit,
+    onResolveSnapshot: (SnapshotCredential) -> Unit,
     onAbort: () -> Unit,
 ) {
     val isUnlocked by authViewModel.isUnlocked.collectAsStateWithLifecycle()
     val crossHostFor by unlockViewModel.crossHostFor.collectAsStateWithLifecycle()
 
-    // Once unlocked, kick off exact-host match load AND the decrypted vault
-    // snapshot. Both are idempotent inside the ViewModel - relock clears
-    // them, and the LaunchedEffect fires again on re-unlock.
+    // Once unlocked, kick off exact-host match load. The snapshot is hot
+    // already (managed by VaultSnapshotStore at app scope); we no longer
+    // call a per-screen loadSnapshot(). The LaunchedEffect fires again on
+    // re-unlock and loadMatches() is idempotent.
     LaunchedEffect(isUnlocked) {
         if (isUnlocked) {
             unlockViewModel.loadMatches()
-            unlockViewModel.loadSnapshot()
         }
     }
 
@@ -243,7 +303,7 @@ private fun UnlockGate(
             credential = crossHostFor!!,
             onConfirm = {
                 val c = unlockViewModel.confirmCrossHost()
-                if (c != null) onResolve(c)
+                if (c != null) onResolveSnapshot(c)
             },
             onCancel = { unlockViewModel.cancelCrossHost() },
         )
@@ -251,9 +311,9 @@ private fun UnlockGate(
             parsed = parsed,
             unlockViewModel = unlockViewModel,
             onBackToMatches = { inSearchMode = false },
-            onResolve = { credential ->
-                val fillNow = unlockViewModel.resolveCandidate(credential, fromExactMatchList = false)
-                if (fillNow) onResolve(credential)
+            onResolve = { snap ->
+                val fillNow = unlockViewModel.resolveSearchCandidate(snap)
+                if (fillNow) onResolveSnapshot(snap)
                 // else: crossHostFor flipped; UnlockGate re-routes to confirm pane
             },
             onAbort = onAbort,
@@ -261,12 +321,7 @@ private fun UnlockGate(
         else -> MatchesSurface(
             parsed = parsed,
             unlockViewModel = unlockViewModel,
-            onResolve = { credential ->
-                // Exact-host match path always fills directly. resolveCandidate
-                // short-circuits to `true` for fromExactMatchList=true.
-                unlockViewModel.resolveCandidate(credential, fromExactMatchList = true)
-                onResolve(credential)
-            },
+            onResolve = onResolveCredential,
             onOpenSearch = { inSearchMode = true },
             onAbort = onAbort,
         )
@@ -324,7 +379,7 @@ private fun MatchesSurface(
                     } else {
                         s.credentials.forEach { credential ->
                             CredentialRow(
-                                credential = credential,
+                                row = credential.toRow(),
                                 onClick = { onResolve(credential) },
                             )
                         }
@@ -351,7 +406,7 @@ private fun SearchSurface(
     parsed: ParsedFields,
     unlockViewModel: AutofillUnlockViewModel,
     onBackToMatches: () -> Unit,
-    onResolve: (Credential) -> Unit,
+    onResolve: (SnapshotCredential) -> Unit,
     onAbort: () -> Unit,
 ) {
     val query by unlockViewModel.searchQuery.collectAsStateWithLifecycle()
@@ -359,6 +414,7 @@ private fun SearchSurface(
     val availableTags by unlockViewModel.availableTags.collectAsStateWithLifecycle()
     val selectedTag by unlockViewModel.selectedTag.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
+    val isBypassed = resultsState is AutofillUnlockViewModel.SearchState.Bypassed
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
@@ -401,6 +457,7 @@ private fun SearchSurface(
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
             singleLine = true,
+            enabled = !isBypassed,
             // autoCorrectEnabled = false avoids the IME persisting query
             // text into the user's personalised-learning dictionary. The
             // search query may include partial credential titles which are
@@ -424,14 +481,46 @@ private fun SearchSurface(
                 tags = availableTags,
                 selected = selectedTag,
                 onSelect = { unlockViewModel.onTagSelected(it) },
+                enabled = !isBypassed,
             )
         }
         when (val s = resultsState) {
-            AutofillUnlockViewModel.SearchState.Idle,
+            AutofillUnlockViewModel.SearchState.Idle -> {
+                if (query.isBlank()) {
+                    // True idle: nothing to filter, prompt the user to type.
+                    Text(
+                        text = "Type to search your vault.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    // Non-blank query but Idle: either the initial stateIn
+                    // value before the first combine emission (~150 ms
+                    // debounce after entry into search mode), or a transient
+                    // lock window before UnlockGate routes us away. Show a
+                    // spinner so the seeded query in the field is not
+                    // contradicted by a "Type to search" hint.
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
             AutofillUnlockViewModel.SearchState.Loading -> {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            AutofillUnlockViewModel.SearchState.Bypassed -> {
                 Text(
-                    text = "Loading vault…",
+                    text = "Your vault is too large to search from autofill. " +
+                        "Open 1Key to find this credential.",
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             is AutofillUnlockViewModel.SearchState.Loaded -> {
@@ -450,7 +539,7 @@ private fun SearchSurface(
                     ) {
                         items(s.credentials, key = { it.id }) { credential ->
                             CredentialRow(
-                                credential = credential,
+                                row = credential.toRow(),
                                 onClick = { onResolve(credential) },
                             )
                         }
@@ -467,12 +556,18 @@ private fun SearchSurface(
 @Composable
 private fun CrossHostConfirmSurface(
     parsed: ParsedFields,
-    credential: Credential,
+    credential: SnapshotCredential,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
 ) {
     val target = parsed.webDomain ?: parsed.packageName
     val credHost = HostExtractor.hostOf(credential.url) ?: "(no URL)"
+    // Local fetching flag: once the user taps "Fill anyway" we kick off the
+    // getCredential(id) coroutine in the activity. Until that completes
+    // (success => finish, error => finish), keep the pane mounted with a
+    // spinner on the confirm button so the user does not see a flicker
+    // back to SearchSurface during the fetch.
+    var fetching by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -514,34 +609,71 @@ private fun CrossHostConfirmSurface(
             }
             Text(
                 text = "1Key only fills automatically when the saved site matches the form. " +
-                    "This credential was saved for a different site - only continue if you're " +
+                    "This credential was saved for a different site: only continue if you're " +
                     "certain they're the same login.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
-                onClick = onConfirm,
+                onClick = {
+                    if (!fetching) {
+                        fetching = true
+                        onConfirm()
+                    }
+                },
+                enabled = !fetching,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.error,
                     contentColor = MaterialTheme.colorScheme.onError,
                 ),
-            ) { Text("Fill anyway") }
-            TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+            ) {
+                if (fetching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onError,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text("Fill anyway")
+                }
+            }
+            TextButton(
+                onClick = onCancel,
+                enabled = !fetching,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text("Cancel")
             }
         }
     }
 }
 
+/**
+ * Local UI projection consumed by [CredentialRow]. Kept private to this file
+ * so the row composable can render either a full [Credential] (host-match path)
+ * or a lean [SnapshotCredential] (search path) without baking either type into
+ * the row signature. Do not iterate over a `List<CredentialRowData>` at the
+ * surface level: keep `.toRow()` at the call site so the parent lambda retains
+ * the typed credential for [AutofillUnlockViewModel.resolveSearchCandidate].
+ */
+private data class CredentialRowData(
+    val title: String,
+    val username: String,
+    val url: String,
+)
+
+private fun Credential.toRow() = CredentialRowData(title, username, url)
+private fun SnapshotCredential.toRow() = CredentialRowData(title, username, url)
+
 @Composable
 private fun CredentialRow(
-    credential: Credential,
+    row: CredentialRowData,
     onClick: () -> Unit,
 ) {
-    val host = HostExtractor.hostOf(credential.url)
+    val host = HostExtractor.hostOf(row.url)
     val subtitleParts = listOfNotNull(
-        credential.username.takeIf { it.isNotBlank() } ?: "(no username)",
+        row.username.takeIf { it.isNotBlank() } ?: "(no username)",
         host,
     )
     Column(
@@ -551,7 +683,7 @@ private fun CredentialRow(
             .padding(vertical = 10.dp, horizontal = 12.dp),
     ) {
         Text(
-            text = credential.title.ifBlank { "1Key item" },
+            text = row.title.ifBlank { "1Key item" },
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
@@ -564,16 +696,19 @@ private fun CredentialRow(
 }
 
 /**
- * Horizontally-scrolling filter chips for the autofill search screen - only
+ * Horizontally-scrolling filter chips for the autofill search screen: only
  * rendered when the user has opted into the category filter AND has at least
  * one tag. Single-select with tap-again-to-clear semantics: re-tapping the
- * active chip returns to "All" (the clear-filter state).
+ * active chip returns to "All" (the clear-filter state). Disabled when the
+ * snapshot is in [AutofillUnlockViewModel.SearchState.Bypassed] state so the
+ * user can't toggle a filter against a search surface that isn't running.
  */
 @Composable
 private fun TagChipRow(
     tags: List<com.onekey.core.domain.model.TagWithCount>,
     selected: String?,
     onSelect: (String?) -> Unit,
+    enabled: Boolean = true,
 ) {
     LazyRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -584,6 +719,7 @@ private fun TagChipRow(
                 selected = selected == null,
                 onClick = { onSelect(null) },
                 label = { Text("All") },
+                enabled = enabled,
                 colors = FilterChipDefaults.filterChipColors(),
             )
         }
@@ -593,6 +729,7 @@ private fun TagChipRow(
                 selected = isActive,
                 onClick = { onSelect(if (isActive) null else tagWithCount.tag.name) },
                 label = { Text("${tagWithCount.tag.name} (${tagWithCount.count})") },
+                enabled = enabled,
                 colors = FilterChipDefaults.filterChipColors(),
             )
         }

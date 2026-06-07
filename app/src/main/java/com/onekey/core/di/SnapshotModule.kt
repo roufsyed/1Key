@@ -7,6 +7,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,4 +69,14 @@ object SnapshotModule {
     @SnapshotStateFlow
     fun provideSnapshotStateFlow(store: VaultSnapshotStore): StateFlow<@JvmSuppressWildcards SnapshotState> =
         store.state
+
+    /**
+     * Provides [Dispatchers.Default] under the [DefaultDispatcher] qualifier.
+     * Used by ViewModels for CPU-bound `.flowOn(...)` hand-offs (filter loops,
+     * URI parsing). Routed through Hilt so tests can substitute a test
+     * dispatcher and have virtual time propagate across the boundary.
+     */
+    @Provides
+    @DefaultDispatcher
+    fun provideDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
 }
