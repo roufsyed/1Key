@@ -34,13 +34,13 @@ import org.jetbrains.uast.UFile
  * except inside the wrapper package itself.
  *
  * Implementation:
- *  - Filter calls by simple name via [getApplicableMethodNames] — Lint then only
+ *  - Filter calls by simple name via [getApplicableMethodNames] - Lint then only
  *    invokes [visitMethodCall] for those names.
  *  - In the visitor, narrow further by the resolved method's package: only flag
  *    calls whose containing class is in `androidx.compose.material3` or
  *    `androidx.compose.ui.window`. This avoids false positives on incidental
  *    function names (e.g. an internal `Dialog` helper in some unrelated lib).
- *  - Skip calls originating from the `lockaware` package — that's where the
+ *  - Skip calls originating from the `lockaware` package - that's where the
  *    sanctioned uses live.
  */
 class UnsafeUnlockableSurfaceDetector : Detector(), SourceCodeScanner {
@@ -53,7 +53,7 @@ class UnsafeUnlockableSurfaceDetector : Detector(), SourceCodeScanner {
         method: PsiMethod,
     ) {
         // Resolve the function's containing class. Top-level Kotlin functions
-        // appear as members of a synthesised "<File>Kt" class — so the qualified
+        // appear as members of a synthesised "<File>Kt" class - so the qualified
         // name will look like `androidx.compose.material3.AndroidAlertDialog_androidKt`.
         // We don't need the exact class; just that it's in one of the known packages.
         val containingPackage = method.containingClass?.qualifiedName
@@ -63,7 +63,7 @@ class UnsafeUnlockableSurfaceDetector : Detector(), SourceCodeScanner {
         val isUiWindow = containingPackage == "androidx.compose.ui.window"
         if (!isMaterial3 && !isUiWindow) return
 
-        // Allow the wrapper file itself to call into M3 / UI window — that's the
+        // Allow the wrapper file itself to call into M3 / UI window - that's the
         // *one* sanctioned site for these surfaces.
         val callerPackage = (context.uastFile as? UFile)?.packageName ?: ""
         if (callerPackage == LOCKAWARE_PACKAGE) return
@@ -111,7 +111,7 @@ class UnsafeUnlockableSurfaceDetector : Detector(), SourceCodeScanner {
         //  - `Dialog` (raw `androidx.compose.ui.window.Dialog`) → `LockAwareWindowDialog`
         //    is a content-slot dialog used when AlertDialog's title/text/buttons
         //    layout doesn't fit (e.g. the multi-phase import preview).
-        //  - `Popup` has no wrapper today — direct the developer to apply
+        //  - `Popup` has no wrapper today - direct the developer to apply
         //    `Modifier.lockAware()` to the popup's content root manually.
         private val WRAPPER_BY_NAME = mapOf(
             "AlertDialog" to "LockAwareDialog",
@@ -128,9 +128,9 @@ class UnsafeUnlockableSurfaceDetector : Detector(), SourceCodeScanner {
             id = "UnsafeUnlockableSurface",
             briefDescription = "Compose surface bypasses the inactivity auto-lock ping",
             explanation = """
-                Compose surfaces that render in a separate Window — `AlertDialog`, \
+                Compose surfaces that render in a separate Window - `AlertDialog`, \
                 `ModalBottomSheet`, `DropdownMenu`, `ExposedDropdownMenu`, `Dialog`, \
-                `Popup`, plus the `OutlinedTextField` / `TextField` IME path — \
+                `Popup`, plus the `OutlinedTextField` / `TextField` IME path - \
                 receive pointer and text-input events that never reach \
                 `Activity.onUserInteraction()`. The inactivity auto-lock relies on \
                 that callback, so without compensation the vault locks under an \

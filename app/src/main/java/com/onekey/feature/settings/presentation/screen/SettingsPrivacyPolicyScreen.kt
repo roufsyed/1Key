@@ -43,42 +43,42 @@ fun SettingsPrivacyPolicyScreen(
 
             PolicySection("What we don't collect") {
                 PrivacyLine("No accounts, no email, no signup of any kind.")
-                PrivacyLine("No analytics, telemetry, or crash reporting — ever.")
+                PrivacyLine("No analytics, telemetry, or crash reporting - ever.")
                 PrivacyLine("No advertising IDs and no tracking.")
             }
 
             PolicySection("How your data is protected") {
-                PrivacyLine("Field-level encryption. Every credential field — title, username, password, URL, notes, custom fields, TOTP secret — is encrypted separately with AES-256-GCM. Each field's ciphertext is bound to its row and column, so an attacker can't swap encrypted blobs between accounts.")
-                PrivacyLine("Memory-hard password verification. Your master password is checked using Argon2id (64 MiB memory, 3 passes) — the OWASP-recommended algorithm. Even with the encrypted blobs in hand, brute-forcing is unrealistic on consumer hardware.")
-                PrivacyLine("Verifier kept off-disk-readable. The password verifier and PIN hash live in EncryptedSharedPreferences, encrypted at rest by an Android Keystore-bound key. Without live access to your phone's Keystore, an attacker can't read the verifier — meaning offline brute-forcing is not possible.")
+                PrivacyLine("Field-level encryption. Every credential field - title, username, password, URL, notes, custom fields, TOTP secret - is encrypted separately with AES-256-GCM. Each field's ciphertext is bound to its row and column, so an attacker can't swap encrypted blobs between accounts.")
+                PrivacyLine("Memory-hard password verification. Your master password is checked using Argon2id (64 MiB memory, 3 passes) - the OWASP-recommended algorithm. Even with the encrypted blobs in hand, brute-forcing is unrealistic on consumer hardware.")
+                PrivacyLine("Verifier kept off-disk-readable. The password verifier and PIN hash live in EncryptedSharedPreferences, encrypted at rest by an Android Keystore-bound key. Without live access to your phone's Keystore, an attacker can't read the verifier - meaning offline brute-forcing is not possible.")
                 PrivacyLine("Hardware-backed wrapping. The vault key is wrapped by a key inside the Android Keystore (TEE / StrongBox on supported devices). On Android 9+ unwrapping additionally requires the device to be unlocked.")
-                PrivacyLine("Subkey separation. Field encryption uses HKDF-derived subkeys, not the raw vault key — so different parts of the data are encrypted under keys derived for that purpose only.")
+                PrivacyLine("Subkey separation. Field encryption uses HKDF-derived subkeys, not the raw vault key - so different parts of the data are encrypted under keys derived for that purpose only.")
                 PrivacyLine("Memory hygiene. The unwrapped vault key only exists in memory while the vault is unlocked, and is dropped the moment auto-lock fires or you lock manually.")
                 PrivacyLine("Existing installs migrate automatically. Older vaults using the previous PBKDF2 verifier silently upgrade to Argon2id on the first unlock after the app update.")
             }
 
             PolicySection("Permissions we use") {
-                PrivacyLine("Biometric — to verify your fingerprint or face for app unlock. The biometric data itself never reaches the app; we only receive a yes/no result from Android.")
-                PrivacyLine("Camera — for QR-code scanning when you add a new 2FA secret, and OCR credential capture. No photos are taken or stored; frames are processed on-device and discarded.")
-                PrivacyLine("Storage — used only on Android 12 and below for reading and writing backup files. Modern Android uses the system file picker, which doesn't require this permission.")
+                PrivacyLine("Biometric - to verify your fingerprint or face for app unlock. The biometric data itself never reaches the app; we only receive a yes/no result from Android.")
+                PrivacyLine("Camera - for QR-code scanning when you add a new 2FA secret, and OCR credential capture. No photos are taken or stored; frames are processed on-device and discarded.")
+                PrivacyLine("Storage - used only on Android 12 and below for reading and writing backup files. Modern Android uses the system file picker, which doesn't require this permission.")
             }
 
             PolicySection("Permissions we don't request") {
-                PrivacyLine("No Internet permission — the app cannot make any network request, period. You can verify this in Android Settings → Apps → 1Key → Mobile data & Wi-Fi: data usage is exactly zero, ever.")
+                PrivacyLine("No Internet permission - the app cannot make any network request, period. You can verify this in Android Settings → Apps → 1Key → Mobile data & Wi-Fi: data usage is exactly zero, ever.")
                 PrivacyLine("No location, contacts, microphone, SMS, or any other personal-data permission.")
             }
 
             PolicySection("Brute-force protection") {
                 PrivacyLine("Wrong master-password and wrong-PIN attempts are tracked in persistent storage, so killing the app cannot reset the counter.")
                 PrivacyLine("Tiered cooldowns: 3 wrong attempts trigger a 30-second wait, 5 trigger 5 minutes, 10 trigger 1 hour.")
-                PrivacyLine("After 3 wrong PINs, the easier PIN unlock is disabled until you successfully enter the master password — proving real identity before the shortcut resumes.")
+                PrivacyLine("After 3 wrong PINs, the easier PIN unlock is disabled until you successfully enter the master password - proving real identity before the shortcut resumes.")
                 PrivacyLine("Each guess pays the full Argon2id memory cost regardless of cooldown, so brute-forcing remains intractable even between wait periods.")
             }
 
             PolicySection("Clipboard & screen capture") {
                 PrivacyLine("Sensitive copies (passwords, 2FA codes) are automatically cleared from the clipboard after 30 seconds.")
                 PrivacyLine("On Android 13 and above, those copies are marked sensitive so the system's paste-preview toast doesn't reveal the value.")
-                PrivacyLine("Screenshots and screen recordings of the app are blocked by default — including the Recent Apps preview. You can change this in Security settings.")
+                PrivacyLine("Screenshots and screen recordings of the app are blocked by default - including the Recent Apps preview. You can change this in Security settings.")
                 PrivacyLine("Revealed passwords cannot be selected from the on-screen text via the long-press menu, so they can only leave the app via the in-app copy button (which routes through the auto-clear path).")
             }
 

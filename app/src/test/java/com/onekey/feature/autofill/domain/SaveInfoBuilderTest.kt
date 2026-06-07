@@ -37,7 +37,7 @@ class SaveInfoBuilderTest {
     @Test fun password_only_partition_emits_password_bit_alone() {
         val parsed = parsed(passwordId = 1, usernameId = null, emailId = null)
         val info = assertNotNull(builder.build(parsed, requestFlags = 0))
-        // We only assert the flag is set — SaveInfo doesn't expose getType()
+        // We only assert the flag is set - SaveInfo doesn't expose getType()
         // publicly on every API level, but the builder accepts the bit either
         // way so the no-throw construction itself is the contract.
         assertNotNull(info)
@@ -70,7 +70,7 @@ class SaveInfoBuilderTest {
     @Test fun save_on_all_views_invisible_flag_is_always_set() {
         // We use the publicly observable FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE constant
         // to confirm the builder configures it. SaveInfo exposes getFlags() since
-        // API 26 — the same API level that exposes AutofillService — so this is
+        // API 26 - the same API level that exposes AutofillService - so this is
         // safe on every supported SDK.
         val parsed = parsed(passwordId = 1, usernameId = 2, emailId = null)
         val info = assertNotNull(builder.build(parsed, requestFlags = 0))

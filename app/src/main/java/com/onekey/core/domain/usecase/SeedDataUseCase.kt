@@ -67,7 +67,7 @@ class SeedDataUseCase @Inject constructor(
         username = username,
         password = "DemoP@ssw0rd!2024",
         url = url,
-        notes = "Seeded for 2FA testing — code rotates every 30 seconds.",
+        notes = "Seeded for 2FA testing - code rotates every 30 seconds.",
         otpParams = OtpParams.defaultTotp(secretBase32),
         tags = listOf("Login"),
         customFields = emptyList(),
@@ -296,7 +296,7 @@ class SeedDataUseCase @Inject constructor(
         ),
         Credential(
             id = "",
-            title = "Slack — Acme Corp",
+            title = "Slack - Acme Corp",
             username = "john.doe@company.com",
             password = "Sl@ckW0rk!P@ss#24",
             url = "https://acmecorp.slack.com",

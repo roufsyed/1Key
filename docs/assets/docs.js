@@ -1,4 +1,4 @@
-// Shared docs JS — theme toggle + active TOC link
+// Shared docs JS - theme toggle + active TOC link
 (function () {
   const root = document.documentElement;
   const themeBtn = document.getElementById('theme-btn');

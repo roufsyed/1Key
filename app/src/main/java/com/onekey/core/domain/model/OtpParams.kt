@@ -8,13 +8,13 @@ import androidx.compose.runtime.Immutable
  * period, and for HOTP, the current counter.
  *
  * Construction enforces the invariants every downstream consumer relies on. Anything
- * that builds an [OtpParams] — the URI parser, the manual-entry validator, the entity
- * mapper — is responsible for handling the `IllegalArgumentException` thrown here at
+ * that builds an [OtpParams] - the URI parser, the manual-entry validator, the entity
+ * mapper - is responsible for handling the `IllegalArgumentException` thrown here at
  * its own boundary; the generator and persistence layers can then trust their inputs.
  *
  * `secret` is the base32-encoded HMAC key. We require callers to normalize before
  * construction (uppercase, no whitespace, no padding) so the string is canonical when
- * compared, hashed, or written to disk. The generator decodes on every invocation —
+ * compared, hashed, or written to disk. The generator decodes on every invocation -
  * caching is a future optimisation, not a correctness concern.
  *
  * For [OtpType.TOTP] and [OtpType.STEAM]: [period] drives the rotation window in

@@ -23,13 +23,13 @@ import com.onekey.feature.twofa.presentation.viewmodel.TotpViewModel
  * ring, matching the look used in the 2FA list rows.
  *
  * HOTP entries take a separate "Generate next code" UI in the 2FA list (added in
- * C5) and must NOT be passed to this widget — [TotpViewModel.startGenerating]
+ * C5) and must NOT be passed to this widget - [TotpViewModel.startGenerating]
  * defensively bails on HOTP, but the caller is expected to gate on
  * `params.type in TOTP, STEAM` for clarity.
  *
  * Code formatting goes through [formatOtpCode], which renders Steam Guard's
  * 5-character codes as a single contiguous block (`RXKBC`) and applies 4-digit
- * grouping for 7- and 8-digit TOTP codes — keeping every OTP surface consistent.
+ * grouping for 7- and 8-digit TOTP codes - keeping every OTP surface consistent.
  */
 @Composable
 fun TotpWidget(

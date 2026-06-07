@@ -83,14 +83,14 @@ fun LockScreen(
     val lockReason by viewModel.lockReason.collectAsStateWithLifecycle()
     val passwordLockoutUntilMs by viewModel.passwordLockoutUntilMs.collectAsStateWithLifecycle()
     val pinLockoutUntilMs by viewModel.pinLockoutUntilMs.collectAsStateWithLifecycle()
-    // Atomic snapshot of (biometric enabled, lock reason set) — read together from the same
+    // Atomic snapshot of (biometric enabled, lock reason set) - read together from the same
     // DataStore Preferences object so the auto-trigger never fires in the brief cold-start
     // window where one of the two flat flows has updated and the other hasn't.
     val biometricUnlockGate by viewModel.biometricUnlockGate.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lockScreenExitProgress = remember { Animatable(0f) }
 
-    // While a lock reason is active the user must enter their master password — biometric
+    // While a lock reason is active the user must enter their master password - biometric
     // and PIN are both held back until they prove possession that way. The store-backed
     // `lockReason` only clears after a successful unlockWithPassword.
     val biometricBlockedByLockReason = lockReason != null
@@ -98,7 +98,7 @@ fun LockScreen(
     var lockReasonDismissed by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(lockReason) { if (lockReason == null) lockReasonDismissed = false }
 
-    // Local fallback flag — flipped by the "Forgot PIN? Use master password" button or
+    // Local fallback flag - flipped by the "Forgot PIN? Use master password" button or
     // when the VM signals exhausted PIN attempts. While true, the password section
     // renders even though a PIN exists. rememberSaveable so config changes don't bounce
     // the user back to PIN mid-fallback.
@@ -146,11 +146,11 @@ fun LockScreen(
     // Auto-trigger biometric prompt once when the screen loads with biometric enabled.
     // Uses biometricUnlockGate (single Preferences read) to avoid a cold-start race where
     // `biometricEnabled` would flip true in one Compose snapshot while `lockReasonSet`
-    // hadn't yet — which previously let the prompt sneak in during a too-many-attempts lock.
+    // hadn't yet - which previously let the prompt sneak in during a too-many-attempts lock.
     // rememberSaveable so a rotation/config-change mid-LockScreen does not reset the
     // flag and re-fire the auto biometric prompt while the user may already be typing.
     var autoTriggeredBiometric by rememberSaveable { mutableStateOf(false) }
-    // Held so we can dismiss the BiometricPrompt programmatically — specifically when the
+    // Held so we can dismiss the BiometricPrompt programmatically - specifically when the
     // too-many-failures lockout fires mid-prompt. Without this, the prompt stays on screen
     // accepting attempts the app would refuse anyway. Not saveable: a rotation rebuilds
     // the prompt naturally via the auto-trigger LaunchedEffect.
@@ -164,7 +164,7 @@ fun LockScreen(
     LaunchedEffect(biometricUnlockGate, requiresMasterPasswordRecheck) {
         // `state is Idle` keeps this effect single-shot at screen-entry time. Without it,
         // a successful master-password unlock clears lockReason, biometricUnlockGate
-        // re-emits, and the effect re-fires DURING the unlock animation — opening the
+        // re-emits, and the effect re-fires DURING the unlock animation - opening the
         // biometric prompt on top of the user already heading to the vault.
         if (!autoTriggeredBiometric &&
             state is AuthUiState.Idle &&
@@ -357,22 +357,22 @@ fun LockScreen(
                 "Three wrong master-password attempts during ${r.context}. " +
                     "That could mean someone other than you was trying to get in, " +
                     "so we've paused biometric unlock to keep your data safe. " +
-                    "Enter your master password to confirm it's really you — " +
+                    "Enter your master password to confirm it's really you - " +
                     "biometric will work as usual on your next unlock."
             LockReason.TooManyFailedPinAttempts ->
                 "Three wrong PIN attempts. That could mean someone other than you was " +
                     "trying to get in, so we've paused biometric unlock to keep your data safe. " +
-                    "Enter your master password to confirm it's really you — biometric will " +
+                    "Enter your master password to confirm it's really you - biometric will " +
                     "work as usual on your next unlock."
             LockReason.TooManyFailedBiometricAttempts ->
                 "Three failed biometric attempts. That could mean someone other than you " +
                     "was trying to get in, so we've paused biometric unlock to keep your data " +
-                    "safe. Enter your master password to confirm it's really you — biometric " +
+                    "safe. Enter your master password to confirm it's really you - biometric " +
                     "will work as usual on your next unlock."
             null -> ""
         }
         LockAwareDialog(
-            onDismissRequest = { /* non-dismissible — user must acknowledge */ },
+            onDismissRequest = { /* non-dismissible - user must acknowledge */ },
             icon = {
                 Icon(
                     Icons.Default.Lock,
@@ -509,13 +509,13 @@ private fun MasterPasswordRecheckBanner() {
         )
         Column {
             Text(
-                "Periodic security check — please verify with your master password",
+                "Periodic security check - please verify with your master password",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                "This check ensures only you — not just someone with your unlocked phone — can access the vault.",
+                "This check ensures only you - not just someone with your unlocked phone - can access the vault.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
             )

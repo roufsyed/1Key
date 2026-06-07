@@ -86,14 +86,14 @@ fun SettingsScreen(
                     snackbarHostState.showSnackbar("${event.count} sample credentials added")
                 is SettingsEvent.TwoFaSeedComplete ->
                     snackbarHostState.showSnackbar(
-                        "${event.count} sample 2FA codes added — open the 2FA tab"
+                        "${event.count} sample 2FA codes added - open the 2FA tab"
                     )
                 is SettingsEvent.DeleteVaultConfirmFailed -> {
                     deleteVaultAttemptsRemaining = event.attemptsRemaining
                     deleteVaultPasswordError = if (event.attemptsRemaining == 1)
-                        "Wrong master password — 1 attempt remaining before the vault locks."
+                        "Wrong master password - 1 attempt remaining before the vault locks."
                     else
-                        "Wrong master password — ${event.attemptsRemaining} attempts remaining."
+                        "Wrong master password - ${event.attemptsRemaining} attempts remaining."
                 }
                 SettingsEvent.VaultLocked -> {
                     showDeleteVaultDialog = false
@@ -102,7 +102,7 @@ fun SettingsScreen(
                     deleteVaultPasswordError = null
                     deleteVaultAttemptsRemaining = 3
                     // The "Vault Locked" explanation lives on LockScreen via LockReasonStore
-                    // — Settings has already left composition by the time the user lands there.
+                    // - Settings has already left composition by the time the user lands there.
                 }
                 is SettingsEvent.Error -> snackbarHostState.showSnackbar(event.message)
                 else -> Unit // PinReset, BiometricEnabled, BiometricConfirmFailed handled in Security subscreen
@@ -264,7 +264,7 @@ fun SettingsScreen(
                         ListItem(
                             headlineContent = { Text("Seed Dummy 2FA Codes") },
                             supportingContent = {
-                                Text("Adds 8 sample logins each with a working TOTP secret — codes appear in the 2FA tab")
+                                Text("Adds 8 sample logins each with a working TOTP secret - codes appear in the 2FA tab")
                             },
                             leadingContent = {
                                 if (isSeedingData) {
@@ -316,7 +316,7 @@ fun SettingsScreen(
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
             )
             Text(
-                "1Key — version 1.0.0",
+                "1Key - version 1.0.0",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),

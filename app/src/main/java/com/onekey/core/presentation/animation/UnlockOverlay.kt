@@ -24,7 +24,7 @@ val PremiumMorphEasing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
 
 object UnlockTransitionTimings {
     const val LOGO_CELEBRATION_DELAY_MS = 430L
-    // Single-phase linear expansion — circle grows at a constant rate from the icon
+    // Single-phase linear expansion - circle grows at a constant rate from the icon
     // outward, so it reads as "gradual reveal" rather than the previous front-loaded
     // burst-then-settle. Tune this to taste.
     const val MORPH_EXPAND_DURATION_MS = 300

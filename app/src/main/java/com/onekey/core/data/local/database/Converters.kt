@@ -24,7 +24,7 @@ class Converters {
         gson.fromJson(value, CUSTOM_FIELDS_TYPE) ?: emptyList()
 
     // Hoisted to companion fields so the anonymous-inner-class TypeToken isn't allocated
-    // on every JSON round-trip — a 1k-credential read otherwise produces ~2k throwaway
+    // on every JSON round-trip - a 1k-credential read otherwise produces ~2k throwaway
     // TypeToken instances and matching reflective Type lookups.
     private companion object {
         private val STRING_LIST_TYPE = object : TypeToken<List<String>>() {}.type

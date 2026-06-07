@@ -21,7 +21,7 @@ private val KEY_LAST_PIN_FAILURE_MS = longPreferencesKey("pin_last_failure_ms")
  * is reset by every process kill, so an attacker holding the device can swipe the
  * app from recents between attempts and bypass the in-session "3 strikes" guard
  * entirely. Persisting the counter to DataStore means a force-stop, swipe-from-
- * recents, or even a process death between attempts cannot reset the lockout —
+ * recents, or even a process death between attempts cannot reset the lockout -
  * the app starts cold with the prior failure state intact.
  *
  * Tier shape (matches password):
@@ -30,7 +30,7 @@ private val KEY_LAST_PIN_FAILURE_MS = longPreferencesKey("pin_last_failure_ms")
  *   10+   failures →   1 hour
  *
  * Counter is reset on a successful PIN unlock OR a successful master-password
- * unlock — both are valid "user has proved identity" signals. It intentionally
+ * unlock - both are valid "user has proved identity" signals. It intentionally
  * survives individual lockout windows so repeated failures escalate to longer tiers.
  */
 @Singleton
@@ -41,7 +41,7 @@ class PinAttemptTracker @Inject constructor(
     companion object {
         /**
          * Lockout duration in milliseconds for a given failure count, or null if no
-         * lockout applies yet. Identical thresholds to [PasswordAttemptTracker] —
+         * lockout applies yet. Identical thresholds to [PasswordAttemptTracker] -
          * keep them in lock-step so neither path is the weak link.
          */
         fun lockoutDurationMs(attempts: Int): Long? = when {

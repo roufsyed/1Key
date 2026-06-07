@@ -42,7 +42,7 @@ import javax.inject.Inject
  *  - **Search**: holds a decrypted vault *snapshot* after unlock and filters
  *    it in-memory on every debounced keystroke. The snapshot is loaded exactly
  *    once per unlocked-vault lifetime (`getAllCredentials()` is decrypt-all
- *    and expensive — see `CredentialRepositoryImpl.toDomain`). Re-locking the
+ *    and expensive - see `CredentialRepositoryImpl.toDomain`). Re-locking the
  *    vault clears the snapshot, the search results, and the matches; a
  *    subsequent re-unlock re-fetches.
  *
@@ -50,14 +50,14 @@ import javax.inject.Inject
  *    render a confirmation pane before delivering a Dataset for a credential
  *    whose stored host does not match the form's [ParsedFields.webDomain]
  *    (or any credential when the form is a native app without a webDomain).
- *    The exact-host path A policy is preserved — the search escape hatch
+ *    The exact-host path A policy is preserved - the search escape hatch
  *    surfaces the user's explicit cross-origin intent before any plaintext
  *    leaves 1Key's UID.
  *
  *  - Persists `searchQuery` and `startInSearch` into [SavedStateHandle] so
  *    process-death recovery preserves user input.
  *
- * Threading invariant — **only** call the public `unlockWith*` methods on
+ * Threading invariant - **only** call the public `unlockWith*` methods on
  * `AuthViewModel` from this surface. Never the `verifyMasterPasswordForPinChange`
  * or `verifyCurrentPin` paths: those use the in-vault [AuthAttemptsStore]
  * (session-scoped, scoped to a different threat model) and would route a
@@ -74,7 +74,7 @@ class AutofillUnlockViewModel @Inject constructor(
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
-    /** Sealed initial state — keeps the missing-extra path off the crash rails. */
+    /** Sealed initial state - keeps the missing-extra path off the crash rails. */
     sealed class InitialState {
         data class Ready(val parsed: ParsedFields) : InitialState()
         data object Invalid : InitialState()
@@ -126,7 +126,7 @@ class AutofillUnlockViewModel @Inject constructor(
 
     /**
      * Tags + usage counts surfaced as filter chips in the search screen.
-     * Empty when the category-filter pref is off — the activity uses that as
+     * Empty when the category-filter pref is off - the activity uses that as
      * its hide-the-row signal so off-by-default users see no chip strip.
      * Eagerly stated: the autofill activity is short-lived, the upstream tag
      * query is cheap, and a deterministic value at construction simplifies
@@ -163,7 +163,7 @@ class AutofillUnlockViewModel @Inject constructor(
 
     init {
         // Seed the search field with the form's host the first time we enter
-        // search mode. Idempotent — re-creating the VM after process death
+        // search mode. Idempotent - re-creating the VM after process death
         // sees the persisted non-empty query and skips the seed.
         if (startInSearch && searchQuery.value.isEmpty()) {
             (initial as? InitialState.Ready)?.parsed?.let { p ->
@@ -200,14 +200,14 @@ class AutofillUnlockViewModel @Inject constructor(
             .launchIn(viewModelScope)
 
         // Search pipeline: cross-product the snapshot with the debounced
-        // query and the tag selection. Tag changes apply immediately — they
+        // query and the tag selection. Tag changes apply immediately - they
         // are discrete user taps, not stream-typed keystrokes. Query keeps
         // the 150ms debounce so rapid typing doesn't thrash the filter.
         val parsed = (initial as? InitialState.Ready)?.parsed
         combine(
             _snapshot,
             searchQuery.debounce(SEARCH_DEBOUNCE_MS).distinctUntilChanged(),
-            // selectedTag is a StateFlow — already distinct by contract.
+            // selectedTag is a StateFlow - already distinct by contract.
             selectedTag,
         ) { snap, q, tag ->
             if (snap == null) SearchState.Idle
@@ -251,14 +251,14 @@ class AutofillUnlockViewModel @Inject constructor(
 
     /**
      * Sets the active tag filter, or clears it (`null` ↔ "All"). The combine
-     * pipeline reacts immediately — tag changes are not debounced.
+     * pipeline reacts immediately - tag changes are not debounced.
      */
     fun onTagSelected(tag: String?) {
         savedState[KEY_SELECTED_TAG] = tag
     }
 
     /**
-     * Called when the user taps a credential — either from the exact-host
+     * Called when the user taps a credential - either from the exact-host
      * picker or the search results. Returns `true` if the activity should
      * complete the fill immediately, `false` if a cross-host confirmation
      * must be shown first. The cross-host candidate is held in
@@ -286,7 +286,7 @@ class AutofillUnlockViewModel @Inject constructor(
     /**
      * Whether [credential]'s stored host matches the form's webDomain. For
      * native-app fills (no webDomain) every credential is considered
-     * cross-host — there's no safe way to assert that a saved web credential
+     * cross-host - there's no safe way to assert that a saved web credential
      * "belongs" to an arbitrary native app, so the confirmation step always
      * runs.
      */
@@ -309,7 +309,7 @@ class AutofillUnlockViewModel @Inject constructor(
             // Empty query: behaviour depends on whether the user asserted a
             // tag filter. With "All" we show only a small recent-items
             // starter (limits the social-engineering surface). With a tag
-            // selected the user has positively narrowed the set — show
+            // selected the user has positively narrowed the set - show
             // everything in it, alphabetical, no preview cap.
             val active = snap.asSequence()
                 .filter { it.deletedAt == null }

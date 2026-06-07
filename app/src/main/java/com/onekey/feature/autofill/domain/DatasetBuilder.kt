@@ -19,19 +19,19 @@ import javax.inject.Singleton
 /**
  * Constructs [Dataset]s for the FillResponse. Three shapes:
  *
- *  - **Locked chip** ([buildLockedDataset]) — single placeholder dataset that
+ *  - **Locked chip** ([buildLockedDataset]) - single placeholder dataset that
  *    routes to the unlock activity via the supplied [PendingIntent]. The
- *    framework calls `setAuthentication` semantics — when the user taps the
+ *    framework calls `setAuthentication` semantics - when the user taps the
  *    chip, the OS launches the intent, the activity returns a replacement
  *    Dataset with real values via `AutofillManager.EXTRA_AUTHENTICATION_RESULT`,
  *    and the OS uses that to fill the fields. The placeholder values bound
- *    here are never written — they exist only so the chip is offered.
+ *    here are never written - they exist only so the chip is offered.
  *
- *  - **Credential dataset** ([buildCredentialDataset]) — populated with real
+ *  - **Credential dataset** ([buildCredentialDataset]) - populated with real
  *    [Credential] values, used directly by the framework when the vault is
  *    already unlocked.
  *
- *  - **Search chip** ([buildSearchDataset]) — trailing entry shown when the
+ *  - **Search chip** ([buildSearchDataset]) - trailing entry shown when the
  *    vault is unlocked but no matches were found. Behaves like the locked
  *    chip: tap routes through the unlock activity (which detects the
  *    already-unlocked state and goes straight to the picker).
@@ -75,7 +75,7 @@ class DatasetBuilder @Inject constructor(
     ): Dataset {
         val presentation = lockedChipRemoteViews(label)
         val builder = Dataset.Builder()
-        // The placeholder values are never persisted — they exist only so each
+        // The placeholder values are never persisted - they exist only so each
         // field gets the chip offered to it. The framework replaces them with
         // values from the dataset returned via EXTRA_AUTHENTICATION_RESULT.
         bindAll(builder, parsed, presentation) { "" }

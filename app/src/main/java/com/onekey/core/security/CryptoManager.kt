@@ -20,18 +20,18 @@ import javax.inject.Singleton
 
 private const val ANDROID_KEYSTORE = "AndroidKeyStore"
 
-// Legacy alias — no setUnlockedDeviceRequired. Kept for reading wrapped blobs on
+// Legacy alias - no setUnlockedDeviceRequired. Kept for reading wrapped blobs on
 // existing installs and on API < 28 devices where the upgrade cannot be applied.
 internal const val KEYSTORE_ALIAS_V1 = "onekey_master"
 
-// Upgraded alias — setUnlockedDeviceRequired(true) on API >= 28. Written during
+// Upgraded alias - setUnlockedDeviceRequired(true) on API >= 28. Written during
 // the one-time silent Keystore migration that runs after the first successful unlock.
 internal const val KEYSTORE_ALIAS_V2 = "onekey_master_v2"
 
 private const val AES_GCM = "AES/GCM/NoPadding"
 private const val GCM_TAG_LENGTH = 128
 
-// PBKDF2 — kept for reading existing verifiers (kdf_version=0 rows).
+// PBKDF2 - kept for reading existing verifiers (kdf_version=0 rows).
 // New verifiers always use Argon2id.
 private const val PBKDF2_ITERATIONS = 310_000
 private const val PBKDF2_KEY_LENGTH = 256
@@ -122,7 +122,7 @@ class CryptoManager @Inject constructor() {
 
     // ── Argon2id key derivation (new installs + migrated verifiers) ──────────
     //
-    // password is NOT zeroed here — the caller owns the CharArray and must zero it.
+    // password is NOT zeroed here - the caller owns the CharArray and must zero it.
     // The UTF-8 byte conversion is done without creating an intermediate String
     // (CharBuffer.encode) to avoid interning key material in immutable heap objects.
 
@@ -208,7 +208,7 @@ class CryptoManager @Inject constructor() {
     // ...) is a known anti-pattern; HKDF gives each purpose its own key.
     //
     // The vault key is already a uniformly random 256-bit AES key, so the
-    // HKDF-Extract step (HMAC(salt, IKM)) is unnecessary — RFC 5869 §3.3
+    // HKDF-Extract step (HMAC(salt, IKM)) is unnecessary - RFC 5869 §3.3
     // explicitly allows skipping it when the input is already uniform.
     // We emit a single 32-byte block via T(1) = HMAC(masterKey, info || 0x01).
 

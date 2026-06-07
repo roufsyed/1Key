@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * exact reference it read. Anything else means a concurrent writer landed
  * and the consume returns null cleanly.
  *
- * Pure JVM — no Android, no Robolectric. Buffer state is process-local;
+ * Pure JVM - no Android, no Robolectric. Buffer state is process-local;
  * each test isolates via [clear].
  */
 class AutofillCaptureBufferTest {
@@ -68,7 +68,7 @@ class AutofillCaptureBufferTest {
     }
 
     @Test fun store_overwrites_prior_unconsumed_slot_with_most_recent_wins() {
-        // Two save submissions in flight without an intervening consume —
+        // Two save submissions in flight without an intervening consume -
         // happens if a second app's autofill lands while the first activity
         // is still on the unlock screen. The buffer's documented contract is
         // "most-recent wins"; the old token becomes orphaned.
@@ -98,10 +98,10 @@ class AutofillCaptureBufferTest {
      * After the round, EITHER:
      *  - Thread B consumed the value (success), OR
      *  - The slot still holds T (i.e. B raced and ran before A's store
-     *    finished propagating — then B saw the prior null and bailed; a
+     *    finished propagating - then B saw the prior null and bailed; a
      *    subsequent direct consume(T) MUST still succeed).
      *
-     * What MUST NOT happen: B consumes null AND the slot is also null —
+     * What MUST NOT happen: B consumes null AND the slot is also null -
      * that is the lost-update bug the AtomicReference rewrite closes.
      */
     @Test fun concurrent_store_and_consume_never_lose_the_value() {
@@ -123,7 +123,7 @@ class AutofillCaptureBufferTest {
                     gate.await()
                     // Best-effort: B doesn't know the token until A returns.
                     // To force the race, sleep nothing and busy-poll for a
-                    // moment — most iterations will see B consume before
+                    // moment - most iterations will see B consume before
                     // A's token is published.
                     val deadline = System.nanoTime() + 5_000_000L
                     while (storedToken[0] == null && System.nanoTime() < deadline) {
@@ -137,7 +137,7 @@ class AutofillCaptureBufferTest {
 
                 val token = storedToken[0]
                 if (token != null && consumed[0] == null) {
-                    // B raced or didn't see the token in time — the value must
+                    // B raced or didn't see the token in time - the value must
                     // still be retrievable directly.
                     val late = AutofillCaptureBuffer.consume(token)
                     if (late == null) losses.incrementAndGet()
@@ -157,7 +157,7 @@ class AutofillCaptureBufferTest {
      * The reverse race: two stores from different sources interleaving.
      * Most-recent wins; the older token cannot consume even if its store
      * landed first temporally. The AtomicReference makes this deterministic
-     * — the last `set` call wins.
+     * - the last `set` call wins.
      */
     @Test fun concurrent_stores_resolve_to_one_consumable_token() {
         val pool = Executors.newFixedThreadPool(2)
@@ -185,13 +185,13 @@ class AutofillCaptureBufferTest {
     }
 
     @Test fun consume_returns_the_same_instance_stored() {
-        // Identity check, not equality — guards against an accidental
+        // Identity check, not equality - guards against an accidental
         // `copy()` mid-consume that would alter the contract for callers
         // relying on referential transparency (e.g. zeroing-on-consume).
         val token = AutofillCaptureBuffer.store("u", "p", "pkg", null)
         val out = AutofillCaptureBuffer.consume(token)
         requireNotNull(out)
-        // Re-store the same captured payload and re-consume — the second
+        // Re-store the same captured payload and re-consume - the second
         // consume returns the same object (just round-tripping the test
         // contract, since `out` is the only object outside the buffer).
         val token2 = AutofillCaptureBuffer.store(out.username, out.password, out.packageName, out.webDomain)

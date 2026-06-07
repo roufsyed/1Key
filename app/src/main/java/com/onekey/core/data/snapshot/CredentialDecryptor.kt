@@ -24,7 +24,7 @@ import javax.inject.Singleton
  * Replaces the per-call inline `toDomain` bodies that previously lived inside
  * [com.onekey.core.data.repository.CredentialRepositoryImpl]. Three roles:
  *
- *  1. [decryptAllLeanWithLockCheck] — bulk lean projection for the
+ *  1. [decryptAllLeanWithLockCheck] - bulk lean projection for the
  *     [VaultSnapshotStore]. Decrypts only title/username/url per row, skips
  *     password/notes/OTP secret/custom fields. Yields between rows and
  *     re-checks [VaultKeyHolder.isUnlocked] after each yield so a mid-loop
@@ -32,29 +32,29 @@ import javax.inject.Singleton
  *     HKDF subkeys for the lifetime of the unlocked vault so an N-row decrypt
  *     does N field-AES-GCM operations, not N × 2 HKDF derivations as well.
  *
- *  2. [decrypt] — full single-row decrypt. Used by repository per-id paths
+ *  2. [decrypt] - full single-row decrypt. Used by repository per-id paths
  *     (`getCredential`, `observeCredential`). Throws on failure; caller chooses
  *     whether to surface the error or wrap in `runCatching`.
  *
- *  3. [decryptOrNull] — full single-row decrypt that returns null on failure.
+ *  3. [decryptOrNull] - full single-row decrypt that returns null on failure.
  *     Used by long-lived list observers (`observeRecycleBin`, `observeFavorites`,
  *     `observeRotatingOtp`, etc.). Matches the previous `toDomainOrNull()`
- *     semantics — a corrupt row drops out without poisoning the upstream
+ *     semantics - a corrupt row drops out without poisoning the upstream
  *     StateFlow.
  *
- *  4. [onLock] — invoked synchronously by [VaultSnapshotStore.snapshotHook]
+ *  4. [onLock] - invoked synchronously by [VaultSnapshotStore.snapshotHook]
  *     from inside [VaultKeyHolder.lock]. Drops the memoised HKDF subkeys so
  *     cross-vault generations (reset → re-setup with a different password)
  *     don't reuse subkeys derived from the prior key.
  *
  * Threading: [decryptAllLeanWithLockCheck] is `suspend` and expected to run
  * on [kotlinx.coroutines.Dispatchers.Default] (HKDF + AES-GCM are CPU-bound).
- * The single-row [decrypt] / [decryptOrNull] are plain `fun` — they don't
+ * The single-row [decrypt] / [decryptOrNull] are plain `fun` - they don't
  * yield internally and may be called from any dispatcher the caller chose
  * via `.flowOn(...)`.
  *
  * Memoisation safety: the cached subkeys are tied to the [SecretKey]
- * instance identity ([memoisedFor] field — referential, not equality, since
+ * instance identity ([memoisedFor] field - referential, not equality, since
  * `SecretKeySpec.equals` is content-based and would mask a key swap that
  * happened to land on the same bytes). If the vault is reset and re-set up
  * with a fresh key, the new [SecretKey] is a different instance and the
@@ -79,11 +79,11 @@ class CredentialDecryptor @Inject constructor(
     /**
      * Lean bulk decrypt with cooperative cancellation and per-row lock
      * checks. Throws [VaultLockedException] if the vault locks mid-iteration
-     * — caller (typically [VaultSnapshotStore]) catches and emits
+     * - caller (typically [VaultSnapshotStore]) catches and emits
      * [SnapshotState.Locked]. **Partial lists are NEVER returned.**
      *
      * Per-row failures (corrupt entity, mismatched cipher version) drop the
-     * row silently via [decryptLeanOrNull] — matches `toDomainListSafe`
+     * row silently via [decryptLeanOrNull] - matches `toDomainListSafe`
      * semantics. The flow stays alive.
      */
     suspend fun decryptAllLeanWithLockCheck(
@@ -129,12 +129,12 @@ class CredentialDecryptor @Inject constructor(
      * Called synchronously from [VaultKeyHolder.lock] via the
      * [com.onekey.core.security.VaultLockHook] installed by
      * [VaultSnapshotStore]. Drops cached subkey references so the next
-     * unlocked session re-derives from the new (or same) vault key — and
+     * unlocked session re-derives from the new (or same) vault key - and
      * so subkey material does not survive in the heap between sessions.
      *
      * Race note: a concurrent decryption loop on Default may have captured
      * a local reference to the cached subkey before this nullification.
-     * That's safe — the loop completes its current row using the local
+     * That's safe - the loop completes its current row using the local
      * reference, then hits the next `yield()` + `isUnlocked` check and
      * throws. The instance-field nullification here is forward-looking
      * (no NEW row inside the same loop will reuse stale subkeys).
@@ -235,7 +235,7 @@ class CredentialDecryptor @Inject constructor(
     }.getOrNull()
 
     /**
-     * Full per-row decrypt — title, username, password, notes, url,
+     * Full per-row decrypt - title, username, password, notes, url,
      * otpParams, custom fields. Mirrors the prior
      * `CredentialRepositoryImpl.toDomain()` body byte-for-byte (lines 352-405
      * pre-refactor) so the per-id observation paths preserve their existing
@@ -294,7 +294,7 @@ class CredentialDecryptor @Inject constructor(
             deletedAt = entity.deletedAt,
             // Pre-MIGRATION_10_11 rows can still be null for a brief window
             // if the migration hasn't completed before a query runs. Fall
-            // back to updatedAt — matches the migration's backfill rule.
+            // back to updatedAt - matches the migration's backfill rule.
             accessedAt = entity.accessedAt ?: entity.updatedAt,
         )
     }

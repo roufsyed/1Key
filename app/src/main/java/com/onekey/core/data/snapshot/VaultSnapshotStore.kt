@@ -29,10 +29,10 @@ import javax.inject.Singleton
  *
  *   1. **Cold-first-search latency** in the main vault and in autofill. The
  *      coordinator is always live; subscribed consumers see `Loaded` as
- *      soon as the first decrypt pass completes — no per-screen warm-up.
+ *      soon as the first decrypt pass completes - no per-screen warm-up.
  *
  *   2. **Duplicate plaintext residency** across `VaultViewModel`,
- *      `AutofillUnlockViewModel`, etc. — one decrypted list shared, lean
+ *      `AutofillUnlockViewModel`, etc. - one decrypted list shared, lean
  *      projection only.
  *
  *   3. **Repeated whole-vault decrypts** per UI surface visit.
@@ -45,7 +45,7 @@ import javax.inject.Singleton
  * decryption [Job]. By the time `lock()` returns to its caller, the snapshot
  * has dropped its plaintext list reference and the next garbage-collection
  * pass will reclaim it. NO assumption is made about cross-dispatcher
- * StateFlow visibility — the synchronous hook is the contract.
+ * StateFlow visibility - the synchronous hook is the contract.
  *
  * **Coordinator branches.** A single coordinator [collectLatest]s a
  * three-way [combine] of `isUnlocked`, `isMigrating`, and the row count.
@@ -55,7 +55,7 @@ import javax.inject.Singleton
  *   - `!unlocked` → `Locked`. No upstream.
  *   - `migrating` → `Loading`. No upstream (avoids Room invalidation storm
  *     while [CredentialCipherMigrator] rewrites legacy rows).
- *   - `count > SNAPSHOT_CAP` → `Bypassed`. No upstream — consumers fall
+ *   - `count > SNAPSHOT_CAP` → `Bypassed`. No upstream - consumers fall
  *     back to SQL observers.
  *   - else → `Loading`, then launch upstream: subscribe to
  *     `dao.observeListRaw(SELECT_ACTIVE)`, conflate bursts, decrypt to the
@@ -84,7 +84,7 @@ class VaultSnapshotStore @Inject constructor(
 
     /**
      * Current snapshot state. Subscribers should pattern-match exhaustively
-     * — the UI distinguishes `Loading` from `Loaded(empty)` so the empty
+     * - the UI distinguishes `Loading` from `Loaded(empty)` so the empty
      * state never flashes during a transient first-decrypt window. See
      * [SnapshotState] for transition contract.
      */
@@ -94,7 +94,7 @@ class VaultSnapshotStore @Inject constructor(
     @Volatile private var upstreamJob: Job? = null
 
     init {
-        // STEP 1 — Install the synchronous lock hook FIRST, before launching
+        // STEP 1 - Install the synchronous lock hook FIRST, before launching
         // the coordinator. A `lock()` that races against the coordinator's
         // first scheduling will still hit the hook on the lock() caller's
         // thread and synchronously transition `_state.value` to `Locked`.
@@ -105,7 +105,7 @@ class VaultSnapshotStore @Inject constructor(
             // zero key bytes.
             _state.value = SnapshotState.Locked
             decryptor.onLock()
-            // Cancel via the public Job API — safe from any thread. The
+            // Cancel via the public Job API - safe from any thread. The
             // upstream coroutine sees CancellationException at its next
             // suspension point (yield() inside decryptAllLeanWithLockCheck
             // OR the next collect resumption from dao.observeListRaw).
@@ -113,7 +113,7 @@ class VaultSnapshotStore @Inject constructor(
             upstreamJob = null
         }
 
-        // STEP 2 — Launch the always-live coordinator. `snapshotScope` is
+        // STEP 2 - Launch the always-live coordinator. `snapshotScope` is
         // SupervisorJob + Dispatchers.Default (see SnapshotModule), so a
         // single CancellationException in an upstream branch cannot kill
         // the coordinator itself.
@@ -146,7 +146,7 @@ class VaultSnapshotStore @Inject constructor(
                         // here would override the test dispatcher and make
                         // the upstream loop untestable on virtual time.
                         // Threading guarantee is preserved at the
-                        // SnapshotModule level — see provideSnapshotScope.
+                        // SnapshotModule level - see provideSnapshotScope.
                         upstreamJob = launch {
                             try {
                                 dao.observeListRaw(SELECT_ACTIVE_SQL)
@@ -167,7 +167,7 @@ class VaultSnapshotStore @Inject constructor(
                                 }
                             }
                             // CancellationException is intentionally NOT
-                            // caught — collectLatest's body cancellation
+                            // caught - collectLatest's body cancellation
                             // propagates upward as designed.
                         }
                     }
@@ -190,7 +190,7 @@ class VaultSnapshotStore @Inject constructor(
          * Maximum active-credential count for which the snapshot maintains
          * a hot decrypted list. Vaults larger than this transition to
          * [SnapshotState.Bypassed] and consumers fall back to per-screen
-         * SQL observers. Tuned empirically before GA — 10 000 is the
+         * SQL observers. Tuned empirically before GA - 10 000 is the
          * starting point covering >99% of real password-manager vaults
          * while bounding heap residency to ~1.2 MB at the lean projection
          * size (~120 bytes/row).

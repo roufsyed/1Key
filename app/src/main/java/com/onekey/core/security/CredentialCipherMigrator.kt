@@ -59,7 +59,7 @@ class CredentialCipherMigrator @Inject constructor(
     /**
      * True while [migrateAll]'s row/history loops are active. Used by
      * [com.onekey.core.data.snapshot.VaultSnapshotStore] to gate the upstream
-     * `dao.observeListRaw` subscription — while a migration is rewriting
+     * `dao.observeListRaw` subscription - while a migration is rewriting
      * legacy rows, every per-batch `upsert` fires a Room invalidation that
      * would trigger the snapshot to re-decrypt the entire vault. By
      * suppressing the snapshot's subscription during migration, the storm
@@ -67,7 +67,7 @@ class CredentialCipherMigrator @Inject constructor(
      *
      * Emits `false` on construction, `true` while [migrateAll] runs, `false`
      * when it completes or is cancelled (via the [collectLatest] re-emit on
-     * lock — the previous job's `finally` flips it back).
+     * lock - the previous job's `finally` flips it back).
      */
     val isMigrating: StateFlow<Boolean> = _isMigrating.asStateFlow()
 
@@ -91,7 +91,7 @@ class CredentialCipherMigrator @Inject constructor(
                     // settles on Loading. Net cost: at most one wasted
                     // partial decrypt on the unlock-immediately-followed-
                     // by-migration path. Re-decryption is idempotent and
-                    // safe — the snapshot eventually settles on the
+                    // safe - the snapshot eventually settles on the
                     // correct Loaded(...) after migration completes.
                     _isMigrating.value = true
                     job = appScope.launch(Dispatchers.Default) {
@@ -117,7 +117,7 @@ class CredentialCipherMigrator @Inject constructor(
         val fieldKey = crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO)
         val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
 
-        // Pass 1 — credentials table.
+        // Pass 1 - credentials table.
         while (true) {
             val batch = runCatching { dao.getLegacyCipherBatch(BATCH_SIZE) }.getOrNull()
                 ?: break
@@ -131,7 +131,7 @@ class CredentialCipherMigrator @Inject constructor(
             }
         }
 
-        // Pass 2 — credential_history table. Same legacy AES-GCM/raw-vault-key
+        // Pass 2 - credential_history table. Same legacy AES-GCM/raw-vault-key
         // shape as v0 credentials, but no notes/totp/custom fields to deal with.
         while (true) {
             val batch = runCatching { historyDao.getLegacyCipherBatch(BATCH_SIZE) }.getOrNull()
@@ -218,7 +218,7 @@ class CredentialCipherMigrator @Inject constructor(
             )
         }
 
-        // updated_at intentionally NOT bumped — see class KDoc.
+        // updated_at intentionally NOT bumped - see class KDoc.
         dao.upsert(migrated)
     }
 
@@ -237,7 +237,7 @@ class CredentialCipherMigrator @Inject constructor(
 
         // Re-encrypt under v2: HKDF subkeys + per-field AAD ("h:" prefix on the id
         // namespaces history rows separately from credential rows). AAD shape must
-        // match the read path in CredentialHistoryRepositoryImpl — keep in lock-step.
+        // match the read path in CredentialHistoryRepositoryImpl - keep in lock-step.
         val encUsername = crypto.encrypt(username, fieldKey, historyFieldAad(entity.id, "username"))
         val encPassword = crypto.encrypt(password, fieldKey, historyFieldAad(entity.id, "password"))
         val encUrl      = urlBytes?.let { crypto.encrypt(it, fieldKey, historyFieldAad(entity.id, "url")) }

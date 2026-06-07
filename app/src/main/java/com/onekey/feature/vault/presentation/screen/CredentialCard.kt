@@ -22,7 +22,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.presentation.util.toRelativeTime
 
 /**
- * Flat list row for a credential — sibling of the home tag rows. No card chrome, no
+ * Flat list row for a credential - sibling of the home tag rows. No card chrome, no
  * elevation; the divider strip below each row (provided by callers) gives the list its
  * separation. Leading icon reflects the credential's first tag so the row is scannable.
  */
@@ -47,7 +47,7 @@ internal fun CredentialCard(
 
 /**
  * Overload for the lean [SnapshotCredential] projection used by the snapshot-backed
- * search surface. The card needs only title/username/tags/isFavorite/updatedAt —
+ * search surface. The card needs only title/username/tags/isFavorite/updatedAt -
  * the snapshot intentionally omits password, notes, OTP secret, and custom fields,
  * so a list-row composable cannot accidentally render any of those.
  */
@@ -98,7 +98,7 @@ private fun CredentialCardImpl(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Icon comes from the credential's first tag rather than its type — legacy
+        // Icon comes from the credential's first tag rather than its type - legacy
         // rows (pre-Phase 1) all carry type = LOGIN, so a type-based icon would render
         // every row as a lock no matter which category list the user is in. Tags
         // match the home rows' icon language anyway, so list views read as one family.

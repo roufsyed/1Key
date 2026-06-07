@@ -40,7 +40,7 @@ private const val SP_KEYSTORE_UPGRADED = "ks_upgraded"
 private const val SP_WRAPPED_KEY_CT_V2 = "wrapped_key_ct_v2"
 private const val SP_WRAPPED_KEY_IV_V2 = "wrapped_key_iv_v2"
 
-// ── Legacy DataStore keys — read-only, used only during the one-time migration ──
+// ── Legacy DataStore keys - read-only, used only during the one-time migration ──
 
 private val DS_SETUP_COMPLETE    = booleanPreferencesKey(SP_SETUP_COMPLETE)
 private val DS_SALT              = stringPreferencesKey(SP_SALT)
@@ -89,7 +89,7 @@ class AuthRepositoryImpl @Inject constructor(
      * One-time migration: copies auth keys from the legacy plaintext DataStore into
      * [authPrefs] (EncryptedSharedPreferences), then removes them from DataStore.
      *
-     * The idempotency invariant is "no plaintext auth keys remain in DataStore" — i.e.
+     * The idempotency invariant is "no plaintext auth keys remain in DataStore" - i.e.
      * the goal state, not an intermediate state. Older versions of this code keyed the
      * skip on `authPrefs.contains(SP_SETUP_COMPLETE)`, which meant a failure of the
      * cleanup step (after the encrypted-store write succeeded) would leave the legacy
@@ -98,7 +98,7 @@ class AuthRepositoryImpl @Inject constructor(
      * hardening is built to remove would silently persist.
      *
      * The fix: drive the skip off the source state. If any DataStore auth key is
-     * present, run the migration. The two phases — copy and clear — are each
+     * present, run the migration. The two phases - copy and clear - are each
      * individually idempotent, so re-running on a partially-migrated state finishes
      * the job. Cleanup failures throw and surface in logcat (rather than being
      * swallowed by `runCatching`); the next launch retries.
@@ -119,14 +119,14 @@ class AuthRepositoryImpl @Inject constructor(
             old[DS_WRAPPED_KEY_IV_V2] != null
         if (!hasLegacyKeys) return
 
-        // Phase 1 — copy. Skip when there's nothing valid to copy (no setup-complete
+        // Phase 1 - copy. Skip when there's nothing valid to copy (no setup-complete
         // marker in DataStore) OR when the encrypted store already has the data.
         // SharedPreferences.commit() is synchronous and atomic at the file-system
         // rename level: either the entire batch lands or none of it does.
         //
         // Important: the half-state "marker missing but other keys present" is a
         // corruption case (e.g. a partial reset). Skipping the copy in that state is
-        // correct — there's no valid auth state to migrate — but we MUST NOT skip the
+        // correct - there's no valid auth state to migrate - but we MUST NOT skip the
         // cleanup phase below. An earlier version of this fix used `?: return` here,
         // which exited the whole function and left the orphan plaintext keys in
         // DataStore forever (re-audit Finding R1).
@@ -149,7 +149,7 @@ class AuthRepositoryImpl @Inject constructor(
             }.commit()
         }
 
-        // Phase 2 — clear. ALWAYS run when legacy keys exist; do NOT swallow errors.
+        // Phase 2 - clear. ALWAYS run when legacy keys exist; do NOT swallow errors.
         // Idempotent: removing a key that's already absent is a no-op, so this is safe
         // to run even when phase 1 was skipped (half-state cleanup) or when phase 1
         // already wrote to the encrypted store on a previous launch (cleanup retry).
@@ -306,9 +306,9 @@ class AuthRepositoryImpl @Inject constructor(
         // verifyPin which returns AppResult<Unit>. The public overload exists for
         // the in-vault Settings → Change PIN flow that legitimately consumes the
         // result. Calling it here discards the result, and runCatchingResult only
-        // catches exceptions — so any wrong PIN would silently flow through to
+        // catches exceptions - so any wrong PIN would silently flow through to
         // unwrapStoredKey() and unlock the vault. Regression introduced by M4 (1aeb4cb)
-        // and fixed in b? — keep this comment to prevent the same swap recurring.
+        // and fixed in b? - keep this comment to prevent the same swap recurring.
         verifyPinInternal(pin)
         // pin is zeroed inside verifyPinInternal.
 
@@ -435,7 +435,7 @@ class AuthRepositoryImpl @Inject constructor(
             val iv   = authPrefs.getString(SP_WRAPPED_KEY_IV_V2, null)?.decodeBase64()
                 ?: error("V2 vault key IV not found")
             val v2Key = crypto.loadKeystoreKey(KEYSTORE_ALIAS_V2)
-                ?: error("V2 Keystore key not found — vault may need repair")
+                ?: error("V2 Keystore key not found - vault may need repair")
             crypto.unwrapKey(EncryptedData(ct, iv), v2Key)
         } else {
             val ct   = authPrefs.getString(SP_WRAPPED_KEY_CT, null)?.decodeBase64()

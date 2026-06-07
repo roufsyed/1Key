@@ -44,7 +44,7 @@ class AppViewModel @Inject constructor(
             }
         }
         // On every unlock, purge recycle-bin items past their 30-day retention window.
-        // We don't surface failures — the bin keeps the items around until next unlock.
+        // We don't surface failures - the bin keeps the items around until next unlock.
         viewModelScope.launch {
             isUnlocked.collect { unlocked ->
                 if (unlocked) purgeExpiredRecycleBin()

@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
  * on the bare JVM. Tests cover every parameter the parser surfaces, every
  * fallback path, and the Steam auto-detection trigger.
  *
- * `@Config(sdk = [34])` pins Robolectric to API 34 — the highest its 4.13
+ * `@Config(sdk = [34])` pins Robolectric to API 34 - the highest its 4.13
  * release supports. Our `compileSdk` is 35, but the URI parsing code path
  * doesn't depend on any post-34 platform behaviour, so dropping back is safe.
  *

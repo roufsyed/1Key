@@ -9,7 +9,7 @@ import com.android.tools.lint.detector.api.Issue
 /**
  * Locks the detector's behaviour against a small fixture surface that mimics
  * Material3 / Compose UI window declarations. We don't depend on the real M3
- * library here — Lint test files compile into a self-contained sandbox, and
+ * library here - Lint test files compile into a self-contained sandbox, and
  * pulling M3 in would balloon test runtime. The fixtures faithfully reproduce
  * the package + simple-name combinations the detector keys off.
  */
@@ -39,7 +39,7 @@ class UnsafeUnlockableSurfaceDetectorTest : LintDetectorTest() {
             )
             .run()
             .expectErrorCount(1)
-            // Pin the suggested wrapper name in the diagnostic — this is the
+            // Pin the suggested wrapper name in the diagnostic - this is the
             // user-facing copy a developer reads when the build fails. Locking
             // it here means a future rename of `LockAwareDialog` would produce
             // an obvious test failure rather than silently broken guidance.

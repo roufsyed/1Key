@@ -25,7 +25,7 @@ import javax.inject.Inject
  * Home-screen ViewModel for the main vault.
  *
  * **Search.** `searchResults` is a [StateFlow] of [SearchState] derived from the
- * shared [com.onekey.core.data.snapshot.VaultSnapshotStore] — not from a per-VM
+ * shared [com.onekey.core.data.snapshot.VaultSnapshotStore] - not from a per-VM
  * paged query. The store keeps a hot, lean-projection decrypted list while the
  * vault is unlocked, so the first keystroke after unlock filters an already-warm
  * list rather than triggering a cold Room invalidation + per-row HKDF + AES-GCM
@@ -53,14 +53,14 @@ class VaultViewModel @Inject constructor(
     /**
      * Sealed state for the top-bar search results pane.
      *
-     *  - [Idle]      — query is blank, OR vault is locked. UI shows the
+     *  - [Idle]      - query is blank, OR vault is locked. UI shows the
      *                  "Type to search credentials…" hint.
-     *  - [Loading]   — snapshot is still completing its first decrypt pass
+     *  - [Loading]   - snapshot is still completing its first decrypt pass
      *                  (or the cipher migrator is rewriting legacy rows). UI
      *                  shows a spinner; never "No results".
-     *  - [Loaded]    — filtered list ready. Empty list + non-blank query
+     *  - [Loaded]    - filtered list ready. Empty list + non-blank query
      *                  renders the "No results for …" empty state.
-     *  - [Bypassed]  — vault size exceeds the snapshot cap. Fast in-memory
+     *  - [Bypassed]  - vault size exceeds the snapshot cap. Fast in-memory
      *                  search is disabled; UI prompts the user to browse via
      *                  All Items. A paged SQL fallback can be wired here in a
      *                  later PR; deferred because real vaults rarely exceed
@@ -123,7 +123,7 @@ class VaultViewModel @Inject constructor(
         .distinctUntilChanged()
         // `WhileSubscribed(5_000)` (not Eagerly): while the user is on
         // Settings, the lock screen, or another tab, no Compose collector is
-        // alive — the filter+sort body should not run for every Room write.
+        // alive - the filter+sort body should not run for every Room write.
         // 5 s grace covers configuration changes (rotation). Initial value
         // is `Idle`, which is what an unobserved bar should report anyway.
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), SearchState.Idle)

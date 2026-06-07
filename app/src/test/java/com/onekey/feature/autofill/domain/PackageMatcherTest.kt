@@ -26,7 +26,7 @@ import org.robolectric.annotation.Config
  *  - the soft cap on results works.
  *
  * Robolectric only because ParsedFields is @Parcelize. The actual matching
- * code does not touch the Android URI framework — it uses java.net.URI — so
+ * code does not touch the Android URI framework - it uses java.net.URI - so
  * the test could run on the bare JVM, but @Parcelize-generated Parcelable
  * methods pull in android.os.Parcel during class init.
  */

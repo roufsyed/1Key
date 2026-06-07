@@ -20,8 +20,8 @@ import javax.inject.Inject
  *
  * `remainingSeconds` and `progress` are kept non-nullable here because the widget
  * only renders for time-based variants (the caller in CredentialDetailScreen gates
- * on `params.type in TOTP, STEAM`). HOTP entries take a different UI path — the
- * 2FA list's "Generate next code" button (added in C5) — and never reach this VM.
+ * on `params.type in TOTP, STEAM`). HOTP entries take a different UI path - the
+ * 2FA list's "Generate next code" button (added in C5) - and never reach this VM.
  */
 data class TotpUiState(
     val code: String = "------",
@@ -46,7 +46,7 @@ class TotpViewModel @Inject constructor(
     private var tickerJob: Job? = null
 
     fun startGenerating(params: OtpParams) {
-        // HOTP must never reach the rotating UI — the widget's caller in C2 gates
+        // HOTP must never reach the rotating UI - the widget's caller in C2 gates
         // on type, but this defensive bail keeps the VM correct on its own if a
         // future caller forgets. Without it we'd silently advance the HOTP code
         // every second and never persist the counter, desyncing the user.

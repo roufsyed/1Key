@@ -43,7 +43,7 @@ fun TwoFaListScreen(
     val scope = rememberCoroutineScope()
     // Store the credential id (saveable) rather than the full entry so the
     // confirm-delete dialog survives rotation. The matching entry is resolved from the
-    // current `entriesList` at render time — if the entry has since disappeared, the
+    // current `entriesList` at render time - if the entry has since disappeared, the
     // dialog simply doesn't show, which is the correct behavior.
     var pendingDeleteCredentialId by rememberSaveable { mutableStateOf<String?>(null) }
     // Sheets driven by the FAB. `showFabPicker` opens the Scan-vs-Manual chooser;
@@ -120,14 +120,14 @@ fun TwoFaListScreen(
             ) {
                 items(entriesList, key = { it.credential.id }) { entry ->
                     val onCopy: (String) -> Unit = { code ->
-                        // Routes through SecureClipboardManager — its app-singleton
+                        // Routes through SecureClipboardManager - its app-singleton
                         // scope makes the 30s clear survive navigation away from this
                         // screen, which is exactly when the user needs it (they
                         // copy the code, then switch apps to paste it).
                         viewModel.copyCode(code)
                         scope.launch {
                             snackbarHostState.showSnackbar(
-                                message = "Code copied — clipboard will be cleared automatically in 30s",
+                                message = "Code copied - clipboard will be cleared automatically in 30s",
                                 duration = SnackbarDuration.Short,
                             )
                         }
@@ -211,7 +211,7 @@ private fun RotatingOtpRow(
     onCopyCode: (String) -> Unit,
 ) {
     // Flat clickable row to match the home / all-items list language. The OTP code stays
-    // the visual hero — same monospace + countdown ring, just without card chrome.
+    // the visual hero - same monospace + countdown ring, just without card chrome.
     // Steam entries (5 alphanumerics) render as a single block via formatOtpCode,
     // while 6/7/8-digit codes get the standard chunking.
     val params = entry.credential.otpParams
@@ -251,8 +251,8 @@ private fun RotatingOtpRow(
 }
 
 /**
- * HOTP row variant. Mirrors [RotatingOtpRow]'s visual rhythm — same title /
- * username / linked-badge header — but trades the timer ring for a
+ * HOTP row variant. Mirrors [RotatingOtpRow]'s visual rhythm - same title /
+ * username / linked-badge header - but trades the timer ring for a
  * "Generate next code" affordance. The body shows the most-recently-generated
  * code or a placeholder dash sequence until the user taps generate.
  *
@@ -271,7 +271,7 @@ private fun HotpRow(
     val params = entry.credential.otpParams
     val displayCode = entry.code?.let { code ->
         if (params != null) formatOtpCode(params, code) else code
-    } ?: "— — —"
+    } ?: "- - -"
     Column(
         modifier = Modifier
             .fillMaxWidth()

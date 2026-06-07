@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    1Key brand mark for the autofill chip — a simplified key glyph derived
+    1Key brand mark for the autofill chip - a simplified key glyph derived
     from the launcher foreground. Sized at 24dp viewBox so the system
     renderer scales it cleanly into the 18-22dp icon slot. Fill is the
     foreground colour resolved at runtime via the @color qualifier set, so

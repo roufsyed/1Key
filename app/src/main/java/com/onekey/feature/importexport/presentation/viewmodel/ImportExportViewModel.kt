@@ -47,14 +47,14 @@ sealed class ImportExportUiState {
     data object Loading : ImportExportUiState()
     data class Success(val message: String) : ImportExportUiState()
     data class ImportSuccess(val result: ImportResult) : ImportExportUiState()
-    // Parsed data ready for user review — shown before committing anything to the vault.
+    // Parsed data ready for user review - shown before committing anything to the vault.
     data class ImportPreview(
         val parsed: ParsedImport,
         val previewItems: List<Credential>,
         val customFieldKeys: List<String>,
         val sensitiveCustomFieldKeys: Set<String>,
     ) : ImportExportUiState()
-    // Plan computed; some items conflict with existing — user picks merge or add-as-separate.
+    // Plan computed; some items conflict with existing - user picks merge or add-as-separate.
     data class ImportReview(val plan: ImportPlan) : ImportExportUiState()
     // Encrypted file detected; error is non-null when decryption failed (retry allowed).
     data class AwaitingImportPassword(val error: String? = null) : ImportExportUiState()
@@ -112,7 +112,7 @@ class ImportExportViewModel @Inject constructor(
                                 ?.use { out -> tmpFile.inputStream().use { it.copyTo(out) } }
                         }
                         _uiState.value = ImportExportUiState.Success(
-                            "Your vault has been exported. This file is NOT encrypted — " +
+                            "Your vault has been exported. This file is NOT encrypted - " +
                             "store it somewhere safe and treat it as a sensitive document."
                         )
                     }
@@ -155,7 +155,7 @@ class ImportExportViewModel @Inject constructor(
                         }
                         _uiState.value = ImportExportUiState.Success(
                             "Your encrypted backup has been saved successfully. " +
-                            "Keep it somewhere safe — you'll need your master password to restore from it."
+                            "Keep it somewhere safe - you'll need your master password to restore from it."
                         )
                     }
                     is AppResult.Error ->
@@ -225,7 +225,7 @@ class ImportExportViewModel @Inject constructor(
         }
     }
 
-    /** Called from the password dialog. Retries are allowed — pendingImportFile stays alive on failure. */
+    /** Called from the password dialog. Retries are allowed - pendingImportFile stays alive on failure. */
     fun importWithPassword(password: CharArray) {
         val file = pendingImportFile ?: return
         viewModelScope.launch {
@@ -279,7 +279,7 @@ class ImportExportViewModel @Inject constructor(
                         pendingPlan = plan
                         _uiState.value = ImportExportUiState.ImportReview(plan)
                     } else {
-                        // No conflicts — apply silently and finish.
+                        // No conflicts - apply silently and finish.
                         applyPlan(plan, ConflictResolution.MERGE)
                     }
                 }
@@ -354,7 +354,7 @@ class ImportExportViewModel @Inject constructor(
             }
 
             try {
-                // Argon2id derivation runs inside unlockWithPassword — keep it off Main
+                // Argon2id derivation runs inside unlockWithPassword - keep it off Main
                 // so the export-verify dialog doesn't freeze the UI on submit.
                 val outcome = withContext(Dispatchers.Default) {
                     authRepository.unlockWithPassword(password)
@@ -386,7 +386,7 @@ class ImportExportViewModel @Inject constructor(
     }
 
     fun acknowledgeResult() {
-        // Defensive — confirmImport already nulls on success, but if any path lands
+        // Defensive - confirmImport already nulls on success, but if any path lands
         // here with stale parsed data, drop it so we don't leak across imports.
         pendingParsedImport = null
         _uiState.value = ImportExportUiState.Idle
@@ -414,7 +414,7 @@ class ImportExportViewModel @Inject constructor(
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /** Returns up to 8 credentials — one representative per unique first tag. */
+    /** Returns up to 8 credentials - one representative per unique first tag. */
     private fun buildPreviewItems(credentials: List<Credential>): List<Credential> {
         if (credentials.isEmpty()) return emptyList()
         val seenBuckets = LinkedHashSet<String>()

@@ -13,11 +13,11 @@ interface CredentialRepository {
         sortOrder: CredentialSortOrder = CredentialSortOrder.NEWEST_FIRST,
     ): Flow<PagingData<Credential>>
     fun observeCredential(id: String): Flow<Credential?>
-    /** Emits regardless of soft-delete state — the detail screen needs to render bin items too. */
+    /** Emits regardless of soft-delete state - the detail screen needs to render bin items too. */
     fun observeCredentialIncludingDeleted(id: String): Flow<Credential?>
     suspend fun getCredential(id: String): AppResult<Credential>
     suspend fun saveCredential(credential: Credential): AppResult<Unit>
-    /** Soft-deletes — moves the credential to the recycle bin. */
+    /** Soft-deletes - moves the credential to the recycle bin. */
     suspend fun deleteCredential(id: String): AppResult<Unit>
     /** Permanently removes the credential, bypassing the recycle bin. */
     suspend fun hardDeleteCredential(id: String): AppResult<Unit>
@@ -33,7 +33,7 @@ interface CredentialRepository {
     fun observeRecycleBinCount(): Flow<Int>
     /** Active items only. */
     suspend fun getAllCredentials(): AppResult<List<Credential>>
-    /** Recycle-bin items only — used for import dedup against soft-deleted matches. */
+    /** Recycle-bin items only - used for import dedup against soft-deleted matches. */
     suspend fun getAllInRecycleBin(): AppResult<List<Credential>>
     suspend fun importCredentials(credentials: List<Credential>): AppResult<Int>
     fun observeCount(): Flow<Int>
@@ -46,13 +46,13 @@ interface CredentialRepository {
     fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>>
     fun observeFavoriteTitlesAlphabetical(): Flow<List<String>>
     /**
-     * Time-based OTP enrolments (TOTP, Steam Guard) — anything that rotates on a
+     * Time-based OTP enrolments (TOTP, Steam Guard) - anything that rotates on a
      * clock. Drives the per-second recompute loop in TwoFaListViewModel.
      */
     fun observeRotatingOtp(): Flow<List<Credential>>
 
     /**
-     * Counter-based OTP enrolments (HOTP). Static list — only re-emits when a
+     * Counter-based OTP enrolments (HOTP). Static list - only re-emits when a
      * row's counter changes or the entry is added/removed/edited. Combined with
      * [observeRotatingOtp] for the unified 2FA list display.
      */
@@ -77,7 +77,7 @@ interface CredentialRepository {
 
     /**
      * Bumps `accessed_at` to the current epoch ms for an active credential.
-     * Soft-deleted (recycle-bin) rows are silently skipped at the SQL level —
+     * Soft-deleted (recycle-bin) rows are silently skipped at the SQL level -
      * "accessed" should reflect real usage, not casual viewing of bin items.
      * Independent of `updated_at`; does not bump it.
      */

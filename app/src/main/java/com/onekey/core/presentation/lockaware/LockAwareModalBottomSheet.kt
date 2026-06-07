@@ -23,7 +23,7 @@ import androidx.compose.ui.unit.dp
  * sheet's separate Window ping [LocalUserActivityPing], keeping the inactivity
  * auto-lock from firing under an actively-interacting user.
  *
- * Drag-to-dismiss and slider scrubs are continuous gestures — the modifier
+ * Drag-to-dismiss and slider scrubs are continuous gestures - the modifier
  * pings on every event of the gesture, not just the initial touch, so a
  * sustained drag (e.g. slowly tuning a password-generator slider for 30+s)
  * doesn't outlive the inactivity window.

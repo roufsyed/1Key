@@ -6,9 +6,9 @@ import java.net.URI
  * Single source of truth for host normalisation across the autofill path.
  *
  * Two independent code paths need to ask "what host is this URL?":
- *   1. [PackageMatcher] — extracting the host from a credential's saved `url`
+ *   1. [PackageMatcher] - extracting the host from a credential's saved `url`
  *      to compare against the form's `webDomain` for exact-host matching.
- *   2. The unlock activity's search snapshot — both to render the credential's
+ *   2. The unlock activity's search snapshot - both to render the credential's
  *      stored host in the picker and to compute the cross-host warning when
  *      the user picks a credential saved under a different domain.
  *

@@ -11,11 +11,11 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Verifies the deny-set hardcoded into [AutofillBlocklist] — system-UI surfaces,
+ * Verifies the deny-set hardcoded into [AutofillBlocklist] - system-UI surfaces,
  * setup wizard, providers, launcher, plus our own package.
  *
  * Robolectric supplies the application Context so the blocklist can read its
- * own package (which is set to the test target — anything stable will do).
+ * own package (which is set to the test target - anything stable will do).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -54,7 +54,7 @@ class AutofillBlocklistTest {
     }
 
     @Test fun chrome_is_not_blocked() {
-        // Browsers must not be in the blocklist — they are the dominant source
+        // Browsers must not be in the blocklist - they are the dominant source
         // of web logins.
         assertFalse(blocklist.isBlocked("com.android.chrome"))
         assertFalse(blocklist.isBlocked("com.google.android.apps.chrome"))

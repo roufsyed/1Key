@@ -33,7 +33,7 @@ import androidx.compose.ui.input.pointer.pointerInput
  *    [com.onekey.core.presentation.lockaware.LockAwareTextField].
  *
  * Implementation note: we capture the latest `ping` lambda via
- * [rememberUpdatedState] so [pointerInput] can be keyed on `Unit` (stable) —
+ * [rememberUpdatedState] so [pointerInput] can be keyed on `Unit` (stable) -
  * this avoids tearing down and rebuilding the gesture loop every recomposition,
  * which would in turn lose any in-progress gesture mid-stream.
  */
@@ -42,7 +42,7 @@ fun Modifier.lockAware(): Modifier = composed {
     this
         .pointerInput(Unit) {
             awaitEachGesture {
-                // First touch of the gesture — always ping.
+                // First touch of the gesture - always ping.
                 awaitFirstDown(requireUnconsumed = false)
                 pingState.value()
                 // Continue pinging on subsequent events of the same gesture.
@@ -62,7 +62,7 @@ fun Modifier.lockAware(): Modifier = composed {
 }
 
 /**
- * Convenience for sites that want to ping without a modifier — e.g. a
+ * Convenience for sites that want to ping without a modifier - e.g. a
  * `TextField`'s `onValueChange`. Reads the local and returns a ping callable.
  *
  * Useful in two places:

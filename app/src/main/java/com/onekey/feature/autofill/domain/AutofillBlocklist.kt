@@ -9,10 +9,10 @@ import javax.inject.Singleton
  * Package allow/deny filter for fill requests. Two reasons a package belongs
  * here:
  *
- *  1. System surfaces — Settings, SystemUI, providers, setup wizard, launchers
- *     — where credentials are never wanted and where filling could leak
+ *  1. System surfaces - Settings, SystemUI, providers, setup wizard, launchers
+ *     - where credentials are never wanted and where filling could leak
  *     plaintext into the wrong context.
- *  2. Our own package — we never want to fill 1Key itself with itself.
+ *  2. Our own package - we never want to fill 1Key itself with itself.
  *
  * Browsers are deliberately not blocked. They are the largest single source of
  * credential fills.

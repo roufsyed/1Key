@@ -39,7 +39,7 @@ import androidx.compose.ui.window.DialogProperties
  * Why we don't just use `AlertDialog` here: M3's `AlertDialog` relies on the
  * platform Dialog window's `softInputMode` to resize when the IME shows. That
  * works on some devices/Compose versions and fails on others, leaving tall
- * dialogs (descriptive copy + a `TextField` + buttons — e.g. the biometric and
+ * dialogs (descriptive copy + a `TextField` + buttons - e.g. the biometric and
  * remove-PIN confirms) with their button row pushed below the keyboard.
  *
  * To make the IME behaviour deterministic we render with the raw `Dialog`,
@@ -49,7 +49,7 @@ import androidx.compose.ui.window.DialogProperties
  * the wrapper shrinks; the surface re-centres in the smaller area; if the
  * surface's natural content exceeds the available height, the text body
  * scrolls (via the `weight(1f, fill = false) + verticalScroll` slot) and the
- * buttons remain pinned at the bottom of the surface — always visible above
+ * buttons remain pinned at the bottom of the surface - always visible above
  * the keyboard.
  *
  * Visual layout mirrors `AlertDialog` (icon → title → text → buttons row,

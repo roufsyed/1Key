@@ -45,7 +45,7 @@ internal object BackupEncryption {
         val header = ByteArray(MAGIC.size)
         val filledFully = File(path).inputStream().use { stream ->
             // InputStream.read(byte[]) is allowed to return fewer bytes than requested even
-            // when more are available — looping until full avoids spuriously misclassifying
+            // when more are available - looping until full avoids spuriously misclassifying
             // a real encrypted backup as plaintext on slow / DocumentFile-backed streams.
             var read = 0
             while (read < header.size) {
@@ -72,7 +72,7 @@ internal object BackupEncryption {
         vaultVersion: Int = 0,
     ): ByteArray {
         val salt = crypto.generateSalt(SALT_LEN)
-        // V4: Argon2id (m=64 MB, t=3, p=1) — ~100× harder to brute-force than PBKDF2.
+        // V4: Argon2id (m=64 MB, t=3, p=1) - ~100× harder to brute-force than PBKDF2.
         val key = crypto.deriveKeyFromPasswordArgon2id(password, salt)
         password.fill(' ')
         val formatByte = if (format == ExportFormat.JSON) FORMAT_JSON else FORMAT_CSV
@@ -146,7 +146,7 @@ internal object BackupEncryption {
 
         // V2/V3: AAD = (MAGIC || VERSION || FORMAT)
         // V4:    AAD = (MAGIC || VERSION || FORMAT || TIMESTAMP || VAULT_VER)
-        // V1: no AAD — legacy backups decrypt without header authentication.
+        // V1: no AAD - legacy backups decrypt without header authentication.
         val aad = when (version) {
             VERSION_V4 -> buildHeaderAad(version, fmtByte, createdAtMs, vaultVersion)
             VERSION_AAD, VERSION_ARGON2ID -> buildHeaderAad(version, fmtByte)

@@ -9,8 +9,8 @@ import javax.inject.Inject
 /**
  * Conflict-aware restore from the recycle bin. The two-step API lets callers detect a
  * collision with an existing active credential (same trimmed title + username) and
- * surface the user's choice — merge into the existing item, or restore as a separate
- * row — before mutating anything. Mirrors the import flow's merge UX.
+ * surface the user's choice - merge into the existing item, or restore as a separate
+ * row - before mutating anything. Mirrors the import flow's merge UX.
  */
 class RestoreFromRecycleBinUseCase @Inject constructor(
     private val credentialRepository: CredentialRepository,
@@ -24,7 +24,7 @@ class RestoreFromRecycleBinUseCase @Inject constructor(
         return active.firstOrNull { it.title.trim() to it.username.trim() == key }
     }
 
-    /** Plain restore — caller has confirmed no conflict, or explicitly chose "keep both". */
+    /** Plain restore - caller has confirmed no conflict, or explicitly chose "keep both". */
     suspend fun restore(id: String): AppResult<Unit> = credentialRepository.restoreCredential(id)
 
     /**
@@ -45,7 +45,7 @@ class RestoreFromRecycleBinUseCase @Inject constructor(
         password = existing.password.takeIf { it.isNotBlank() } ?: binItem.password,
         url = existing.url.takeIf { it.isNotBlank() } ?: binItem.url,
         notes = existing.notes.takeIf { it.isNotBlank() } ?: binItem.notes,
-        // Existing OTP enrolment wins as a unit — params are bound to their secret.
+        // Existing OTP enrolment wins as a unit - params are bound to their secret.
         otpParams = existing.otpParams ?: binItem.otpParams,
         tags = if (existing.tags.isNotEmpty()) existing.tags else binItem.tags,
         customFields = if (existing.customFields.isNotEmpty()) existing.customFields else binItem.customFields,

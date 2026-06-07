@@ -7,7 +7,7 @@ import kotlinx.parcelize.Parcelize
 /**
  * One field recognised by the parser. Carries the [AutofillId] needed to
  * write a value back through the framework, plus the contextual metadata
- * the matcher consumes (package and optional web domain). Pure data — no
+ * the matcher consumes (package and optional web domain). Pure data - no
  * Android-side behaviour beyond Parcel-ability.
  *
  * Parcelable so [ParsedFields] can ride in a `PendingIntent` extra without

@@ -5,7 +5,7 @@ import kotlin.math.log2
 /**
  * Validates backup passwords before they are used to encrypt a vault export.
  *
- * All validation operates directly on the CharArray — no String conversion occurs,
+ * All validation operates directly on the CharArray - no String conversion occurs,
  * so key material is never interned in the JVM string pool.
  *
  * Entropy is estimated from the character classes present in the password, not from the
@@ -41,7 +41,7 @@ internal object BackupPasswordValidator {
         is Result.Valid -> ""
         is Result.Empty -> "Backup password cannot be empty."
         is Result.TooShort -> "Backup password must be at least ${result.minLength} characters."
-        is Result.AllSameCharacter -> "Backup password is too simple — use a mix of different characters."
+        is Result.AllSameCharacter -> "Backup password is too simple - use a mix of different characters."
         is Result.TooWeak -> "Backup password is too weak. Use a longer or more complex password."
     }
 
@@ -57,7 +57,7 @@ internal object BackupPasswordValidator {
      *   lowercase letters  → +26
      *   uppercase letters  → +26
      *   decimal digits     → +10
-     *   other (symbols)    → +32  (conservative — printable ASCII non-alphanum is ~32)
+     *   other (symbols)    → +32  (conservative - printable ASCII non-alphanum is ~32)
      *
      * This deliberately avoids building a Set<Char> (which requires boxing) or converting
      * to String. The estimate is a lower bound: a password using only 'a' and 'b' gets

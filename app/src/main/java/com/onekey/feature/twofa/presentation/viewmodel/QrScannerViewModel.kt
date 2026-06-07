@@ -91,7 +91,7 @@ class QrScannerViewModel @Inject constructor(
                 url = "",
                 notes = "",
                 // Persist the full parsed params (algorithm/digits/period/counter/type)
-                // — saving as defaultTotp would silently drop SHA-256, 8-digit, 60s,
+                // - saving as defaultTotp would silently drop SHA-256, 8-digit, 60s,
                 // HOTP, and Steam QRs into a vanilla SHA-1/30s/6 entry that yields
                 // wrong codes against the issuer.
                 otpParams = parsed.params,
@@ -131,7 +131,7 @@ class QrScannerViewModel @Inject constructor(
 
     private fun buildTitle(parsed: ParsedOtpAuthUri): String = when {
         parsed.issuer.isNotEmpty() && parsed.account.isNotEmpty() ->
-            "${parsed.issuer} — ${parsed.account}"
+            "${parsed.issuer} - ${parsed.account}"
         parsed.issuer.isNotEmpty() -> parsed.issuer
         else -> parsed.account
     }

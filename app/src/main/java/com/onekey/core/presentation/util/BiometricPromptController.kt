@@ -24,10 +24,10 @@ import com.onekey.core.security.AutoLockManager
  *  2. **Inactivity-suppression is balanced.** A long-running BiometricPrompt
  *     consumes no `onUserInteraction` events (the system dialog steals
  *     touches), so [AutoLockManager]'s idle timer would expire mid-prompt
- *     and relock the vault — silently dropping the key the user is about to
+ *     and relock the vault - silently dropping the key the user is about to
  *     receive. We acquire on show, release on every terminal callback
  *     (success / error / cancel). [onAuthFailed] (wrong finger) does NOT
- *     release — the prompt stays open and we keep suppressing.
+ *     release - the prompt stays open and we keep suppressing.
  */
 class BiometricPromptController(
     private val context: Context,
@@ -40,13 +40,13 @@ class BiometricPromptController(
     /**
      * Shows the prompt, replacing any in-flight one. Callbacks fire on the
      * main thread (the underlying [showBiometricPrompt] uses the main
-     * executor). `onSuccess` / `onError` / `onUserCancel` are terminal —
+     * executor). `onSuccess` / `onError` / `onUserCancel` are terminal -
      * after they fire the prompt is gone and another [show] is required.
      * `onAuthFailed` is mid-prompt feedback only; the system continues to
      * accept retries until success, hard error, or user cancel.
      *
      * @param title defaults to "Biometric Unlock"; do NOT add subtitle that
-     *   names the requesting host — leaks via OEM biometric logs.
+     *   names the requesting host - leaks via OEM biometric logs.
      */
     fun show(
         title: String = "Biometric Unlock",
@@ -60,7 +60,7 @@ class BiometricPromptController(
         // Exception-safety: if [showBiometricPrompt] throws (e.g. the
         // [requireNotNull] FragmentActivity check fails, or any future
         // addition throws before `authenticate` lands), the suppression
-        // already acquired above would otherwise leak forever — the
+        // already acquired above would otherwise leak forever - the
         // controller never gets a callback to release it. Re-balance the
         // bracket and rethrow.
         active = try {
@@ -88,7 +88,7 @@ class BiometricPromptController(
     }
 
     /**
-     * Cancels the active prompt if any. Idempotent — calling multiple times
+     * Cancels the active prompt if any. Idempotent - calling multiple times
      * or when no prompt is showing is a no-op. Releases the inactivity
      * suppression atomically with the cancel.
      */

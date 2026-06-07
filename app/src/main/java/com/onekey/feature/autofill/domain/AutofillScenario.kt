@@ -2,7 +2,7 @@ package com.onekey.feature.autofill.domain
 
 /**
  * Coarse classification of a parsed Autofill request. v1 detects only LOGIN
- * vs UNKNOWN — sign-up detection ships in v1.1 (see project memory
+ * vs UNKNOWN - sign-up detection ships in v1.1 (see project memory
  * `project_autofill.md` for the deferred-scope list).
  */
 enum class AutofillScenario {

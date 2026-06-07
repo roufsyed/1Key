@@ -56,7 +56,7 @@ class PasswordGeneratorViewModel @Inject constructor(
     fun currentPassword(): String = _state.value.password
 
     private fun scheduleGeneration(debounceMs: Long = 0L) {
-        // All mutations are on Main.immediate — no concurrent access to generationJob.
+        // All mutations are on Main.immediate - no concurrent access to generationJob.
         viewModelScope.launch(Dispatchers.Main.immediate) {
             generationJob?.cancel()
             generationJob = viewModelScope.launch(Dispatchers.Default) {

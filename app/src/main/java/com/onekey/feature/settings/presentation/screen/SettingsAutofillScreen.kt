@@ -38,7 +38,7 @@ fun SettingsAutofillScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // Refresh the OS-level "is 1Key the current provider" status on every
-    // ON_RESUME — the user toggles this in the system settings page, which
+    // ON_RESUME - the user toggles this in the system settings page, which
     // gives us no direct callback when they return.
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -78,7 +78,7 @@ fun SettingsAutofillScreen(
                         onSetAsProvider = {
                             // ACTION_REQUEST_SET_AUTOFILL_SERVICE prompts the
                             // user to confirm 1Key as their provider. Some
-                            // OEM builds reject this with ActivityNotFound —
+                            // OEM builds reject this with ActivityNotFound -
                             // fall back to the generic autofill settings
                             // page in that case.
                             val primary = Intent(Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE).apply {
@@ -124,7 +124,7 @@ fun SettingsAutofillScreen(
                         supportingContent = {
                             Text(
                                 "Add a chip row below the search field so you can narrow by tag. " +
-                                    "Off by default — most fills are resolved by host match before search."
+                                    "Off by default - most fills are resolved by host match before search."
                             )
                         },
                         trailingContent = {
@@ -144,7 +144,7 @@ fun SettingsAutofillScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     PrivacyLine(
-                        "Filling matches by exact host or app package — never by similarity. " +
+                        "Filling matches by exact host or app package - never by similarity. " +
                                 "A saved login for github.com will never offer itself on a similarly-named site."
                     )
                     PrivacyLine(
@@ -153,7 +153,7 @@ fun SettingsAutofillScreen(
                                 "matches are revealed."
                     )
                     PrivacyLine(
-                        "No network calls are made for autofill — same guarantee as the rest of 1Key. " +
+                        "No network calls are made for autofill - same guarantee as the rest of 1Key. " +
                                 "Field structure leaves your device only when the system delivers it to us, " +
                                 "and we throw it away after each request."
                     )
@@ -184,7 +184,7 @@ private fun SystemStatusRow(
         supportingContent = {
             Text(
                 if (isProvider) {
-                    "You can disable individual fills with the toggle below — or change provider in your phone's Settings."
+                    "You can disable individual fills with the toggle below - or change provider in your phone's Settings."
                 } else {
                     "Tap below to make 1Key your provider. The system will ask you to confirm."
                 }

@@ -46,7 +46,7 @@ fun LockAwareDropdownMenu(
 /**
  * Lock-aware twin of [ExposedDropdownMenuBoxScope.ExposedDropdownMenu]. Must be
  * called from inside an `ExposedDropdownMenuBox` body, exactly like the M3
- * original — receiver type is preserved so use-site syntax doesn't change.
+ * original - receiver type is preserved so use-site syntax doesn't change.
  *
  * Why this is a separate wrapper from [LockAwareDropdownMenu]: the M3 component
  * is scope-bound to `ExposedDropdownMenuBoxScope` (it relies on the box's

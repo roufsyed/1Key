@@ -5,7 +5,7 @@ package com.onekey.feature.autofill.domain
  * confirms in [com.onekey.feature.autofill.presentation.AutofillSaveActivity].
  *
  * Plaintext credential bytes intentionally never ride Intent extras or
- * SavedState bundles — both can leak through `ActivityManagerService` IPC
+ * SavedState bundles - both can leak through `ActivityManagerService` IPC
  * snapshots and the system Recent Apps thumbnail pipeline. The opaque
  * [token] is the only thing the save Intent carries; the activity reads the
  * buffer by token and clears it on consume.

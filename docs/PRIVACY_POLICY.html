@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>1Key — Privacy Policy</title>
-<meta name="description" content="How 1Key handles your data — collected, transmitted, stored, and shared." />
+<title>1Key - Privacy Policy</title>
+<meta name="description" content="How 1Key handles your data - collected, transmitted, stored, and shared." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
@@ -34,7 +34,7 @@
 <header class="doc-hero wrap">
   <span class="eyebrow">Privacy policy</span>
   <h1>The shortest <em>privacy policy</em> you'll read this year.</h1>
-  <p class="lede">No accounts. No telemetry. No network permission. Here's the full list of what 1Key does — and doesn't — do with your data.</p>
+  <p class="lede">No accounts. No telemetry. No network permission. Here's the full list of what 1Key does - and doesn't - do with your data.</p>
   <div class="doc-meta">
     <span class="pill">v1.0</span>
     <span>· Last updated <b>May 2026</b></span>
@@ -71,31 +71,31 @@
     <h2 id="dont-collect"><span class="num">01</span>What we don't collect</h2>
     <ul>
       <li>No accounts, no email, no signup of any kind.</li>
-      <li>No analytics, telemetry, or crash reporting — ever.</li>
+      <li>No analytics, telemetry, or crash reporting - ever.</li>
       <li>No advertising IDs and no tracking.</li>
     </ul>
 
     <h2 id="protected"><span class="num">02</span>How your data is protected</h2>
     <ul>
-      <li><b>Field-level encryption.</b> Every credential field — title, username, password, URL, notes, custom fields, TOTP secret — is encrypted separately with AES-256-GCM. Each field's ciphertext is bound to its row and column, so an attacker can't swap encrypted blobs between accounts.</li>
-      <li><b>Memory-hard password verification.</b> Your master password is checked using Argon2id (64 MiB memory, 3 passes) — the OWASP-recommended algorithm. Even with the encrypted blobs in hand, brute-forcing is unrealistic on consumer hardware.</li>
-      <li><b>Verifier kept off-disk-readable.</b> The password verifier and PIN hash live in <code>EncryptedSharedPreferences</code>, encrypted at rest by an Android Keystore-bound key. Without live access to your phone's Keystore, an attacker can't read the verifier — meaning offline brute-forcing is not possible.</li>
+      <li><b>Field-level encryption.</b> Every credential field - title, username, password, URL, notes, custom fields, TOTP secret - is encrypted separately with AES-256-GCM. Each field's ciphertext is bound to its row and column, so an attacker can't swap encrypted blobs between accounts.</li>
+      <li><b>Memory-hard password verification.</b> Your master password is checked using Argon2id (64 MiB memory, 3 passes) - the OWASP-recommended algorithm. Even with the encrypted blobs in hand, brute-forcing is unrealistic on consumer hardware.</li>
+      <li><b>Verifier kept off-disk-readable.</b> The password verifier and PIN hash live in <code>EncryptedSharedPreferences</code>, encrypted at rest by an Android Keystore-bound key. Without live access to your phone's Keystore, an attacker can't read the verifier - meaning offline brute-forcing is not possible.</li>
       <li><b>Hardware-backed wrapping.</b> The vault key is wrapped by a key inside the Android Keystore (TEE / StrongBox on supported devices). On Android 9+ unwrapping additionally requires the device to be unlocked.</li>
-      <li><b>Subkey separation.</b> Field encryption uses HKDF-derived subkeys, not the raw vault key — so different parts of the data are encrypted under different keys derived for that purpose only.</li>
+      <li><b>Subkey separation.</b> Field encryption uses HKDF-derived subkeys, not the raw vault key - so different parts of the data are encrypted under different keys derived for that purpose only.</li>
       <li><b>Memory hygiene.</b> The unwrapped vault key only exists in memory while the vault is unlocked, and is dropped the moment auto-lock fires or you lock manually.</li>
       <li><b>Existing installs migrate automatically.</b> Older vaults using the previous PBKDF2 verifier silently upgrade to Argon2id on the first unlock after the app update.</li>
     </ul>
 
     <h2 id="permissions"><span class="num">03</span>Permissions we use</h2>
     <ul>
-      <li><b>Biometric</b> — to verify your fingerprint or face for app unlock. The biometric data itself never reaches the app; we only receive a yes/no result from Android.</li>
-      <li><b>Camera</b> — only for QR-code scanning when you add a new 2FA secret, and OCR credential capture. No photos are taken or stored.</li>
-      <li><b>Storage</b> — used only on Android 12 and below for reading and writing backup files. Modern Android uses the system file picker, which doesn't require this permission.</li>
+      <li><b>Biometric</b> - to verify your fingerprint or face for app unlock. The biometric data itself never reaches the app; we only receive a yes/no result from Android.</li>
+      <li><b>Camera</b> - only for QR-code scanning when you add a new 2FA secret, and OCR credential capture. No photos are taken or stored.</li>
+      <li><b>Storage</b> - used only on Android 12 and below for reading and writing backup files. Modern Android uses the system file picker, which doesn't require this permission.</li>
     </ul>
 
     <h2 id="no-permissions"><span class="num">04</span>Permissions we <em>don't</em> request</h2>
     <ul>
-      <li>No <b>Internet</b> permission — the app cannot make any network request, period. You can verify this in Android Settings → Apps → 1Key → Mobile data &amp; Wi-Fi: data usage is exactly zero, ever.</li>
+      <li>No <b>Internet</b> permission - the app cannot make any network request, period. You can verify this in Android Settings → Apps → 1Key → Mobile data &amp; Wi-Fi: data usage is exactly zero, ever.</li>
       <li>No location, contacts, microphone, SMS, or any other personal-data permission.</li>
     </ul>
 
@@ -115,7 +115,7 @@
     <ul>
       <li>Sensitive copies (passwords, 2FA codes) are automatically cleared from the clipboard after 30 seconds.</li>
       <li>On Android 13 and above, those copies are marked sensitive so the system's paste-preview toast doesn't reveal the value.</li>
-      <li>Screenshots and screen recordings of the app are blocked by default — including the Recent Apps preview. You can change this in Security settings.</li>
+      <li>Screenshots and screen recordings of the app are blocked by default - including the Recent Apps preview. You can change this in Security settings.</li>
       <li>Revealed passwords cannot be selected from the on-screen text via the long-press menu, so they can only leave the app via the in-app copy button (which routes through the auto-clear path).</li>
     </ul>
 

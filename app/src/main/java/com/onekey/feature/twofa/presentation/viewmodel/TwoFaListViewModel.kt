@@ -49,7 +49,7 @@ data class RotatingOtpEntry(
 
 /**
  * Counter-based row (HOTP). [code] is null until the user taps "Generate next code"
- * for the first time after the screen mounts (C5 — codes are not held across
+ * for the first time after the screen mounts (C5 - codes are not held across
  * sessions because they're effectively burned once shown). [generating] gates the
  * row's button so a fast double-tap can't burn two counters.
  */
@@ -83,7 +83,7 @@ class TwoFaListViewModel @Inject constructor(
     /**
      * Per-second recompute loop for rotating OTP types (TOTP, STEAM). Fed by the
      * DAO-level filter `observeRotatingOtp`, which excludes HOTP at the SQL layer
-     * — HOTP is on a different cadence and gets its own flow below.
+     * - HOTP is on a different cadence and gets its own flow below.
      */
     private val rotating: Flow<List<RotatingOtpEntry>> = credentialRepository.observeRotatingOtp()
         .transformLatest { credentials ->
@@ -107,7 +107,7 @@ class TwoFaListViewModel @Inject constructor(
      * in-flight flag that disables the button while the atomic increment is in
      * Room's transaction queue. Keyed by credential id.
      *
-     * Deliberately not persisted across process death — HOTP codes are single-use,
+     * Deliberately not persisted across process death - HOTP codes are single-use,
      * so showing a stale code from a prior session would be misleading at best.
      */
     private val hotpUiState = MutableStateFlow<Map<String, HotpRowState>>(emptyMap())
@@ -140,7 +140,7 @@ class TwoFaListViewModel @Inject constructor(
     /**
      * Combined feed: rotating entries first (sorted by title at the SQL layer),
      * then HOTP entries (also title-sorted). Splitting them visually rather than
-     * fully interleaving makes the cadence difference legible to the user — all
+     * fully interleaving makes the cadence difference legible to the user - all
      * "ticking" codes are together, all "tap to advance" codes are together.
      */
     val entries: StateFlow<List<TwoFaListEntry>?> = combine(rotating, hotp) { r, h -> r + h }
@@ -171,7 +171,7 @@ class TwoFaListViewModel @Inject constructor(
      * misplaced caller can't desync the counter:
      *
      * - The entry must actually be a HOTP type (gate against future call sites).
-     * - A generation already in flight returns immediately — repeated taps don't
+     * - A generation already in flight returns immediately - repeated taps don't
      *   queue up; the user-facing button is disabled while [HotpListEntry.generating]
      *   is true, but defence-in-depth here catches anything that bypasses the UI.
      *
@@ -201,7 +201,7 @@ class TwoFaListViewModel @Inject constructor(
                     is AppResult.Success -> {
                         val counter = result.data
                         if (counter == null) {
-                            // Row vanished or wasn't HOTP — drop the spinner and bail.
+                            // Row vanished or wasn't HOTP - drop the spinner and bail.
                             hotpUiState.update { it.markIdle(entry.credential.id) }
                             return@launch
                         }
@@ -215,7 +215,7 @@ class TwoFaListViewModel @Inject constructor(
                             ))
                         }
                         // Auto-copy on generation matches the row-tap behaviour for
-                        // rotating entries — keeps the interaction model consistent
+                        // rotating entries - keeps the interaction model consistent
                         // ("tap = code is in your clipboard").
                         if (code != null) copyCode(code)
                     }

@@ -22,7 +22,7 @@ fun RestoreConflictDialog(
     onKeepBoth: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    val displayedSubtitle = if (username.isNotBlank()) "$title — $username" else title
+    val displayedSubtitle = if (username.isNotBlank()) "$title - $username" else title
     LockAwareDialog(
         onDismissRequest = onCancel,
         icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null) },

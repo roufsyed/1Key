@@ -45,14 +45,14 @@ class CredentialRepositoryImpl @Inject constructor(
 
     // Gate every flow that calls toDomain() on the vault unlock state.
     //
-    // For LIST-shaped flows we emit `emptyList()` on lock — the list screen
+    // For LIST-shaped flows we emit `emptyList()` on lock - the list screen
     // visibly empties for a frame and the user is then routed to LockScreen,
     // so the empty state isn't confusing.
     //
     // For SINGLE-credential flows (observeCredential, observeCredentialIncludingDeleted)
-    // we emit nothing on lock — `emptyFlow()`, not `flowOf(null)`. The reason:
+    // we emit nothing on lock - `emptyFlow()`, not `flowOf(null)`. The reason:
     // `Credential?` consumers read `null` as "this credential doesn't exist",
-    // but on lock the credential is fine — the vault just can't read it. Emitting
+    // but on lock the credential is fine - the vault just can't read it. Emitting
     // `flowOf(null)` would conflate "vault locked" with "credential missing" and
     // cause the detail screen's ViewModel to flip to Error("Credential not found")
     // every time the vault locks. With `emptyFlow()` the inner flow simply pauses;
@@ -64,7 +64,7 @@ class CredentialRepositoryImpl @Inject constructor(
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(PagingData.empty())
             else if (query.isEmpty() && sortOrder != CredentialSortOrder.ALPHABETICAL) {
-                // Fast path — SQL filter + date-only ordering, real paging.
+                // Fast path - SQL filter + date-only ordering, real paging.
                 // Title is never read in SQL, so encrypted v2+ titles don't matter here.
                 // tags column is a JSON array; matching on the quoted token (`"foo"`)
                 // avoids tag "foo" spuriously matching credentials tagged "foobar".
@@ -77,7 +77,7 @@ class CredentialRepositoryImpl @Inject constructor(
                     pagingSourceFactory = { dao.pagingSourceRaw(sql) },
                 ).flow.map { pagingData -> pagingData.toDomainPaging() }
             } else {
-                // Slow path — title is involved. SQL filters by tag + deleted_at only;
+                // Slow path - title is involved. SQL filters by tag + deleted_at only;
                 // we decrypt, filter by title query, and sort in memory. PagingData.from
                 // wraps the materialised list so the public Flow<PagingData<Credential>>
                 // contract stays intact.
@@ -155,7 +155,7 @@ class CredentialRepositoryImpl @Inject constructor(
         dao.observeRecycleBinCount().distinctUntilChanged()
 
     override suspend fun getAllCredentials(): AppResult<List<Credential>> = runCatchingResult {
-        // One-shot suspend call — let decrypt failures surface as AppResult.Error to the
+        // One-shot suspend call - let decrypt failures surface as AppResult.Error to the
         // caller (export, import dedupe) instead of silently dropping rows. Long-lived
         // observers use the per-row safe path because a transient throw there poisons
         // the StateFlow; here a throw is just a normal error to the user.
@@ -198,7 +198,7 @@ class CredentialRepositoryImpl @Inject constructor(
                     pagingSourceFactory = { dao.favoritesPagingSourceRaw(sql) },
                 ).flow.map { pagingData -> pagingData.toDomainPaging() }
             } else {
-                // Alphabetical favourites — decrypt and sort by title in memory.
+                // Alphabetical favourites - decrypt and sort by title in memory.
                 dao.observeFavorites().map { entities ->
                     PagingData.from(entities.toDomainListSafe().sortedWith(sortOrder.comparator()))
                 }
@@ -232,7 +232,7 @@ class CredentialRepositoryImpl @Inject constructor(
     // The alphabet observers used to project the plaintext `title` column directly
     // from SQL. After H1 (DB v13), v2+ rows have an empty plaintext title, so the
     // path now decrypts the full row and projects to titles in memory. Cost is
-    // bounded by vault size — the alphabet scrollbar already shows every row.
+    // bounded by vault size - the alphabet scrollbar already shows every row.
     override fun observeAllTitlesAlphabetical(tag: String): Flow<List<String>> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
             if (!unlocked) flowOf(emptyList())
@@ -253,12 +253,12 @@ class CredentialRepositoryImpl @Inject constructor(
             }
         }.flowOn(Dispatchers.Default)
 
-    /** Date-only SQL ordering. Caller must ensure sortOrder != ALPHABETICAL — that path uses [comparator]. */
+    /** Date-only SQL ordering. Caller must ensure sortOrder != ALPHABETICAL - that path uses [comparator]. */
     private fun CredentialSortOrder.dateOrderBy() = when (this) {
         CredentialSortOrder.NEWEST_FIRST -> "created_at DESC"
         CredentialSortOrder.LAST_MODIFIED -> "updated_at DESC"
         // SQLite sorts NULL as smaller than any value, so DESC puts never-accessed rows
-        // at the bottom — exactly the desired UX (recent activity at the top).
+        // at the bottom - exactly the desired UX (recent activity at the top).
         CredentialSortOrder.RECENTLY_ACCESSED -> "accessed_at DESC"
         CredentialSortOrder.ALPHABETICAL -> error("ALPHABETICAL sort takes the in-memory path; do not use SQL ordering")
     }
@@ -269,7 +269,7 @@ class CredentialRepositoryImpl @Inject constructor(
         CredentialSortOrder.LAST_MODIFIED -> compareByDescending { it.updatedAt }
         // toDomain() falls back to updatedAt when accessedAt is null, so this comparator
         // sees a non-null Long in practice. compareByDescending also handles raw nulls
-        // correctly (Kotlin's stdlib treats null as smallest, so DESC = nulls last) —
+        // correctly (Kotlin's stdlib treats null as smallest, so DESC = nulls last) -
         // matching the SQL fast path's behaviour for legacy rows.
         CredentialSortOrder.RECENTLY_ACCESSED -> compareByDescending { it.accessedAt }
         CredentialSortOrder.ALPHABETICAL -> compareBy { it.title.lowercase() }
@@ -311,11 +311,11 @@ class CredentialRepositoryImpl @Inject constructor(
     // Decryption is delegated to [CredentialDecryptor]. The list/paging
     // helpers below keep their "per-row failure stays local" semantics:
     //
-    //   toDomainListSafe — drops corrupt rows via decryptor.decryptOrNull,
+    //   toDomainListSafe - drops corrupt rows via decryptor.decryptOrNull,
     //   so the upstream Flow stays alive when one row's GCM tag verification
     //   fails. Used by long-lived observers.
     //
-    //   toDomainPaging — PagingData<T> requires T : Any, so we can't filter
+    //   toDomainPaging - PagingData<T> requires T : Any, so we can't filter
     //   out per-row failures. An unrecoverable decrypt error yields a
     //   placeholder credential, keeping the Flow alive and visible.
 
@@ -349,7 +349,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
     // The per-row decrypt body that used to live here as `CredentialEntity.toDomain()`
     // now lives in [CredentialDecryptor] (`core/data/snapshot/CredentialDecryptor.kt`).
-    // It is the single source of truth for read-path decryption — used here for
+    // It is the single source of truth for read-path decryption - used here for
     // single-row paths (getCredential, observeCredential, toDomainPaging fallback)
     // AND by [com.onekey.core.data.snapshot.VaultSnapshotStore] for the bulk lean
     // path. Keeping one decryptor avoids drift between AAD shapes and OTP-defaults
@@ -374,7 +374,7 @@ class CredentialRepositoryImpl @Inject constructor(
 
         return CredentialEntity(
             id = resolvedId,
-            // Plaintext title cleared on v2+ rows — the encrypted column is the source of truth.
+            // Plaintext title cleared on v2+ rows - the encrypted column is the source of truth.
             title = "",
             titleEncrypted = encTitle.ciphertext,
             ivTitle = encTitle.iv,

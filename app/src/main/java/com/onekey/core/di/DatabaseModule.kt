@@ -61,7 +61,7 @@ object DatabaseModule {
             // Deliberately NOT calling fallbackToDestructiveMigration(): for a password
             // manager, silently wiping the user's encrypted vault on a schema slip is the
             // worst possible failure mode. A real migration bug should crash so it's
-            // caught in dev/QA — never destroy data behind the user's back.
+            // caught in dev/QA - never destroy data behind the user's back.
             .build()
 
     @Provides

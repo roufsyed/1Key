@@ -50,7 +50,7 @@ data class ImportPlan(
     val skipped: List<SkippedCredential>,
     val failed: List<FailedEntry>,
 ) {
-    /** True when the plan can be applied silently — no user decision needed. */
+    /** True when the plan can be applied silently - no user decision needed. */
     val needsConflictResolution: Boolean get() = conflicts.isNotEmpty()
 }
 
@@ -62,7 +62,7 @@ data class MergePair(
     val restoreFromBin: Boolean,
 )
 
-/** A merge with at least one field clash — needs a user decision. */
+/** A merge with at least one field clash - needs a user decision. */
 data class ConflictPair(
     val existing: Credential,
     val incoming: Credential,

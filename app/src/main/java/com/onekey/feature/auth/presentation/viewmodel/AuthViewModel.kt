@@ -38,13 +38,13 @@ sealed class AuthUiState {
 }
 
 sealed class AuthEvent {
-    /** Three wrong PINs in a row — LockScreen forces the master-password fallback. */
+    /** Three wrong PINs in a row - LockScreen forces the master-password fallback. */
     data object PinAttemptsExhausted : AuthEvent()
     /** Settings → Change PIN: current PIN matched. Advance to "enter new PIN". */
     data object CurrentPinVerified : AuthEvent()
     /** Settings → Change PIN: wrong current PIN, [remaining] attempts left this session. */
     data class CurrentPinFailed(val remaining: Int) : AuthEvent()
-    /** Settings → Change PIN: 3 wrong current PINs. Soft cap — vault stays unlocked, but
+    /** Settings → Change PIN: 3 wrong current PINs. Soft cap - vault stays unlocked, but
      * the PIN field disables and the user is pointed at the Forgot-PIN escape hatch. */
     data object CurrentPinExhausted : AuthEvent()
     /** Settings → Change PIN → Forgot PIN: master password matched. Skip current-PIN
@@ -88,7 +88,7 @@ class AuthViewModel @Inject constructor(
 
     /**
      * Epoch-ms when the current master-password lockout expires, or null if no lockout
-     * is in effect. May be in the past once the window has elapsed — the UI compares
+     * is in effect. May be in the past once the window has elapsed - the UI compares
      * against [System.currentTimeMillis] to decide whether to show the countdown.
      */
     val passwordLockoutUntilMs: StateFlow<Long?> = passwordAttemptTracker.lockoutUntilMs
@@ -112,7 +112,7 @@ class AuthViewModel @Inject constructor(
     /**
      * "X biometric attempts remaining" surface for the UI. Reads through
      * [BiometricAttemptTracker] (DataStore-backed) so the count is shared
-     * across LockScreen and the autofill activities — preventing the
+     * across LockScreen and the autofill activities - preventing the
      * "rotate between surfaces to triple the budget" attack that an
      * in-memory ViewModel field would allow.
      */
@@ -122,7 +122,7 @@ class AuthViewModel @Inject constructor(
 
     // Local counter for the in-vault Settings→Change PIN current-PIN verification.
     // The vault is already unlocked here so the threat shape is different from
-    // LockScreen PIN entry — a session-scoped counter is sufficient. (LockScreen
+    // LockScreen PIN entry - a session-scoped counter is sufficient. (LockScreen
     // PIN attempts are tracked persistently via PinAttemptTracker.)
     private var currentPinAttemptsRemaining = MAX_CURRENT_PIN_ATTEMPTS
 
@@ -150,7 +150,7 @@ class AuthViewModel @Inject constructor(
     fun setup(password: CharArray) {
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
-            // Two PBKDF2 derivations (~600-1600ms total) — keep them off Main so the
+            // Two PBKDF2 derivations (~600-1600ms total) - keep them off Main so the
             // Loading spinner actually paints and the button visibly transitions.
             val result = withContext(Dispatchers.Default) { setupMasterPassword(password) }
             if (result is AppResult.Success) {
@@ -169,7 +169,7 @@ class AuthViewModel @Inject constructor(
             // the UI button is disabled. This stops automated callers from bypassing
             // the per-attempt Argon2id cost by retrying before the window expires.
             //
-            // Read DataStore directly — the [passwordLockoutUntilMs] StateFlow lags
+            // Read DataStore directly - the [passwordLockoutUntilMs] StateFlow lags
             // a concurrent [recordFailure] DataStore commit (the StateFlow collector
             // runs on `viewModelScope`, which is one dispatcher hop behind the write).
             // A fresh `.first()` on the underlying Flow guarantees a current value
@@ -183,7 +183,7 @@ class AuthViewModel @Inject constructor(
             }
 
             _state.value = AuthUiState.Loading
-            // Argon2id/PBKDF2 verifier check (~300-800ms) — keep off Main so the button
+            // Argon2id/PBKDF2 verifier check (~300-800ms) - keep off Main so the button
             // properly shows its spinner instead of freezing the UI on first tap.
             val result = withContext(Dispatchers.Default) { unlockVault.withPassword(password) }
             when (result) {
@@ -214,10 +214,10 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             // Defense-in-depth lockout check. The LockScreen UI also disables the PIN
             // field while the lockout window is active, but the repository must refuse
-            // independently — otherwise an automated caller (or a future code path that
+            // independently - otherwise an automated caller (or a future code path that
             // bypasses the UI) could brute-force at full Argon2id throughput.
             //
-            // Read DataStore directly via `.first()` — the [pinLockoutUntilMs]
+            // Read DataStore directly via `.first()` - the [pinLockoutUntilMs]
             // StateFlow lags a concurrent [recordFailure] commit, which would let a
             // fast retry slip through the gap on a fresh-per-Activity VM whose
             // StateFlow seed is `null` until the first upstream emission lands.
@@ -249,7 +249,7 @@ class AuthViewModel @Inject constructor(
                         authRepository.lock()
                         _events.emit(AuthEvent.PinAttemptsExhausted)
                         // Compute the lockout duration directly from the just-returned
-                        // cumulative count rather than reading pinLockoutUntilMs.value —
+                        // cumulative count rather than reading pinLockoutUntilMs.value -
                         // the StateFlow may briefly lag the DataStore commit, which would
                         // make the message say "please use your master password" without
                         // a countdown even when one is in effect. Using `cumulative`
@@ -258,13 +258,13 @@ class AuthViewModel @Inject constructor(
                         val remainingSecs = if (lockoutMs != null) (lockoutMs / 1000L).coerceAtLeast(1L) else 0L
                         _state.value = AuthUiState.Error(
                             if (remainingSecs > 0) "Too many wrong PINs. Try again in ${remainingSecs}s, or use your master password."
-                            else "Too many wrong PINs — please use your master password."
+                            else "Too many wrong PINs - please use your master password."
                         )
                     } else {
                         val remaining = MAX_PIN_ATTEMPTS - cumulative
                         _state.value = AuthUiState.Error(
-                            if (remaining == 1) "Wrong PIN — 1 attempt remaining."
-                            else "Wrong PIN — $remaining attempts remaining."
+                            if (remaining == 1) "Wrong PIN - 1 attempt remaining."
+                            else "Wrong PIN - $remaining attempts remaining."
                         )
                     }
                 }
@@ -276,10 +276,10 @@ class AuthViewModel @Inject constructor(
      * Unlocks the vault using a successful biometric authentication that the caller
      * has already obtained via [androidx.biometric.BiometricPrompt].
      *
-     * Threat-model note — **biometric is a SOFT GATE**, not a cryptographic one.
+     * Threat-model note - **biometric is a SOFT GATE**, not a cryptographic one.
      * The wrap key in `AuthRepositoryImpl.unlockWithBiometric` is wrapped with
      * `setUserAuthenticationRequired(false)` (`CryptoManager.kt`), which means the
-     * Keystore will unwrap it any time the calling process can load it — no
+     * Keystore will unwrap it any time the calling process can load it - no
      * `CryptoObject` is bound to the BiometricPrompt. We rely on the prompt's UX
      * confirmation, the lock-reason gate, and the [BiometricAttemptTracker] to
      * approximate the security a hardware-bound key would provide.
@@ -292,7 +292,7 @@ class AuthViewModel @Inject constructor(
      */
     fun unlockWithBiometric() {
         viewModelScope.launch {
-            // Defensive — if a stale BiometricPrompt completes after we've already locked
+            // Defensive - if a stale BiometricPrompt completes after we've already locked
             // out for too-many-failures, refuse the unlock. The button is hidden on
             // LockScreen when lockReason is set, but the in-flight prompt can still fire.
             //
@@ -301,12 +301,12 @@ class AuthViewModel @Inject constructor(
             // the StateFlow collector on `appScope` propagates the new value
             // *asynchronously*. A concurrent [recordBiometricFailure] that just hit
             // the 3-strike threshold could land in DataStore before this method runs
-            // but not yet be visible in `reason.value` — leaving a race window where
+            // but not yet be visible in `reason.value` - leaving a race window where
             // a fast biometric success unlocks the vault despite the just-set reason.
             // `.latest()` closes that window.
             if (lockReasonStore.latest() != null) {
                 _state.value = AuthUiState.Error(
-                    "Use your master password — biometric is paused after recent failures."
+                    "Use your master password - biometric is paused after recent failures."
                 )
                 return@launch
             }
@@ -330,7 +330,7 @@ class AuthViewModel @Inject constructor(
     fun recordBiometricFailure() {
         viewModelScope.launch {
             // Once we've already escalated to a lock reason, additional failures from a
-            // still-visible BiometricPrompt are noise — the user is in master-password-only
+            // still-visible BiometricPrompt are noise - the user is in master-password-only
             // mode and the count is meaningless. Don't decrement past the threshold.
             // Read DataStore directly for the same reason `unlockWithBiometric` does.
             if (lockReasonStore.latest() != null) return@launch
@@ -351,15 +351,15 @@ class AuthViewModel @Inject constructor(
                 lockReasonStore.set(LockReason.TooManyFailedBiometricAttempts)
                 authRepository.lock()
                 _state.value = AuthUiState.Error(
-                    "Too many wrong biometric attempts — please use your master password."
+                    "Too many wrong biometric attempts - please use your master password."
                 )
             } else {
                 val remaining = BiometricAttemptTracker.MAX_FAILURES - cumulative
                 _state.value = AuthUiState.Error(
                     if (remaining == 1)
-                        "Wrong biometric — 1 attempt remaining."
+                        "Wrong biometric - 1 attempt remaining."
                     else
-                        "Wrong biometric — $remaining attempts remaining."
+                        "Wrong biometric - $remaining attempts remaining."
                 )
             }
         }
@@ -367,7 +367,7 @@ class AuthViewModel @Inject constructor(
 
     /**
      * Settings → Change PIN, step 0: confirms the user knows the current PIN before
-     * we let them change it. Pure verification — no vault key touched. Local-counter
+     * we let them change it. Pure verification - no vault key touched. Local-counter
      * lockout (3 attempts) that disables the PIN field for this session but keeps the
      * vault unlocked, since the user is already authenticated to the vault.
      */
@@ -396,7 +396,7 @@ class AuthViewModel @Inject constructor(
 
     /**
      * Settings → Change PIN → Forgot PIN: verify the master password to bypass the
-     * current-PIN check. Mirrors removePinWithVerification's lockout shape — uses the
+     * current-PIN check. Mirrors removePinWithVerification's lockout shape - uses the
      * shared AuthAttemptsStore so navigating Security ↔ top-level Settings can't reset
      * the count, three wrong attempts persist a lock reason and lock the vault.
      */
@@ -407,7 +407,7 @@ class AuthViewModel @Inject constructor(
                 val result = withContext(Dispatchers.Default) {
                     authRepository.unlockWithPassword(password)
                 }
-                // unlockWithPassword sets the vault key on success — but we're already
+                // unlockWithPassword sets the vault key on success - but we're already
                 // inside an unlocked vault, so it's a no-op replacement. We don't want
                 // _state to cascade to Unlocked here, so flip back to Idle explicitly.
                 _state.value = AuthUiState.Idle
@@ -463,7 +463,7 @@ class AuthViewModel @Inject constructor(
 
     /**
      * Decrypts an encrypted 1Key backup, creates the vault using the backup password as the
-     * master password, and imports the credentials — all in one step for onboarding.
+     * master password, and imports the credentials - all in one step for onboarding.
      *
      * The [password] CharArray is zeroed inside [setupFromBackup] (by AuthRepository) and again
      * in the finally block as a safety net.

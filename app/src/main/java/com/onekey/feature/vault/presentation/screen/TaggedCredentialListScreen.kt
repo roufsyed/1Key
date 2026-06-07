@@ -61,7 +61,7 @@ fun TaggedCredentialListScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     // Bottom-sheet picker only fires for the meta-tags (TAG_ALL / TAG_FAVORITES) where
     // there's no implicit credential type. Default and custom tags route directly via
-    // resolveAddTarget below — no sheet, no extra tap.
+    // resolveAddTarget below - no sheet, no extra tap.
     var showAddSheet by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
@@ -77,7 +77,7 @@ fun TaggedCredentialListScreen(
         canScroll = { hideTopBarOnScroll && !isSelectionMode },
     )
     // Snap the bar back to fully visible when collapse is disabled, or when entering
-    // selection mode — otherwise the user could land on a hidden bar with no way to act.
+    // selection mode - otherwise the user could land on a hidden bar with no way to act.
     LaunchedEffect(isSelectionMode, hideTopBarOnScroll) {
         if (isSelectionMode || !hideTopBarOnScroll) {
             topAppBarState.heightOffset = 0f
@@ -338,7 +338,7 @@ private fun AlphabetIndexer(
         val totalHeightDp = maxHeight
         val contentHeightDp = (totalHeightDp - vertPadding * 2).coerceAtLeast(1.dp)
 
-        // Floating letter badge — rendered outside the 28dp strip via negative offset
+        // Floating letter badge - rendered outside the 28dp strip via negative offset
         if (badgeAlpha > 0.01f && letters.isNotEmpty()) {
             val slotHeight = contentHeightDp / letters.size
             val safeIdx = displayIdx.coerceIn(0, letters.lastIndex)
@@ -424,7 +424,7 @@ private fun AlphabetIndexer(
 
 private fun emptyTagCopy(rawTag: String, displayName: String): Pair<String, String> = when (rawTag) {
     TAG_ALL -> "Your vault is empty" to
-        "Add your first credential from the home screen — tap the + button to get started."
+        "Add your first credential from the home screen - tap the + button to get started."
     TAG_FAVORITES -> "No favourites yet" to
         "Tap the heart on any credential to keep it within easy reach here."
     else -> "No credentials in $displayName" to

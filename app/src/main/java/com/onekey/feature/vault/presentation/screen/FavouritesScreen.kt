@@ -289,7 +289,7 @@ private fun AlphabetIndexer(
         val totalHeightDp = maxHeight
         val contentHeightDp = (totalHeightDp - vertPadding * 2).coerceAtLeast(1.dp)
 
-        // Floating letter badge — rendered outside the 28dp strip via negative offset
+        // Floating letter badge - rendered outside the 28dp strip via negative offset
         if (badgeAlpha > 0.01f && letters.isNotEmpty()) {
             val slotHeight = contentHeightDp / letters.size
             val safeIdx = displayIdx.coerceIn(0, letters.lastIndex)

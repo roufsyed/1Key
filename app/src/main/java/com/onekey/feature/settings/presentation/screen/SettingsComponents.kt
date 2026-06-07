@@ -30,7 +30,7 @@ internal fun SectionHeader(title: String) {
 // The pulse is painted *on top* of the row content via [drawWithContent] rather than as
 // a [Modifier.background]. The reason: M3 [ListItem] (the typical child of this composable)
 // defaults its `containerColor` to `colorScheme.surface`, an opaque colour. A background
-// modifier on the outer Box ends up drawn behind that opaque container — invisible to the
+// modifier on the outer Box ends up drawn behind that opaque container - invisible to the
 // user. Drawing the pulse on top guarantees it is actually seen.
 //
 // Peak alpha is held at ~0.45 (not 1.0) so the row text stays readable through the flash,

@@ -95,7 +95,7 @@ kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 android-lint = { id = "com.android.lint", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 # Parcelize ships bundled with the Kotlin plugin (already on the classpath),
-# so we cannot — and should not — pin a version here. Pinning trips Gradle's
+# so we cannot - and should not - pin a version here. Pinning trips Gradle's
 # "plugin already on classpath with an unknown version" compatibility check.
 kotlin-parcelize = { id = "org.jetbrains.kotlin.plugin.parcelize" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }

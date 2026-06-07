@@ -19,17 +19,17 @@ import org.junit.Test
 /**
  * Locks in the post-fix ordering of [ResetVaultUseCase.invoke]:
  *
- *   1. authRepository.lock()                       — synchronous snapshot-clear via VaultLockHook
- *   2. credentialRepository.deleteAllCredentials() — SQL DELETE encrypted rows
- *   3. historyRepository.deleteAll()               — SQL DELETE history rows
- *   4. authRepository.resetVault()                 — clear auth state
+ *   1. authRepository.lock()                       - synchronous snapshot-clear via VaultLockHook
+ *   2. credentialRepository.deleteAllCredentials() - SQL DELETE encrypted rows
+ *   3. historyRepository.deleteAll()               - SQL DELETE history rows
+ *   4. authRepository.resetVault()                 - clear auth state
  *
- * The pre-fix ordering was (delete, deleteHistory, resetVault) — lock came
+ * The pre-fix ordering was (delete, deleteHistory, resetVault) - lock came
  * implicitly via resetVault. That left a window where the snapshot still
  * held decrypted bytes from the deleted vault. The new ordering guarantees
  * the snapshot is dropped synchronously BEFORE any SQL delete runs.
  *
- * Plain JVM — recording fakes capture method-call order in a shared list,
+ * Plain JVM - recording fakes capture method-call order in a shared list,
  * then we assert the expected sequence.
  */
 class ResetVaultUseCaseTest {
@@ -45,7 +45,7 @@ class ResetVaultUseCaseTest {
 
         assertTrue("Reset must succeed when every step returns Success", result is AppResult.Success)
         assertEquals(
-            "Strict call sequence is the security contract — see ResetVaultUseCase KDoc",
+            "Strict call sequence is the security contract - see ResetVaultUseCase KDoc",
             listOf(
                 "auth.lock",
                 "creds.deleteAllCredentials",
@@ -112,7 +112,7 @@ class ResetVaultUseCaseTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Recording fakes — minimal implementations that record method names
+    // Recording fakes - minimal implementations that record method names
     // into a shared list. Anything not exercised by ResetVaultUseCase
     // throws NotImplementedError to catch accidental drift.
     // ─────────────────────────────────────────────────────────────────────

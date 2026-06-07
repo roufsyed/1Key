@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger
  *    exception in one request does not cancel siblings.
  *  - Every `onFillRequest` launches its own [Job] under that scope. The
  *    framework's [CancellationSignal] wires through to this per-request
- *    job only — sibling jobs are unaffected when one request is cancelled.
+ *    job only - sibling jobs are unaffected when one request is cancelled.
  *
  * Security:
  *  - Captured save submissions never ride Intent extras. They live in the
@@ -83,7 +83,7 @@ class OneKeyAutofillService : AutofillService() {
             } catch (_: Throwable) {
                 // Any unhandled error: tell the framework we have nothing to
                 // contribute. Never throw across IPC. No logging per the
-                // project's no-telemetry stance — error details would leak
+                // project's no-telemetry stance - error details would leak
                 // package names and host names into logcat.
                 runCatching { callback.onSuccess(null) }
             }
@@ -139,8 +139,8 @@ class OneKeyAutofillService : AutofillService() {
             builder.build()
         } catch (_: Throwable) {
             // Defensive fallback for TransactionTooLargeException at parcel
-            // time. Return a single "Search 1Key" chip — always safe to
-            // serialise — rather than nothing.
+            // time. Return a single "Search 1Key" chip - always safe to
+            // serialise - rather than nothing.
             buildSearchOnlyResponse(parsed, saveInfo)
         }
     }
@@ -159,7 +159,7 @@ class OneKeyAutofillService : AutofillService() {
         val intent = Intent(applicationContext, AutofillUnlockActivity::class.java).apply {
             putExtra(AutofillUnlockActivity.EXTRA_PARSED_FIELDS, parsed)
             // Distinguishes the trailing "Search 1Key" chip from the
-            // locked-vault chip — the activity reads this from its initial
+            // locked-vault chip - the activity reads this from its initial
             // Intent and lands directly in search mode when true.
             putExtra(AutofillUnlockActivity.EXTRA_START_IN_SEARCH, startInSearch)
         }
@@ -217,7 +217,7 @@ class OneKeyAutofillService : AutofillService() {
             applicationContext.startActivity(intent)
             callback.onSuccess()
         } catch (_: Throwable) {
-            // Even on error we must call back — otherwise the framework
+            // Even on error we must call back - otherwise the framework
             // shows a stuck "Saving..." indicator. Swallow silently to
             // preserve the no-logging policy.
             runCatching { callback.onSuccess() }
@@ -226,9 +226,9 @@ class OneKeyAutofillService : AutofillService() {
 
     /**
      * Reads a string value out of the most-recent FillContext for the given
-     * AutofillId. Used at save time — the OS scrubs password text from
+     * AutofillId. Used at save time - the OS scrubs password text from
      * `AssistStructure` at fill time but populates it at save time for
-     * fields declared in `SaveInfo`. Recursive — keep it iterative on the
+     * fields declared in `SaveInfo`. Recursive - keep it iterative on the
      * same pattern as the walker.
      */
     private fun readField(structure: AssistStructure, id: android.view.autofill.AutofillId?): String? {
@@ -252,7 +252,7 @@ class OneKeyAutofillService : AutofillService() {
     private fun runBlockingForCheck(block: suspend () -> Boolean): Boolean =
         // Only used as a defensive escape hatch in places where a suspend
         // function must be evaluated from a non-suspend OS callback. Not
-        // currently invoked — kept here so future maintainers see the pattern.
+        // currently invoked - kept here so future maintainers see the pattern.
         runBlocking { block() }
 
     private companion object {

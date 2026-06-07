@@ -62,9 +62,9 @@ interface CredentialDao {
     suspend fun getAll(): List<CredentialEntity>
 
     // Used by CredentialCipherMigrator to walk pre-current-cipher rows in batches.
-    // CURRENT_CIPHER_VERSION lives in CredentialCipherMigrator.kt — the value
+    // CURRENT_CIPHER_VERSION lives in CredentialCipherMigrator.kt - the value
     // is duplicated as a literal here because @Query doesn't accept Kotlin consts.
-    // Includes soft-deleted rows so the bin migrates too — otherwise restoring a
+    // Includes soft-deleted rows so the bin migrates too - otherwise restoring a
     // v0/v1 row post-migration would fail to decrypt under the current read
     // path. Newest rows first so the visible vault converts before the long
     // tail of bin entries.
@@ -94,13 +94,13 @@ interface CredentialDao {
     fun favoritesPagingSource(): PagingSource<Int, CredentialEntity>
 
     /**
-     * Time-based OTP entries (TOTP, Steam Guard) — anything that rotates on a clock.
+     * Time-based OTP entries (TOTP, Steam Guard) - anything that rotates on a clock.
      * Drives the per-second recompute loop in TwoFaListViewModel. Excluding HOTP
      * here is load-bearing: HOTP codes only advance on explicit user tap; including
      * them in the recompute loop would silently regenerate codes every second
      * without persisting the counter, desyncing the user from the issuer.
      */
-    // ORDER BY title removed in DB v13 — titles are encrypted on v2+ rows so the
+    // ORDER BY title removed in DB v13 - titles are encrypted on v2+ rows so the
     // SQL collation can't compare them. The repository sorts by decrypted title
     // in memory after toDomain().
     @Query(
@@ -112,7 +112,7 @@ interface CredentialDao {
     fun observeRotatingOtp(): Flow<List<CredentialEntity>>
 
     /**
-     * Counter-based OTP entries (HOTP). Static list — only re-emits when a row's
+     * Counter-based OTP entries (HOTP). Static list - only re-emits when a row's
      * counter is incremented or the entry itself is added/removed/edited. The 2FA
      * list combines this with [observeRotatingOtp] for display, with HOTP rows
      * showing a "Generate next code" button instead of a countdown ring.
@@ -132,7 +132,7 @@ interface CredentialDao {
      * `returned + 1` so the next tap derives the next code without re-reading.
      *
      * Why pre-increment-and-return: the persisted counter convention here is "value
-     * to use for the next generation" — matching what `otpauth://hotp/?counter=0`
+     * to use for the next generation" - matching what `otpauth://hotp/?counter=0`
      * URIs encode (counter=0 → first code uses 0, then the entry advances to 1).
      *
      * Atomicity matters because two concurrent taps must produce two distinct codes,
@@ -164,7 +164,7 @@ interface CredentialDao {
      * Bumps `accessed_at` to the supplied timestamp. Deliberately scoped to
      * active rows (`deleted_at IS NULL`) so a stray bump on a soft-deleted
      * credential is a silent no-op rather than reviving its "last used"
-     * marker — a defence-in-depth gate for callers that don't filter
+     * marker - a defence-in-depth gate for callers that don't filter
      * upstream. Does NOT touch `updated_at`: "accessed" and "modified" are
      * separate concepts (matching KeePassXC, 1Password).
      */

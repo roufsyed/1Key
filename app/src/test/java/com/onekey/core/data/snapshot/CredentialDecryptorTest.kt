@@ -30,8 +30,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Behavioural locks for [CredentialDecryptor]. Pure-JVM — no Robolectric,
- * no Room — uses a real [CryptoManager] (JCE/JVM) and a real
+ * Behavioural locks for [CredentialDecryptor]. Pure-JVM - no Robolectric,
+ * no Room - uses a real [CryptoManager] (JCE/JVM) and a real
  * [VaultKeyHolder] to build synthetic v2 entities via the same encrypt
  * path the production write code uses. This guarantees AAD and HKDF
  * info-label byte-equivalence between read and write paths.
@@ -106,7 +106,7 @@ class CredentialDecryptorTest {
         val ex = assertThrows(VaultLockedException::class.java) {
             runBlocking(Dispatchers.Default) {
                 val locked = CompletableDeferred<Unit>()
-                // Background coroutine — wait briefly, then lock the vault.
+                // Background coroutine - wait briefly, then lock the vault.
                 // A small real delay is fine here because the test is plain
                 // JVM (no TestDispatcher). 5ms is enough for the decrypt
                 // loop to process several rows.
@@ -130,7 +130,7 @@ class CredentialDecryptorTest {
         val good = buildV2Entity(id = "good", title = "Real")
         val corrupt = good.copy(
             id = "corrupt",
-            // Flip a ciphertext byte — AES-GCM tag verification will fail.
+            // Flip a ciphertext byte - AES-GCM tag verification will fail.
             usernameEncrypted = good.usernameEncrypted.copyOf().also {
                 it[0] = (it[0].toInt() xor 0xFF).toByte()
             },
@@ -261,7 +261,7 @@ class CredentialDecryptorTest {
      * Builds a synthetic v2 credential entity using the production
      * [CryptoManager.encrypt] path with the matching HKDF subkeys + AADs.
      * Any drift between this helper and the production write path would
-     * surface as a GCM-tag failure during the corresponding decrypt — so
+     * surface as a GCM-tag failure during the corresponding decrypt - so
      * these tests double as a round-trip check on the AAD shape.
      */
     private fun buildV2Entity(

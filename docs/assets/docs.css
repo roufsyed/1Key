@@ -1,4 +1,4 @@
-/* Shared docs theme — matches 1Key Landing.html */
+/* Shared docs theme - matches 1Key Landing.html */
 :root {
   --primary:        #1A56DB;
   --on-primary:     #FFFFFF;
@@ -250,7 +250,7 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
   font-style: italic;
 }
 
-/* Section card — used for whitepaper section wrappers and intro callouts */
+/* Section card - used for whitepaper section wrappers and intro callouts */
 .callout {
   border: 1px solid var(--outline-soft);
   background: var(--surface);

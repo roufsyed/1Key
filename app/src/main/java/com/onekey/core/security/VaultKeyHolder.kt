@@ -11,8 +11,8 @@ import javax.inject.Singleton
 /**
  * Thrown by [VaultKeyHolder.requireKey] when the in-memory key has been cleared
  * (auto-lock fired, manual lock, vault reset). Callers that race against the
- * lock — e.g. a save() coroutine that started while unlocked but completes
- * after — pattern-match this type instead of the [Throwable.message] string so
+ * lock - e.g. a save() coroutine that started while unlocked but completes
+ * after - pattern-match this type instead of the [Throwable.message] string so
  * a future copy edit doesn't silently break the routing.
  */
 class VaultLockedException : IllegalStateException("Vault is locked")
@@ -28,9 +28,9 @@ class VaultLockedException : IllegalStateException("Vault is locked")
  *  - MUST run synchronously on the lock() caller's thread. No suspending
  *    calls. No blocking I/O. No coroutine launches that the caller might
  *    expect to complete before lock() returns.
- *  - MUST be idempotent — `lock()` may be called multiple times (e.g.
+ *  - MUST be idempotent - `lock()` may be called multiple times (e.g.
  *    `ResetVaultUseCase` then auto-lock), and the hook fires every time.
- *  - SHOULD complete in microseconds — assigning a `MutableStateFlow.value`,
+ *  - SHOULD complete in microseconds - assigning a `MutableStateFlow.value`,
  *    cancelling a `Job`, nulling a reference. Anything heavier defeats the
  *    purpose of the synchronous contract.
  */
@@ -56,7 +56,7 @@ class VaultKeyHolder @Inject constructor() {
     val isUnlocked: StateFlow<Boolean> = _isUnlocked.asStateFlow()
 
     /**
-     * Optional synchronous hook invoked at the very top of [lock] — before
+     * Optional synchronous hook invoked at the very top of [lock] - before
      * the `isUnlocked` flag flip and before key bytes are zeroed. Installed
      * by [com.onekey.core.data.snapshot.VaultSnapshotStore] during its DI
      * construction so the snapshot's plaintext list reference is dropped
@@ -68,7 +68,7 @@ class VaultKeyHolder @Inject constructor() {
      * and the eventual `lock()` caller thread (typically Main.immediate
      * via `AutoLockManager` / `AuthRepositoryImpl.lock`).
      *
-     * `internal` so only the `:app` module can install it — discourages
+     * `internal` so only the `:app` module can install it - discourages
      * accidental wide-scope hooks. Nullability is intentional: hook is
      * absent on cold-start before the snapshot store is wired, and lock()
      * must remain safe to call in that window.
@@ -95,22 +95,22 @@ class VaultKeyHolder @Inject constructor() {
     fun requireKey(): SecretKey = _key ?: throw VaultLockedException()
 
     fun lock() {
-        // STEP 1 — Synchronous snapshot hook on the lock() caller's thread.
+        // STEP 1 - Synchronous snapshot hook on the lock() caller's thread.
         // Runs BEFORE the flag flip and BEFORE key bytes are zeroed. Used by
         // VaultSnapshotStore to drop its plaintext list reference and cancel
         // its upstream decryption job dispatcher-independently. See the
-        // [VaultLockHook] KDoc — hook implementations MUST NOT suspend or
+        // [VaultLockHook] KDoc - hook implementations MUST NOT suspend or
         // block; this happens on Main.immediate in the typical path.
         snapshotHook?.onLockBeforeKeyZero()
 
-        // STEP 2 — Flip the unlocked flag. Subscribers gated on isUnlocked
+        // STEP 2 - Flip the unlocked flag. Subscribers gated on isUnlocked
         // (the credential observers in CredentialRepositoryImpl) get the
         // false signal asynchronously on their own dispatcher and switch to
         // emptyList(). The snapshot store does NOT rely on this StateFlow
-        // emission for its lock semantics — that's what STEP 1 is for.
+        // emission for its lock semantics - that's what STEP 1 is for.
         _isUnlocked.value = false
 
-        // STEP 3 — Zero key bytes. Any in-flight decryption loop on a worker
+        // STEP 3 - Zero key bytes. Any in-flight decryption loop on a worker
         // thread that captured a SecretKey reference before STEP 2 still
         // holds a usable reference (defensive copy via SecretKeySpec); it
         // either completes its current row safely or hits the next

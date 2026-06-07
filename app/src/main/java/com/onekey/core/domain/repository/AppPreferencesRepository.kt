@@ -50,14 +50,14 @@ interface AppPreferencesRepository {
     /**
      * Opt-in toggle for showing category (tag) chips inside the autofill search
      * screen. Defaults to `false` because the autofill picker is a high-frequency,
-     * low-real-estate surface — adding a chip row taxes every fill for the benefit
+     * low-real-estate surface - adding a chip row taxes every fill for the benefit
      * of the subset of users who organise vault entries by tag. Bitwarden, Proton
      * Pass, and 1Password v8 deliberately omit category filters from their pickers
      * for the same reason. Power users opt in via Settings → Autofill.
      */
     fun isAutofillCategoryFilterEnabled(): Flow<Boolean>
     suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean)
-    /** Persistent lock-reason context — survives process restart so biometric stays paused. */
+    /** Persistent lock-reason context - survives process restart so biometric stays paused. */
     fun getLockReasonContext(): Flow<String?>
     /**
      * Race-free read of the persisted lock-reason context. Reads `dataStore.data.first()`

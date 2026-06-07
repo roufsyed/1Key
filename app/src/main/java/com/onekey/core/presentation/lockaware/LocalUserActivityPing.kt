@@ -15,7 +15,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
  *
  * The fix is per-surface compensation: every wrapper composable in this
  * package reads this local and threads `ping()` into the surface's input path.
- * `MainActivity.setContent` is the single provider — no other site should
+ * `MainActivity.setContent` is the single provider - no other site should
  * override.
  *
  * `staticCompositionLocalOf` rather than `compositionLocalOf` because the

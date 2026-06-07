@@ -21,7 +21,7 @@ import javax.inject.Inject
  *
  *  - On first hydration it [consume]s the [AutofillCaptureBuffer] by token,
  *    pulling out the captured username/password pair. The result is held in
- *    [capture] (a [SaveState]) — `null` means the slot was empty (likely a
+ *    [capture] (a [SaveState]) - `null` means the slot was empty (likely a
  *    stale Intent from a prior process) and the activity should finish.
  *
  *  - After unlock, it searches the vault for an existing credential that
@@ -35,7 +35,7 @@ import javax.inject.Inject
  * Process-death note: the consume happens once at construction. If the
  * activity is recreated, [SavedStateHandle] preserves [HYDRATED_TOKEN] so we
  * do not double-consume. The captured payload itself is not persisted into
- * SavedState — once consumed, it lives only in this ViewModel instance, and
+ * SavedState - once consumed, it lives only in this ViewModel instance, and
  * a real process death drops it (the user re-submits the form). That is by
  * design: plaintext credential bytes must not survive process death.
  */
@@ -78,13 +78,13 @@ class AutofillSaveViewModel @Inject constructor(
 
     /**
      * Consume the capture buffer by [token], at most once across recreations.
-     * Idempotent — the SavedState flag guards against re-consume on rotation.
+     * Idempotent - the SavedState flag guards against re-consume on rotation.
      */
     fun hydrate(token: String) {
         if (_capture.value !is SaveState.Idle) return
         val alreadyHydrated = savedState.get<Boolean>(HYDRATED_TOKEN) == true
         if (alreadyHydrated) {
-            // Process recreation after consume — payload is gone; treat as
+            // Process recreation after consume - payload is gone; treat as
             // missing so the activity finishes cleanly.
             _capture.value = SaveState.MissingCapture
             return

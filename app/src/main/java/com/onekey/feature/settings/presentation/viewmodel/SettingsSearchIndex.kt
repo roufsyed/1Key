@@ -20,7 +20,7 @@ enum class SettingsDestination {
 
 // Only dialogs whose state lives in SettingsScreen itself.
 // Dialogs owned by sub-screens (biometric, screenshots, lock timers, etc.) are reached
-// by navigating to their sub-screen — lifting them here would require invasive API changes.
+// by navigating to their sub-screen - lifting them here would require invasive API changes.
 enum class SettingsDialogId { DeleteVault }
 
 // Stable string keys used by sub-screens to identify which row to scroll-to and highlight
@@ -29,7 +29,7 @@ enum class SettingsDialogId { DeleteVault }
 //
 // Why every search entry navigates (no in-place toggle): tapping a search result for
 // "dark mode" should open the General screen with that row pulsed, not silently flip the
-// theme. The latter is surprising — users expect search to reveal where a setting lives,
+// theme. The latter is surprising - users expect search to reveal where a setting lives,
 // not to actuate it. So all toggles now go through Navigate + a highlight key.
 object SettingsHighlightKeys {
     const val DARK_THEME = "dark_theme"
@@ -58,7 +58,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "General",
         keywords = listOf("appearance", "display", "layout"),
         action = SettingsAction.Navigate(SettingsDestination.General),
-        // No highlightKey — navigates to the screen overview, no specific row.
+        // No highlightKey - navigates to the screen overview, no specific row.
     ),
     SettingsEntry(
         title = "Dark theme",
@@ -124,7 +124,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("password", "pin", "biometric", "lock", "fingerprint"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
-        // No highlightKey — navigates to the screen overview, no specific row.
+        // No highlightKey - navigates to the screen overview, no specific row.
     ),
     SettingsEntry(
         title = "Setup / Change PIN",
@@ -144,7 +144,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
     ),
     SettingsEntry(
         title = "Remove PIN",
-        subtitle = "Stop using a PIN — only master password will unlock 1Key",
+        subtitle = "Stop using a PIN - only master password will unlock 1Key",
         sectionLabel = "Security",
         keywords = listOf("delete pin", "disable pin", "unset pin"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
@@ -156,7 +156,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         sectionLabel = "Security",
         keywords = listOf("update password", "reset password", "new password"),
         action = SettingsAction.Navigate(SettingsDestination.ChangePassword),
-        // No highlightKey — navigates to a standalone screen, not a row in Security.
+        // No highlightKey - navigates to a standalone screen, not a row in Security.
     ),
     SettingsEntry(
         title = "Lock when app in background",

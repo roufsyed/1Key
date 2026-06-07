@@ -48,7 +48,7 @@ fun ChangePasswordScreen(
             !newPasswordState.contentEquals(confirmPasswordState)
     val newTooShort = !newPasswordState.isEmpty && newPasswordState.length < 8
     // Refuse a no-op change. We compare against the current field rather than the
-    // stored verifier so the user gets immediate inline feedback as they type —
+    // stored verifier so the user gets immediate inline feedback as they type -
     // no extra KDF work needed. The repository enforces the same rule
     // (defense in depth) before touching the verifier.
     val newSameAsCurrent = !newPasswordState.isEmpty &&
@@ -89,7 +89,7 @@ fun ChangePasswordScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    "Only your password verification is updated on this device. Your vault key is unchanged — all existing credentials remain accessible immediately.",
+                    "Only your password verification is updated on this device. Your vault key is unchanged - all existing credentials remain accessible immediately.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

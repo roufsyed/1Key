@@ -49,8 +49,8 @@ import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 /**
  * Shared lock surface for the autofill activities, replacing the per-activity
  * master-password-only panes. Mirrors the main [com.onekey.feature.auth.presentation.screen.LockScreen]
- * unlock decision tree exactly — biometric (auto-triggered if enabled), PIN
- * (if set up), master password (always available as fallback) — minus the
+ * unlock decision tree exactly - biometric (auto-triggered if enabled), PIN
+ * (if set up), master password (always available as fallback) - minus the
  * animated logo, morph transition, and full LockReason modal. The autofill
  * activity is a thin one-shot surface; the modal explanation is shown once
  * in the main app when the lockout fires, and re-showing it on every
@@ -70,7 +70,7 @@ import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
  * persistence prevents a rotation mid-prompt from re-firing it.
  *
  * `LockReason` and `requiresMasterPasswordRecheck` flips during the user's
- * stay on the screen are honoured live — the [BiometricPromptController]
+ * stay on the screen are honoured live - the [BiometricPromptController]
  * cancels any in-flight prompt and the section flips to password-only.
  *
  * @param target friendly destination string ("github.com" / "com.acme.app")
@@ -137,7 +137,7 @@ fun AutofillLockedSurface(
     // Auto-trigger biometric exactly once per surface entry, when:
     //  - we haven't fired yet (rememberSaveable),
     //  - the unified atomic gate from AuthViewModel says biometric is OK
-    //    (biometric pref on AND no lock reason — read together to avoid the
+    //    (biometric pref on AND no lock reason - read together to avoid the
     //    cold-start race where one half flipped first),
     //  - the OS reports biometric is currently available, AND
     //  - the master-password recheck interval has not elapsed,
@@ -187,7 +187,7 @@ fun AutofillLockedSurface(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            // Inline banners — they explain why the user is being forced to type
+            // Inline banners - they explain why the user is being forced to type
             // their master password. Two reasons may compose; show the more-
             // specific lock-reason copy when both are true.
             when {

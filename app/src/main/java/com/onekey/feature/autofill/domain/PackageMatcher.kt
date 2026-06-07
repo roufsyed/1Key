@@ -12,18 +12,18 @@ import javax.inject.Singleton
  * Matches a [ParsedFields] against the user's vault and returns the top-N
  * credentials by match strength.
  *
- * v1 strategy (deliberately conservative — see `project_autofill.md` and the
+ * v1 strategy (deliberately conservative - see `project_autofill.md` and the
  * skeptic review's BLOCKER 13):
  *
  *  - **Exact host match only.** We do not collapse domains to eTLD+1. Without
  *    a Public Suffix List embedded, the eTLD+1 heuristic can match
- *    `mary.co.uk` to `john.co.uk` — a cross-tenant credential-leak vector.
+ *    `mary.co.uk` to `john.co.uk` - a cross-tenant credential-leak vector.
  *    `accounts.google.com` therefore does not match `google.com`. Less
  *    convenient, but a password manager must not silently fill credentials
  *    across origin boundaries.
  *
  *  - **Native-app fills require a webDomain.** If [ParsedFields.webDomain] is
- *    `null` (no WebView, raw native form) we return `emptyList()` — there's
+ *    `null` (no WebView, raw native form) we return `emptyList()` - there's
  *    no safe way to map a package name to a saved URL without explicit user
  *    linking. Path-A defers explicit linking to v1.1.
  *

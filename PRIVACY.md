@@ -1,8 +1,8 @@
-# Privacy Policy — 1Key
+# Privacy Policy - 1Key
 
 **Last updated: May 2026**
 
-1Key is a password manager built on a simple principle: your data belongs to you, not us. This document explains exactly what the app does and does not do with your information — in plain English, not legal boilerplate.
+1Key is a password manager built on a simple principle: your data belongs to you, not us. This document explains exactly what the app does and does not do with your information - in plain English, not legal boilerplate.
 
 ---
 
@@ -21,7 +21,7 @@
 - App settings and preferences (theme, auto-lock timeout, biometric preference)
 - Tags and categories you create
 
-Everything except a small amount of metadata (timestamps, sort order, tag membership) is encrypted on disk. The encryption key is wrapped by the Android Keystore — meaning it lives in your phone's secure hardware and can only be unwrapped from inside the app, with your master password.
+Everything except a small amount of metadata (timestamps, sort order, tag membership) is encrypted on disk. The encryption key is wrapped by the Android Keystore - meaning it lives in your phone's secure hardware and can only be unwrapped from inside the app, with your master password.
 
 ---
 
@@ -40,25 +40,25 @@ There is nothing to opt out of, because nothing is collected in the first place.
 
 ## Does 1Key connect to the internet?
 
-No. The app does not have the `INTERNET` permission in its manifest. This is not a setting that can be toggled — it is architecturally impossible for 1Key to make a network request. Your device's operating system enforces this.
+No. The app does not have the `INTERNET` permission in its manifest. This is not a setting that can be toggled - it is architecturally impossible for 1Key to make a network request. Your device's operating system enforces this.
 
 ---
 
 ## How your master password is protected
 
-Your master password is **never stored on this device**, in any form. We don't keep a hash, a copy, or anything that could be used to recover it. If you forget it, your data is unrecoverable — that's the trade-off for not having a server-side reset path.
+Your master password is **never stored on this device**, in any form. We don't keep a hash, a copy, or anything that could be used to recover it. If you forget it, your data is unrecoverable - that's the trade-off for not having a server-side reset path.
 
-To check whether the password you typed is correct, 1Key uses a small **verifier** — a piece of ciphertext that only the right password can decrypt. The key for this check is derived from your password using **Argon2id**, a memory-hard algorithm that allocates 64 MiB of RAM per attempt. This makes brute-forcing your password expensive enough that even a desktop GPU farm can't realistically crack a decent password in a useful timeframe.
+To check whether the password you typed is correct, 1Key uses a small **verifier** - a piece of ciphertext that only the right password can decrypt. The key for this check is derived from your password using **Argon2id**, a memory-hard algorithm that allocates 64 MiB of RAM per attempt. This makes brute-forcing your password expensive enough that even a desktop GPU farm can't realistically crack a decent password in a useful timeframe.
 
-The verifier itself is stored in **EncryptedSharedPreferences**, which is itself encrypted at rest by an Android Keystore-bound key. So even if someone extracted your phone's storage, they couldn't read the verifier blob — meaning offline brute-forcing of your password is not possible. They would need a live, attacker-controlled phone with your Keystore intact, which already implies game-over.
+The verifier itself is stored in **EncryptedSharedPreferences**, which is itself encrypted at rest by an Android Keystore-bound key. So even if someone extracted your phone's storage, they couldn't read the verifier blob - meaning offline brute-forcing of your password is not possible. They would need a live, attacker-controlled phone with your Keystore intact, which already implies game-over.
 
 ---
 
 ## How your credentials are encrypted
 
-Each field of each credential — title, username, password, URL, notes, custom fields, TOTP secret — is encrypted separately with **AES-256-GCM**, the same authenticated cipher used by Signal, WhatsApp, and modern TLS. Authenticated encryption means tampering with the encrypted data is detected on decryption rather than producing scrambled output.
+Each field of each credential - title, username, password, URL, notes, custom fields, TOTP secret - is encrypted separately with **AES-256-GCM**, the same authenticated cipher used by Signal, WhatsApp, and modern TLS. Authenticated encryption means tampering with the encrypted data is detected on decryption rather than producing scrambled output.
 
-We don't use the vault key directly to encrypt fields. Instead we derive purpose-specific subkeys via **HKDF-SHA256** — one for credential fields, another for titles. Each field's encryption is also bound to its row ID and column name (using a technique called *additional authenticated data*), so an attacker with raw database write access can't swap, say, an old password's ciphertext into a different account without the decryption failing.
+We don't use the vault key directly to encrypt fields. Instead we derive purpose-specific subkeys via **HKDF-SHA256** - one for credential fields, another for titles. Each field's encryption is also bound to its row ID and column name (using a technique called *additional authenticated data*), so an attacker with raw database write access can't swap, say, an old password's ciphertext into a different account without the decryption failing.
 
 The same protections apply to the credential history table that stores previous versions of credentials when you edit them.
 
@@ -76,25 +76,25 @@ The same protections apply to the credential history table that stores previous 
 ### `USE_BIOMETRIC`
 **Why:** Allows the app to prompt for fingerprint or face unlock so you can open your vault without typing your master password every time.
 
-**What we do NOT do:** 1Key never sees your fingerprint or face data. The Android operating system handles biometric matching entirely inside the device's secure hardware. The app only receives a yes or no — authentication succeeded or it did not. Your biometric data never enters 1Key's code or memory.
+**What we do NOT do:** 1Key never sees your fingerprint or face data. The Android operating system handles biometric matching entirely inside the device's secure hardware. The app only receives a yes or no - authentication succeeded or it did not. Your biometric data never enters 1Key's code or memory.
 
 ### `READ_EXTERNAL_STORAGE` (Android 12 and below) / `WRITE_EXTERNAL_STORAGE` (Android 9 and below)
 **Why:** Reading and writing backup files on older Android versions that pre-date the system file picker.
 
-**What we do NOT do:** On Android 13 and above, neither of these is requested. Modern Android uses the system file picker (Storage Access Framework), which doesn't require a broad-storage permission — you grant access to a single chosen file at a time.
+**What we do NOT do:** On Android 13 and above, neither of these is requested. Modern Android uses the system file picker (Storage Access Framework), which doesn't require a broad-storage permission - you grant access to a single chosen file at a time.
 
 ---
 
-## Biometric unlock — how it actually works
+## Biometric unlock - how it actually works
 
-When you enable biometric unlock, 1Key generates a cryptographic key inside the Android Keystore — a hardware-backed secure enclave on your device (called a TEE, Trusted Execution Environment, or StrongBox on newer phones). This key is tied to your biometric credential at the hardware level, and on Android 9+ it additionally requires the device to be unlocked at the time of use.
+When you enable biometric unlock, 1Key generates a cryptographic key inside the Android Keystore - a hardware-backed secure enclave on your device (called a TEE, Trusted Execution Environment, or StrongBox on newer phones). This key is tied to your biometric credential at the hardware level, and on Android 9+ it additionally requires the device to be unlocked at the time of use.
 
 When you unlock with biometrics:
 1. Android's secure hardware verifies your fingerprint or face
 2. If it matches, the hardware releases the key to the app
 3. 1Key uses that key to unwrap the vault key
 
-Your fingerprint or face is never extracted, copied, or seen by 1Key. The secure enclave handles everything. If you clear your biometrics from your phone's settings, the key is automatically destroyed and biometric unlock stops working — you fall back to your master password.
+Your fingerprint or face is never extracted, copied, or seen by 1Key. The secure enclave handles everything. If you clear your biometrics from your phone's settings, the key is automatically destroyed and biometric unlock stops working - you fall back to your master password.
 
 ---
 
@@ -104,7 +104,7 @@ If someone gets hold of your phone, the only way into the vault without your bio
 
 - **Persistent counters.** Wrong-attempt counts live in DataStore, so killing and reopening the app cannot reset them.
 - **Tiered cooldowns.** 3 wrong attempts trigger a 30-second wait. 5 trigger 5 minutes. 10 trigger 1 hour.
-- **PIN escalation.** After 3 wrong PINs, the easier PIN unlock is disabled until you successfully enter the master password — proving real identity before the shortcut resumes.
+- **PIN escalation.** After 3 wrong PINs, the easier PIN unlock is disabled until you successfully enter the master password - proving real identity before the shortcut resumes.
 - **Argon2id cost per attempt.** Each guess pays a 64 MiB memory cost regardless of cooldown.
 
 Combined, these mean even with the device in hand, a full 6-digit PIN search would take far longer than the device's useful lifetime, and a strong master password is unrealistic to brute-force.
@@ -113,10 +113,10 @@ Combined, these mean even with the device in hand, a full 6-digit PIN search wou
 
 ## Exports and backups
 
-When you export your vault, you are moving your data from the app to a file. That file goes wherever you choose to put it — your Downloads folder, a USB drive, cloud storage you control, etc.
+When you export your vault, you are moving your data from the app to a file. That file goes wherever you choose to put it - your Downloads folder, a USB drive, cloud storage you control, etc.
 
-- **Encrypted exports** (`.1key` format) — the file is protected with AES-256-GCM using a key derived from your master password via Argon2id. The export timestamp and vault-version counter are bound into the authentication tag, so tampering with any header field, swapping the encrypted body across files, or replaying an older backup against a newer vault all fail authentication. Without the password, the file is indistinguishable from random bytes.
-- **Plain exports** (CSV or JSON) — the file contains your credentials in readable text. 1Key warns you clearly before creating one and requires you to confirm your master password first.
+- **Encrypted exports** (`.1key` format) - the file is protected with AES-256-GCM using a key derived from your master password via Argon2id. The export timestamp and vault-version counter are bound into the authentication tag, so tampering with any header field, swapping the encrypted body across files, or replaying an older backup against a newer vault all fail authentication. Without the password, the file is indistinguishable from random bytes.
+- **Plain exports** (CSV or JSON) - the file contains your credentials in readable text. 1Key warns you clearly before creating one and requires you to confirm your master password first.
 
 1Key has no knowledge of where your export files end up. Once the file leaves the app, it is entirely your responsibility.
 
@@ -132,13 +132,13 @@ When you export your vault, you are moving your data from the app to a file. Tha
 
 ## Recycle bin
 
-Deleted credentials go to a recycle bin for 30 days by default (configurable: 1 week, 30 days, 6 months, 1 year, or never). Bin items are encrypted with the exact same protections as active items — the only difference is they're filtered out of normal views. After the retention window, they're auto-purged on the next vault unlock.
+Deleted credentials go to a recycle bin for 30 days by default (configurable: 1 week, 30 days, 6 months, 1 year, or never). Bin items are encrypted with the exact same protections as active items - the only difference is they're filtered out of normal views. After the retention window, they're auto-purged on the next vault unlock.
 
 ---
 
-## OCR — on-device text recognition
+## OCR - on-device text recognition
 
-The OCR feature uses Google's ML Kit Text Recognition library. This library runs entirely on your device — no image or text is uploaded to Google or any other server. The camera frame is processed locally and the result is discarded once the text is extracted.
+The OCR feature uses Google's ML Kit Text Recognition library. This library runs entirely on your device - no image or text is uploaded to Google or any other server. The camera frame is processed locally and the result is discarded once the text is extracted.
 
 ---
 
@@ -150,7 +150,7 @@ The OCR feature uses Google's ML Kit Text Recognition library. This library runs
 
 ## Changes to this policy
 
-If this policy ever changes, the updated version will be in this file in the repository. Since 1Key has no account system, there is no way to notify you directly — check this file if you are curious.
+If this policy ever changes, the updated version will be in this file in the repository. Since 1Key has no account system, there is no way to notify you directly - check this file if you are curious.
 
 ---
 

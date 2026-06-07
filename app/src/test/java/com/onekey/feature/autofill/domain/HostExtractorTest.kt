@@ -11,7 +11,7 @@ import org.junit.Test
  * mark a credential as "same-host" in one path while flagging it as
  * "cross-host" in the other.
  *
- * Pure JVM — `URI` is `java.net.URI`, no Android shadow needed.
+ * Pure JVM - `URI` is `java.net.URI`, no Android shadow needed.
  */
 class HostExtractorTest {
 
@@ -50,7 +50,7 @@ class HostExtractorTest {
     }
 
     @Test fun preserves_subdomain() {
-        // Critical: accounts.google.com must NOT collapse to google.com —
+        // Critical: accounts.google.com must NOT collapse to google.com -
         // that would break the exact-host security contract.
         assertEquals("accounts.google.com", HostExtractor.hostOf("https://accounts.google.com"))
         assertEquals("mail.google.com", HostExtractor.hostOf("https://mail.google.com"))

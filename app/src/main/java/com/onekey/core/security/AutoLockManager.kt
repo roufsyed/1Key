@@ -39,7 +39,7 @@ class AutoLockManager @Inject constructor(
     @Volatile private var pickerActive = false
 
     // Counter-based inactivity-timer suppression for in-app flows that hold the
-    // user's attention without producing touch events — camera previews (OCR,
+    // user's attention without producing touch events - camera previews (OCR,
     // QR scanners). Composes under picker suppression: pickers acquire this
     // and additionally flip pickerActive to also disable the background timer.
     // Cameras only acquire this; they do NOT disable the background timer, so
@@ -48,7 +48,7 @@ class AutoLockManager @Inject constructor(
 
     /**
      * Suppresses the inactivity timer until [releaseInactivitySuppression] is
-     * called. Re-entrant — N acquires require N releases. Callers MUST pair
+     * called. Re-entrant - N acquires require N releases. Callers MUST pair
      * each acquire with exactly one release (typically via DisposableEffect).
      */
     fun acquireInactivitySuppression() {
@@ -107,7 +107,7 @@ class AutoLockManager @Inject constructor(
 
     // Called from MainActivity.onUserInteraction(). Throttled to avoid coroutine
     // churn during continuous gestures (scrolling, etc.). Skipped while any
-    // inactivity suppression is held — re-arming the idle timer underneath an
+    // inactivity suppression is held - re-arming the idle timer underneath an
     // active suppression would defeat the whole point of holding it.
     fun onUserActivity() {
         if (!isVaultUnlocked) return
@@ -139,7 +139,7 @@ class AutoLockManager @Inject constructor(
         backgroundJob?.cancel()
         backgroundJob = null
         // If a suppression is active (camera flow re-foregrounding mid-session),
-        // leave idleJob alone — the suppressor still owns it.
+        // leave idleJob alone - the suppressor still owns it.
         if (isVaultUnlocked && inactivitySuppressionCount.get() == 0) resetIdleTimer()
     }
 

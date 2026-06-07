@@ -3,7 +3,7 @@ package com.onekey.core.domain.model
 /**
  * How quickly the vault locks after the app moves to the background.
  *
- * This is the security knob — the threat model is "someone picks up my unlocked phone
+ * This is the security knob - the threat model is "someone picks up my unlocked phone
  * after I've put it down with the app open". Defaults to [IMMEDIATE].
  */
 enum class BackgroundLockTimeout(val displayName: String, val millis: Long) {
@@ -17,7 +17,7 @@ enum class BackgroundLockTimeout(val displayName: String, val millis: Long) {
  * How long the vault stays unlocked while the app is in the foreground but receiving
  * no user input.
  *
- * This is the convenience knob — the threat model is "I walked away from the unlocked
+ * This is the convenience knob - the threat model is "I walked away from the unlocked
  * phone with the app still open". [NEVER] disables the idle timer entirely (the
  * background timer still runs). Defaults to [FIVE_MINUTES].
  */

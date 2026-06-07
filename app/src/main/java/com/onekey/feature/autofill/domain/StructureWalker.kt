@@ -8,7 +8,7 @@ import javax.inject.Singleton
 
 /**
  * Walks an [AssistStructure] and flattens every node we care about into a list
- * of [RawNode]s. Iterative (uses an [ArrayDeque]) rather than recursive — deep
+ * of [RawNode]s. Iterative (uses an [ArrayDeque]) rather than recursive - deep
  * signup forms can have stacks 30+ levels deep and we'd rather not gamble on a
  * 4 KB worker-thread stack on low-end OEM JVMs.
  *
@@ -28,7 +28,7 @@ class StructureWalker @Inject constructor() {
      *
      * Nodes with `IMPORTANT_FOR_AUTOFILL_NO` or `..._NO_EXCLUDE_DESCENDANTS`
      * are dropped, including their subtree in the latter case. This is a
-     * defence-in-depth check — the OS pre-filters these as well, but custom
+     * defence-in-depth check - the OS pre-filters these as well, but custom
      * AssistStructure backends in some browsers historically have not.
      */
     fun walk(structure: AssistStructure, cancelled: () -> Boolean = { false }): List<RawNode> {
@@ -63,7 +63,7 @@ class StructureWalker @Inject constructor() {
                         hint = node.hint,
                         inputType = node.inputType,
                         // `htmlInfo.attributes` is `List<android.util.Pair>`,
-                        // not Kotlin's Pair — explicit conversion required.
+                        // not Kotlin's Pair - explicit conversion required.
                         htmlAttributes = node.htmlInfo?.attributes?.mapNotNull { p ->
                             val first = p.first ?: return@mapNotNull null
                             val second = p.second ?: return@mapNotNull null

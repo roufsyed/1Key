@@ -20,7 +20,7 @@ import javax.inject.Singleton
  * decryption coroutines are CPU-bound (HKDF + AES-GCM per row) and must NOT
  * land on Main. The existing [ApplicationScope] provider in
  * [DatabaseModule] omits the dispatcher and would dispatch through whatever
- * the call site provides — too implicit for a security-critical CPU loop.
+ * the call site provides - too implicit for a security-critical CPU loop.
  *
  * `SupervisorJob` ensures one decryption batch's failure (e.g. corrupt row
  * surfacing as an unexpected exception) does not cancel the coordinator
@@ -54,7 +54,7 @@ object SnapshotModule {
      * Re-publishes [VaultSnapshotStore.state] under the [SnapshotStateFlow]
      * qualifier so search/list ViewModels depend on a `StateFlow<SnapshotState>`
      * contract rather than the concrete store. Same testability rationale as
-     * [provideMigrationStatusFlow] — a unit test passes a
+     * [provideMigrationStatusFlow] - a unit test passes a
      * `MutableStateFlow<SnapshotState>` and drives transitions directly
      * without standing up DAO + key holder + decryptor.
      *

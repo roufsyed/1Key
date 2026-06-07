@@ -49,7 +49,7 @@ class MainActivity : FragmentActivity() {
 
         // Default to FLAG_SECURE until the screenshots preference hydrates from DataStore.
         // Erring on "blocked" during the brief startup window is safer for a password
-        // manager — the observer below clears the flag if the user has enabled screenshots.
+        // manager - the observer below clears the flag if the user has enabled screenshots.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
 
         lifecycleScope.launch {
@@ -64,7 +64,7 @@ class MainActivity : FragmentActivity() {
             // NavHost.startDestination is one-shot per graph instance, but if we tracked
             // setupComplete reactively the `when` arm would change at the moment setup
             // finishes (false → true), passing a different `startDestination` to
-            // OneKeyNavGraph and remounting the graph — which yanks the user from
+            // OneKeyNavGraph and remounting the graph - which yanks the user from
             // VaultReadyPage straight to LockScreen and short-circuits the post-setup
             // hand-off. The onboarding flow does its own navigation via onSetupComplete;
             // MainActivity only needs the initial value.
@@ -77,8 +77,8 @@ class MainActivity : FragmentActivity() {
 
             OneKeyTheme(darkTheme = isDarkTheme) {
                 // Provide the user-activity ping at the composition root so every
-                // dialog / sheet / popup downstream — even ones rendered in their
-                // own Window — can reset the inactivity timer. Without this, the
+                // dialog / sheet / popup downstream - even ones rendered in their
+                // own Window - can reset the inactivity timer. Without this, the
                 // M3 dialog/sheet/popup family is blind to the timer, since their
                 // touches never reach Activity.onUserInteraction().
                 //

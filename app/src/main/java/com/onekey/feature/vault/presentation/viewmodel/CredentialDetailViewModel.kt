@@ -58,7 +58,7 @@ class CredentialDetailViewModel @Inject constructor(
      * call with [endCameraSession]; the underlying counter clamps at zero so
      * an unmatched end is a no-op rather than corrupting timer state.
      *
-     * The background timer is intentionally NOT suppressed here — turning the
+     * The background timer is intentionally NOT suppressed here - turning the
      * screen off mid-scan should still lock the vault.
      */
     fun beginCameraSession() = autoLockManager.acquireInactivitySuppression()
@@ -85,7 +85,7 @@ class CredentialDetailViewModel @Inject constructor(
 
     /**
      * Frozen snapshot of `accessed_at` taken on the first non-null emission of
-     * this screen's credential — what the UI shows under "Last accessed" on
+     * this screen's credential - what the UI shows under "Last accessed" on
      * the Details panel. Display-only, deliberately decoupled from the live
      * credential in [uiState] so that:
      *
@@ -117,8 +117,8 @@ class CredentialDetailViewModel @Inject constructor(
             viewModelScope.launch {
                 // Single Room subscription drives both the live UI state and
                 // the one-shot accessed_at snapshot. The capture branch fires
-                // exactly once — on the first emission with a non-null
-                // credential — so the bump's own re-emission can't overwrite
+                // exactly once - on the first emission with a non-null
+                // credential - so the bump's own re-emission can't overwrite
                 // the snapshot, and a missing/deleted row simply leaves the
                 // snapshot null (UI hides "Last accessed" in that case).
                 //
@@ -135,7 +135,7 @@ class CredentialDetailViewModel @Inject constructor(
                             // the UI state transitions to Success so the very
                             // first frame of the Details panel already has
                             // its "Last accessed" value to render. Avoids a
-                            // one-frame "Last accessed: —" flicker.
+                            // one-frame "Last accessed: -" flicker.
                             _displayAccessedAt.value = credential.accessedAt
                             // Fire-and-forget under the outer launch so the
                             // bump cancels cleanly if the user navigates
@@ -150,7 +150,7 @@ class CredentialDetailViewModel @Inject constructor(
                                     CredentialDetailUiState.Success(credential)
                                 state is CredentialDetailUiState.Success ->
                                     state.copy(credential = credential)
-                                // Preserve terminal states — DB updates must not override Saved/Deleted.
+                                // Preserve terminal states - DB updates must not override Saved/Deleted.
                                 else -> state
                             }
                         }
@@ -174,7 +174,7 @@ class CredentialDetailViewModel @Inject constructor(
                 is AppResult.Error -> {
                     if (result.exception is VaultLockedException) {
                         // Vault auto-locked between editor open and Save tap. Don't surface
-                        // the cryptic "Vault is locked" message — NavGraph's
+                        // the cryptic "Vault is locked" message - NavGraph's
                         // LaunchedEffect(isUnlocked) routes to LockScreen on the next
                         // recomposition. Leaving uiState on Success(isEditing=true) means
                         // that with restoreLastScreenOnUnlock enabled, the user lands back
@@ -238,7 +238,7 @@ class CredentialDetailViewModel @Inject constructor(
             if (result is AppResult.Error) {
                 _uiState.value = CredentialDetailUiState.Error(result.message ?: "Merge failed")
             } else {
-                // The bin item was permanently removed during merge — pop back to the prior screen.
+                // The bin item was permanently removed during merge - pop back to the prior screen.
                 _uiState.value = CredentialDetailUiState.Deleted
             }
         }
@@ -279,7 +279,7 @@ class CredentialDetailViewModel @Inject constructor(
     /**
      * Records that the user actually used this credential. Skipped for
      * unsaved-new entries (blank id) and silently skipped at the SQL layer
-     * for soft-deleted ones. Fire-and-forget — a failed bump shouldn't
+     * for soft-deleted ones. Fire-and-forget - a failed bump shouldn't
      * abort the copy itself, the user already has the value on the
      * clipboard.
      */

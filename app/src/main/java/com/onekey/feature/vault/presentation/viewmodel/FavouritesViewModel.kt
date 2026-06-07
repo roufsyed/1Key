@@ -60,7 +60,7 @@ class FavouritesViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     // On the favourites tab every visible row is already favourited, so the action will
-    // always default to "remove from favourites" — but the flag is computed the same way
+    // always default to "remove from favourites" - but the flag is computed the same way
     // for symmetry with TaggedCredentialListViewModel.
     val selectedAreAllFavourite: StateFlow<Boolean> =
         combine(_selectedIds, credentials) { ids, list ->

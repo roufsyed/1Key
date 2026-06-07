@@ -6,7 +6,7 @@
     variants live in values-night/ for system dark mode.
 -->
 <resources>
-    <!-- Autofill chip palette — light mode -->
+    <!-- Autofill chip palette - light mode -->
     <color name="autofill_chip_title">#0B1220</color>
     <color name="autofill_chip_subtitle">#5B6470</color>
     <color name="autofill_chip_accent">#1A56DB</color>

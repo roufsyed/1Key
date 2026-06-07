@@ -107,7 +107,7 @@ private fun fieldSuggestionsFor(type: CredentialType): List<FieldSuggestion> = w
 }
 
 // Types that don't surface auth (username/password/url/totp) inputs at all. Notes still
-// flows through `notes` — sometimes promoted to a primary content area.
+// flows through `notes` - sometimes promoted to a primary content area.
 private val NO_AUTH_TYPES = setOf(
     CredentialType.SECURE_NOTE,
     CredentialType.CREDIT_CARD,
@@ -265,7 +265,7 @@ private fun CredentialViewContent(
             )
         }
     ) { padding ->
-        // Flat divider-separated sections — same visual language as the home and list
+        // Flat divider-separated sections - same visual language as the home and list
         // screens. No card chrome, no per-row gap; dividers carry the structural rhythm.
         Column(
             modifier = Modifier
@@ -455,7 +455,7 @@ private fun MetadataSection(credential: Credential, displayAccessedAt: Long?) {
     }
     // displayAccessedAt is the snapshot the ViewModel froze at screen-open, so
     // the user sees the *previous* access (their last visit) rather than "now"
-    // — we don't read credential.accessedAt here on purpose, that field is the
+    // - we don't read credential.accessedAt here on purpose, that field is the
     // live DB value the bump just advanced to. Hidden when null (new
     // unsaved credential, or extreme edge case where the snapshot read failed).
     val accessedText = remember(displayAccessedAt) {
@@ -489,7 +489,7 @@ private fun HistorySection(
     onToggle: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        // Header row is the entire tap target — matches the section-row affordance the
+        // Header row is the entire tap target - matches the section-row affordance the
         // home and list screens use. No card chrome.
         Row(
             modifier = Modifier
@@ -587,7 +587,7 @@ private fun DetailField(
         Column(modifier = Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             // Sensitive values bypass SelectionContainer so an OS-menu long-press copy
-            // can't sidestep SecureClipboardManager — the in-app copy button is the
+            // can't sidestep SecureClipboardManager - the in-app copy button is the
             // only way to put the value on the clipboard, and it auto-clears.
             // clearAndSetSemantics replaces the accessibility node text with a neutral
             // description so screen readers and automation services cannot read the value.
@@ -624,7 +624,7 @@ private fun CredentialEditContent(
 ) {
     // rememberSaveable on the simple String/Boolean fields so a config change (rotation,
     // multi-window resize, fold) doesn't wipe partially-typed edits. Bundle persistence
-    // is acceptable here — Android writes savedInstanceState through file-based encryption
+    // is acceptable here - Android writes savedInstanceState through file-based encryption
     // at rest, so the typed-but-unsaved values aren't sitting on disk in cleartext.
     //
     // selectedTags and customFields stay on plain `remember` because List<Tag> and
@@ -661,7 +661,7 @@ private fun CredentialEditContent(
     var showTotpScanner by rememberSaveable { mutableStateOf(false) }
     var showOcrScanner by rememberSaveable { mutableStateOf(false) }
     // Latched true once OCR successfully fills fields. Holds inactivity-suppression for
-    // the rest of the editor session — the user just spent N seconds at the camera and
+    // the rest of the editor session - the user just spent N seconds at the camera and
     // will spend more reading the auto-filled values; the idle timer can't tell that
     // apart from "user walked away". Released when the editor leaves composition (save,
     // back, or vault-lock-driven nav). Background-lock is unaffected: turning the screen
@@ -862,7 +862,7 @@ private fun CredentialEditContent(
             }
 
             // Type-specific quick-add suggestions. Tapping a chip drops a pre-labeled
-            // CustomField with a sensible sensitive default — no reserved storage, no
+            // CustomField with a sensible sensitive default - no reserved storage, no
             // schema impact. Already-added labels are filtered out to avoid duplicates.
             val suggestions = fieldSuggestionsFor(credential.type)
             val activeSuggestions = suggestions.filter { suggestion ->
@@ -975,7 +975,7 @@ private fun CredentialEditContent(
         OcrScannerSheet(
             targets = ocrTargetsFor(credential.type),
             onResult = { assignments ->
-                // Latch the post-OCR review window — see comment at `ocrUsed` declaration.
+                // Latch the post-OCR review window - see comment at `ocrUsed` declaration.
                 ocrUsed = true
                 assignments.username?.let { username = it }
                 assignments.password?.let { password = it }
@@ -1194,7 +1194,7 @@ private fun TotpCameraPreview(
                                         }
                                         if (detected.compareAndSet(false, true)) {
                                             // The in-editor scanner only carries the secret string back
-                                            // to the form field — algorithm/digits/period/counter come
+                                            // to the form field - algorithm/digits/period/counter come
                                             // through the dedicated 2FA list manual-entry sheet (C7) or
                                             // a fresh credential created via QrScannerScreen, both of
                                             // which preserve full params end-to-end.
@@ -1256,7 +1256,7 @@ private fun TotpCameraPreview(
                 shape = MaterialTheme.shapes.medium,
             ) {
                 Text(
-                    "Not a 2FA QR code — try a different one.",
+                    "Not a 2FA QR code - try a different one.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -1358,7 +1358,7 @@ private fun TagPickerDialog(
 
 @Composable
 private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> Unit, onRemove: () -> Unit) {
-    // Field content is read straight from the prop and propagated through the callback —
+    // Field content is read straight from the prop and propagated through the callback -
     // no internal mirror. Internal state used to drift when the parent removed an earlier
     // row: each surviving row's `remember`d text would carry over into the wrong slot
     // because Compose reused slots positionally. Reading the prop directly removes that

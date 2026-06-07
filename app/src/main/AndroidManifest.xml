@@ -50,7 +50,7 @@
 
             exported=false: PendingIntent retains our app identity at delivery
             time, so the system does not need component-level export.
-            excludeFromRecents=true: this is a transient unlock surface — it
+            excludeFromRecents=true: this is a transient unlock surface - it
             must not appear in the user's recent-apps thumbnail strip.
             taskAffinity="" plus launchMode=singleInstance: keeps the autofill
             UI out of MainActivity's task stack and guarantees only one

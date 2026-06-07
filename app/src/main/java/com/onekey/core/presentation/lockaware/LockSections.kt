@@ -52,18 +52,18 @@ private val PinSuccessColor = Color(0xFF4CAF50)
 
 /**
  * Six-dot PIN entry section. Identical UX to the production `LockScreen`'s
- * `PinUnlockSection` — the only behavioural difference vs. the original is
+ * `PinUnlockSection` - the only behavioural difference vs. the original is
  * the lockout-seconds source: this file delegates to [rememberLockoutSecondsRemaining]
  * so a single ticker implementation drives both the lock and autofill surfaces.
  *
- * Decoupled from `AuthViewModel` and `AppViewModel` — consumes only the
+ * Decoupled from `AuthViewModel` and `AppViewModel` - consumes only the
  * abstract [state], the lockout timestamp, and two callbacks. Same pattern
  * for `PasswordUnlockSection` below.
  *
  * @param state the unified `AuthUiState` driving error/loading/unlocked flips
  * @param lockoutUntilMs epoch-ms when the current PIN cooldown expires, or
  *   null when no cooldown is active. Must come from a tracker that emits the
- *   persisted value (PinAttemptTracker) — a frozen `now` will not work here.
+ *   persisted value (PinAttemptTracker) - a frozen `now` will not work here.
  * @param onPinSubmit fires when the user has typed a 6-digit PIN (auto-submit
  *   pattern), or when they press the IME Done action with a non-empty PIN.
  * @param onFallbackToPassword routes the user to the master-password fallback,
@@ -333,7 +333,7 @@ fun PasswordUnlockSection(
 
 /**
  * Compact error banner used by both unlock sections during a cooldown window.
- * Keep visually consistent — same shape, padding, and copy structure across
+ * Keep visually consistent - same shape, padding, and copy structure across
  * surfaces. The countdown re-renders via [rememberLockoutSecondsRemaining]
  * upstream; this composable just paints the current frame.
  */

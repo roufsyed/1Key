@@ -139,17 +139,17 @@ dependencies {
     // opens. Instead, we keep the classes in the APK so ML Kit loads, and strip the
     // INTERNET / ACCESS_NETWORK_STATE permissions from the merged manifest via
     // tools:node="remove" in AndroidManifest.xml. The Firelog Uploader still runs
-    // but the OS blocks every socket attempt — telemetry cannot exfiltrate.
+    // but the OS blocks every socket attempt - telemetry cannot exfiltrate.
     implementation(libs.mlkit.barcode)
     implementation(libs.mlkit.text.recognition)
 
-    // Argon2id — Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
+    // Argon2id - Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
     implementation(libs.argon2kt)
 
-    // EncryptedSharedPreferences — Keystore-backed encryption for auth data at rest.
+    // EncryptedSharedPreferences - Keystore-backed encryption for auth data at rest.
     implementation(libs.security.crypto)
 
-    // Testing — JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
+    // Testing - JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).
     testImplementation(libs.junit)
@@ -195,8 +195,8 @@ android {
         // workaround upstream until AGP republishes against Kotlin 2.0.
         //
         //  - NullSafeMutableLiveData: NonNullableMutableLiveDataDetector. We
-        //    don't use MutableLiveData anywhere — everything is StateFlow /
-        //    SharedFlow — so the rule has nothing useful to find here.
+        //    don't use MutableLiveData anywhere - everything is StateFlow /
+        //    SharedFlow - so the rule has nothing useful to find here.
         //  - FrequentlyChangingValue: FrequentlyChangingValueDetector. Same
         //    bundled-detector class loader issue. Re-enable once we're on a
         //    newer AGP that re-ships its bundled checks.

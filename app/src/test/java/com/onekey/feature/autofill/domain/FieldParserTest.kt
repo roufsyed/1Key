@@ -168,7 +168,7 @@ class FieldParserTest {
 
     @Test fun rescue_rejects_non_text_class_predecessor() {
         val nodes = listOf(
-            // Non-EditText class — even though the input type is plain text,
+            // Non-EditText class - even though the input type is plain text,
             // looksLikePlausibleIdentifier should reject it.
             textNode(
                 id = 1,
@@ -223,7 +223,7 @@ class FieldParserTest {
     }
 
     @Test fun isFillable_requires_either_password_or_username_or_email() {
-        // Direct shape contract — defensive, mirrors how the service uses parsed.isFillable().
+        // Direct shape contract - defensive, mirrors how the service uses parsed.isFillable().
         val withPassword = ParsedFields(
             username = null, password = AutofillField(newAutofillId(1), AutofillField.Type.PASSWORD),
             email = null, scenario = AutofillScenario.LOGIN, packageName = "x", webDomain = null,

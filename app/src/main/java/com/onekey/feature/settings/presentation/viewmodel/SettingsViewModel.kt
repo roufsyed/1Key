@@ -254,7 +254,7 @@ class SettingsViewModel @Inject constructor(
 
     /**
      * Wipes the vault only after the user re-enters their master password. Three wrong
-     * attempts lock the vault — same policy as the biometric-enable flow.
+     * attempts lock the vault - same policy as the biometric-enable flow.
      */
     fun deleteVaultContentsWithVerification(password: CharArray) {
         viewModelScope.launch {

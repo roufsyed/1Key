@@ -17,7 +17,7 @@ private val KEY_LAST_PW_FAILURE_MS = longPreferencesKey("pw_last_failure_ms")
  * DataStore-backed tracker for master-password unlock failures on the LockScreen.
  *
  * Persisting to DataStore (rather than an in-memory var) means a force-stop or
- * swipe-from-recents between attempts cannot reset the lockout — the app starts
+ * swipe-from-recents between attempts cannot reset the lockout - the app starts
  * cold with the prior failure state intact, preventing an adversary from bypassing
  * the lockout by killing the process.
  *

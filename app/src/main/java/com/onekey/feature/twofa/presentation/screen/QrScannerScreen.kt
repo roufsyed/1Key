@@ -66,7 +66,7 @@ fun QrScannerScreen(
 
     // Camera previews don't surface touch events, so the inactivity auto-lock
     // would otherwise fire mid-scan. Pair acquire/release with the screen's
-    // composition lifetime — onDispose runs on back-press, vault-lock-driven
+    // composition lifetime - onDispose runs on back-press, vault-lock-driven
     // navigation, and process death equivalents in compose.
     DisposableEffect(Unit) {
         viewModel.beginCameraSession()
@@ -83,7 +83,7 @@ fun QrScannerScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is ScanEvent.InvalidQr -> snackbarHostState.showSnackbar(
-                    message = "Not a 2FA QR code — try a different one.",
+                    message = "Not a 2FA QR code - try a different one.",
                     duration = SnackbarDuration.Short,
                 )
             }
@@ -192,7 +192,7 @@ private fun CameraPreviewWithOverlay(
                         analysis.setAnalyzer(analysisExecutor) { imageProxy ->
                             // CameraX's ExperimentalGetImage uses androidx RequiresOptIn,
                             // so a Kotlin @OptIn is a no-op. AGP lint still flags
-                            // imageProxy.image inside this nested lambda — suppress here.
+                            // imageProxy.image inside this nested lambda - suppress here.
                             @SuppressLint("UnsafeOptInUsageError")
                             val mediaImage = imageProxy.image
                             if (mediaImage != null) {
@@ -202,7 +202,7 @@ private fun CameraPreviewWithOverlay(
                                 )
                                 barcodeScanner.process(input)
                                     .addOnSuccessListener { barcodes ->
-                                        // Pass every QR through to the VM — it parses and
+                                        // Pass every QR through to the VM - it parses and
                                         // decides between a valid otpauth URI and an
                                         // InvalidQr event.
                                         barcodes.firstOrNull()?.rawValue

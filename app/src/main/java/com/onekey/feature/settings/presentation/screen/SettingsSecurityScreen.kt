@@ -79,7 +79,7 @@ fun SettingsSecurityScreen(
                     removePinPasswordVisible = false
                     removePinPasswordError = false
                     removePinAttemptsRemaining = 3
-                    snackbarHostState.showSnackbar("PIN removed — master password is now required to unlock")
+                    snackbarHostState.showSnackbar("PIN removed - master password is now required to unlock")
                 }
                 is SettingsEvent.PinRemoveConfirmFailed -> {
                     removePinPasswordError = true
@@ -108,7 +108,7 @@ fun SettingsSecurityScreen(
                     removePinPasswordError = false
                     removePinAttemptsRemaining = 3
                     // The "Vault Locked" explanation lives on LockScreen via LockReasonStore
-                    // — Settings has already left composition by the time the user lands there.
+                    // - Settings has already left composition by the time the user lands there.
                 }
                 else -> Unit // VaultContentsDeleted, Seed events, DeleteVaultConfirmFailed handled elsewhere
             }
@@ -186,7 +186,7 @@ fun SettingsSecurityScreen(
                         ) {
                             ListItem(
                                 headlineContent = { Text("Remove PIN") },
-                                supportingContent = { Text("Stop using a PIN — only your master password will unlock 1Key") },
+                                supportingContent = { Text("Stop using a PIN - only your master password will unlock 1Key") },
                                 leadingContent = { Icon(Icons.Default.LockReset, null) },
                                 trailingContent = { Icon(Icons.Default.ChevronRight, null) },
                                 modifier = Modifier.clickable {
@@ -258,7 +258,7 @@ fun SettingsSecurityScreen(
                                     checked = isRestoreLastScreenOnUnlock,
                                     onCheckedChange = { newValue ->
                                         if (newValue) {
-                                            // Confirm before turning on — surface the trade-off.
+                                            // Confirm before turning on - surface the trade-off.
                                             showRestoreLastScreenDialog = true
                                         } else {
                                             settingsVm.setRestoreLastScreenOnUnlock(false)
@@ -330,7 +330,7 @@ fun SettingsSecurityScreen(
                                         )
                                         if (option == MasterPasswordInterval.HOURS_48) {
                                             Text(
-                                                "Default — recommended",
+                                                "Default - recommended",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
@@ -354,7 +354,7 @@ fun SettingsSecurityScreen(
                         headlineContent = { Text("Allow Screenshots") },
                         supportingContent = {
                             Text(
-                                if (isScreenshotsEnabled) "App visible in Recent Apps screen — screenshots and recordings enabled"
+                                if (isScreenshotsEnabled) "App visible in Recent Apps screen - screenshots and recordings enabled"
                                 else "Blocks screenshots, screen recordings, and Recent Apps preview"
                             )
                         },
@@ -405,8 +405,8 @@ fun SettingsSecurityScreen(
                             {
                                 val remaining = biometricAttemptsRemaining
                                 Text(
-                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
-                                    else "Incorrect password — $remaining attempts remaining."
+                                    if (remaining == 1) "Incorrect password - 1 attempt remaining before vault locks."
+                                    else "Incorrect password - $remaining attempts remaining."
                                 )
                             }
                         } else null,
@@ -494,7 +494,7 @@ fun SettingsSecurityScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "How quickly the vault locks after you leave the app. Shorter is more secure — the vault key is wiped from memory when this fires.",
+                        "How quickly the vault locks after you leave the app. Shorter is more secure - the vault key is wiped from memory when this fires.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -614,8 +614,8 @@ fun SettingsSecurityScreen(
                             {
                                 val remaining = removePinAttemptsRemaining
                                 Text(
-                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
-                                    else "Incorrect password — $remaining attempts remaining."
+                                    if (remaining == 1) "Incorrect password - 1 attempt remaining before vault locks."
+                                    else "Incorrect password - $remaining attempts remaining."
                                 )
                             }
                         } else null,
@@ -665,7 +665,7 @@ fun SettingsSecurityScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "When auto-lock fires while you're using the app and you unlock again, " +
-                            "we'll take you back to the same screen you were on — even if that " +
+                            "we'll take you back to the same screen you were on - even if that " +
                             "was a credential's details. Helps you stay in flow.",
                     )
                     Text(

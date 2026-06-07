@@ -21,7 +21,7 @@ import javax.inject.Inject
  *    Even when the OS reports us as the active provider, this flag lets the
  *    user disable our chips without untoggling at the OS level.
  *  - [isSystemAutofillProvider] mirrors [AutofillManager.hasEnabledAutofillServices].
- *    Refreshed lazily via [refreshSystemStatus] — the screen calls it on
+ *    Refreshed lazily via [refreshSystemStatus] - the screen calls it on
  *    every ON_RESUME because the user typically toggles this in the system
  *    settings panel and we have no callback when they return.
  */
@@ -59,7 +59,7 @@ class AutofillSettingsViewModel @Inject constructor(
 
     private fun querySystemProviderStatus(): Boolean {
         // AutofillManager can return null on form factors that don't support
-        // autofill (e.g. Wear). Treat that as "not our provider" — the screen
+        // autofill (e.g. Wear). Treat that as "not our provider" - the screen
         // will surface a useful message.
         val manager = application.getSystemService(AutofillManager::class.java) ?: return false
         return runCatching { manager.hasEnabledAutofillServices() }.getOrDefault(false)

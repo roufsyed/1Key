@@ -10,7 +10,7 @@ import java.time.format.DateTimeFormatter
 
 /**
  * Normalises whatever timestamp shape an import file gives us into Unix
- * milliseconds since 1970 UTC — the contract every column in our schema
+ * milliseconds since 1970 UTC - the contract every column in our schema
  * (`created_at`, `updated_at`, `deleted_at`, `accessed_at`) actually stores.
  *
  * Handled formats:
@@ -28,10 +28,10 @@ import java.time.format.DateTimeFormatter
  *  - Bare ISO date (`2025-05-07`)
  *
  * Deliberately not detected (silently-wrong-data risk):
- *  - Regional `MM/DD/YYYY` / `DD/MM/YYYY` — locale-ambiguous.
- *  - Excel serial dates — collide with arbitrary 5-digit numbers.
- *  - Compact `YYYYMMDD` — collides with 8-digit integers.
- *  - Java `Date.toString()` — ambiguous timezone abbreviations (`IST`, `CST`…).
+ *  - Regional `MM/DD/YYYY` / `DD/MM/YYYY` - locale-ambiguous.
+ *  - Excel serial dates - collide with arbitrary 5-digit numbers.
+ *  - Compact `YYYYMMDD` - collides with 8-digit integers.
+ *  - Java `Date.toString()` - ambiguous timezone abbreviations (`IST`, `CST`…).
  *
  * Unrecognised input returns `null`; callers fall back to
  * `System.currentTimeMillis()`.
@@ -56,7 +56,7 @@ object TimestampParser {
         val s = raw.trim()
         if (s.isEmpty()) return null
 
-        // Numeric first — covers "1715002494", "1715002494773.0", "1.71E+09".
+        // Numeric first - covers "1715002494", "1715002494773.0", "1.71E+09".
         s.toDoubleOrNull()?.let { return normalizeNumeric(it) }
 
         // ISO 8601 instant: "2025-05-07T18:30:00Z" / with millis / nanos.
@@ -97,7 +97,7 @@ object TimestampParser {
     private fun normalizeNumeric(value: Double): Long? {
         if (!value.isFinite() || value <= 0.0) return null
         return when {
-            value < 1e8 -> null               // pre-1973-in-seconds — almost certainly not a timestamp
+            value < 1e8 -> null               // pre-1973-in-seconds - almost certainly not a timestamp
             value < 1e11 -> (value * 1000).toLong()       // seconds → ms
             value < 1e14 -> value.toLong()                // already ms
             value < 1e17 -> (value / 1000).toLong()       // μs → ms

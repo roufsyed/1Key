@@ -28,8 +28,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.SecretKeySpec
 
 /**
- * Behavioural locks for [VaultSnapshotStore]. Plain JVM — no Robolectric,
- * no Room — built around a fake [CredentialDao] (controllable
+ * Behavioural locks for [VaultSnapshotStore]. Plain JVM - no Robolectric,
+ * no Room - built around a fake [CredentialDao] (controllable
  * `observeListRaw` + `observeCount`) and a real
  * [CredentialDecryptor] + [CryptoManager] + [VaultKeyHolder]. Synthetic v2
  * entities are produced via the production encrypt path so AAD shapes
@@ -115,7 +115,7 @@ class VaultSnapshotStoreTest {
         fakeDao.count.value = 1
         keyHolder.setKey(vaultKey)
         advanceUntilIdle()
-        // Sanity — cache populated after first decrypt.
+        // Sanity - cache populated after first decrypt.
         assertEquals(vaultKey, readPrivate(decryptor, "memoisedFor"))
 
         keyHolder.lock()
@@ -165,7 +165,7 @@ class VaultSnapshotStoreTest {
         fakeDao.rows.value = listOf(buildV2Entity("a", "T1"))
         fakeDao.count.value = 1
 
-        // Step 1 — unlock with migrating=false. Snapshot decrypts.
+        // Step 1 - unlock with migrating=false. Snapshot decrypts.
         keyHolder.setKey(vaultKey)
         advanceUntilIdle()
         assertTrue(
@@ -173,7 +173,7 @@ class VaultSnapshotStoreTest {
             store.state.value is SnapshotState.Loaded,
         )
 
-        // Step 2 — migrator finally flips its flag to true (the race).
+        // Step 2 - migrator finally flips its flag to true (the race).
         // Snapshot's coordinator must cancel its upstream and transition
         // to Loading.
         migrationStatus.value = true
@@ -184,7 +184,7 @@ class VaultSnapshotStoreTest {
             store.state.value,
         )
 
-        // Step 3 — migration completes. Snapshot resumes upstream and
+        // Step 3 - migration completes. Snapshot resumes upstream and
         // settles on Loaded with the post-migration view of the data.
         migrationStatus.value = false
         advanceUntilIdle()
@@ -323,7 +323,7 @@ class VaultSnapshotStoreTest {
     }
 
     /**
-     * Minimal CredentialDao fake — only the methods VaultSnapshotStore reads
+     * Minimal CredentialDao fake - only the methods VaultSnapshotStore reads
      * from are implemented (observeListRaw and observeCount). Everything else
      * throws so any accidental new dependency on a previously-unread DAO
      * method is loud.
@@ -335,7 +335,7 @@ class VaultSnapshotStoreTest {
         override fun observeListRaw(query: SupportSQLiteQuery): Flow<List<CredentialEntity>> = rows
         override fun observeCount(): Flow<Int> = count
 
-        // Unused-by-store members — fail loud on unexpected use.
+        // Unused-by-store members - fail loud on unexpected use.
         override fun observeById(id: String): Flow<CredentialEntity?> = error("unused")
         override suspend fun getById(id: String): CredentialEntity? = error("unused")
         override suspend fun getByIdIncludingDeleted(id: String): CredentialEntity? = error("unused")

@@ -3,8 +3,8 @@ package com.onekey.feature.twofa.domain
 /**
  * Steam Guard's 5-character alphanumeric code encoding.
  *
- * Steam runs vanilla TOTP under the hood — same HMAC-SHA1, same 30-second window,
- * same RFC 4226 dynamic truncation — but instead of taking the truncated 4-byte int
+ * Steam runs vanilla TOTP under the hood - same HMAC-SHA1, same 30-second window,
+ * same RFC 4226 dynamic truncation - but instead of taking the truncated 4-byte int
  * mod 10^N to produce digits, it indexes a custom 26-letter alphabet five times in
  * little-endian-ish order. The output looks like `RXKBC` rather than `123456`.
  *
@@ -19,7 +19,7 @@ package com.onekey.feature.twofa.domain
  *
  * The alphabet deliberately omits ambiguous characters (`0`, `1`, `O`, `I`, `L`,
  * `A`, `E`, `S`, `U`, `Z`) so codes are typo-resistant when read aloud or off
- * a small screen. The order and content are not arbitrary — changing them yields
+ * a small screen. The order and content are not arbitrary - changing them yields
  * codes the Steam server rejects.
  *
  * Internal `object` so the encoding is callable only from inside the twofa domain

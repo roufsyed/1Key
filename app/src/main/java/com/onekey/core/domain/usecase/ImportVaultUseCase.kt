@@ -31,7 +31,7 @@ class ImportVaultUseCase @Inject constructor(
     /**
      * Classifies each parsed credential against the vault (active + recycle bin):
      * new, auto-mergeable (compatible fields), or conflict (needs user decision).
-     * No DB writes happen here — call [applyPlan] once the user has decided how to
+     * No DB writes happen here - call [applyPlan] once the user has decided how to
      * handle any conflicts.
      */
     suspend fun planImport(
@@ -169,7 +169,7 @@ class ImportVaultUseCase @Inject constructor(
 
     private fun Credential.applyFieldOptions(opts: ImportFieldOptions): Credential {
         // Derive against the source `url` (this.url) before the url toggle below
-        // potentially blanks it — the rescue must run on the parsed value, not
+        // potentially blanks it - the rescue must run on the parsed value, not
         // the post-filter one.
         val derivedTitle = if (opts.deriveTitleFromUrl && title.isBlank()) {
             UrlTitleExtractor.extractTitle(url) ?: title
@@ -192,7 +192,7 @@ class ImportVaultUseCase @Inject constructor(
      * [existing] and [incoming]. Empty list means a clean merge is possible.
      *
      * Single-value fields: equal-or-one-side-empty is compatible. Both non-empty + differ = conflict.
-     * Tags / custom fields: must match exactly to be compatible (no auto-union — too ambiguous).
+     * Tags / custom fields: must match exactly to be compatible (no auto-union - too ambiguous).
      */
     private fun conflictingFields(existing: Credential, incoming: Credential): List<String> {
         val clashes = mutableListOf<String>()
@@ -234,7 +234,7 @@ class ImportVaultUseCase @Inject constructor(
         password = existing.password.takeIf { it.isNotBlank() } ?: incoming.password,
         url = existing.url.takeIf { it.isNotBlank() } ?: incoming.url,
         notes = existing.notes.takeIf { it.isNotBlank() } ?: incoming.notes,
-        // Existing OTP enrolment wins as a unit — algorithm/digits/period/counter
+        // Existing OTP enrolment wins as a unit - algorithm/digits/period/counter
         // are tied to the secret, so we never mix one credential's secret with
         // another's params.
         otpParams = existing.otpParams ?: incoming.otpParams,

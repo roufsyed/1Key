@@ -5,7 +5,7 @@ import android.view.autofill.AutofillId
 /**
  * Pure data carrier holding everything the [FieldParser] needs about one
  * `AssistStructure.ViewNode`. Exists so the parser can be unit-tested on
- * the JVM — `ViewNode` is final and impossible to construct outside the
+ * the JVM - `ViewNode` is final and impossible to construct outside the
  * Android framework.
  *
  * `StructureWalker` is the only producer; tests build [RawNode] instances

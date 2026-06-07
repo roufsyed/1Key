@@ -78,7 +78,7 @@ fun OnboardingScreen(
 
     LaunchedEffect(state) {
         if (state is AuthUiState.SetupComplete) {
-            // Hide the IME only on a successful setup — a wrong restore-backup password
+            // Hide the IME only on a successful setup - a wrong restore-backup password
             // or any in-flight error should leave the keyboard up so the user can retype
             // immediately without re-tapping the field. `clearFocus(force = true)` covers
             // hardware-keyboard / stuck-IME edge cases where `hide()` alone isn't enough.
@@ -288,7 +288,7 @@ private fun PrivacyPage(onNext: () -> Unit, onBack: () -> Unit) {
 
         PrivacyPoint("Everything stays on your device. No sync servers, no backups to the cloud.")
         Spacer(Modifier.height(16.dp))
-        PrivacyPoint("Your master password never leaves your device — not even hashed.")
+        PrivacyPoint("Your master password never leaves your device - not even hashed.")
         Spacer(Modifier.height(16.dp))
         PrivacyPoint("No analytics, no crash reporting, no telemetry of any kind.")
         Spacer(Modifier.height(16.dp))
@@ -336,7 +336,7 @@ private fun CreateVaultPage(
     // Hero (intro copy) is the only thing that scrolls; the form (fields, privacy
     // controls, primary + secondary actions) is a non-scrolling sibling pinned to
     // the bottom. The outer OnboardingScreen Column already applies `.imePadding()`,
-    // so the form here doesn't need its own — it sits above the keyboard naturally.
+    // so the form here doesn't need its own - it sits above the keyboard naturally.
     // The single-scroll original lost the "Create Vault" button below the viewport
     // when a password field was focused.
     Column(
@@ -366,7 +366,7 @@ private fun CreateVaultPage(
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                "Your password is never stored. We derive an encryption key from it using PBKDF2 (310,000 iterations). Forget the password — lose access forever.",
+                "Your password is never stored. We derive an encryption key from it using PBKDF2 (310,000 iterations). Forget the password - lose access forever.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -504,10 +504,10 @@ private fun PrivacyPolicyDialog(onDismiss: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrivacyPoint("All your data stays on this device, encrypted with AES-256-GCM.")
                 PrivacyPoint("No accounts, no internet connection, no cloud sync.")
-                PrivacyPoint("No analytics, telemetry, or crash reports — ever.")
+                PrivacyPoint("No analytics, telemetry, or crash reports - ever.")
                 PrivacyPoint("Your master password never leaves your device, not even hashed.")
                 PrivacyPoint("If you forget your master password, your data cannot be recovered.")
-                PrivacyPoint("Encrypted .1key backups are protected by your master password. Plain JSON or CSV exports are unencrypted — treat those files as sensitive.")
+                PrivacyPoint("Encrypted .1key backups are protected by your master password. Plain JSON or CSV exports are unencrypted - treat those files as sensitive.")
             }
         },
         confirmButton = {
@@ -554,7 +554,7 @@ private fun VaultReadyPage(onContinue: () -> Unit) {
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "Your master password is the only key. Keep it safe — there is no recovery.",
+            "Your master password is the only key. Keep it safe - there is no recovery.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -683,7 +683,7 @@ private fun RestoreFromBackupDialog(
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 private fun VaultSetupStatusLine(isLoading: Boolean) {
-    val staticHint = "This takes a few seconds — we're stretching your password so it's hard to crack."
+    val staticHint = "This takes a few seconds - we're stretching your password so it's hard to crack."
     val loadingMessages = listOf(
         "Securing your vault…",
         "Encrypting with your master password…",
@@ -691,7 +691,7 @@ private fun VaultSetupStatusLine(isLoading: Boolean) {
     )
 
     // Keyed on isLoading so a fresh loading cycle (e.g. retry after error) starts at 0
-    // synchronously — without the key the previous index would briefly paint as the
+    // synchronously - without the key the previous index would briefly paint as the
     // first frame before the LaunchedEffect could reset it.
     var messageIndex by remember(isLoading) { mutableStateOf(0) }
     LaunchedEffect(isLoading) {

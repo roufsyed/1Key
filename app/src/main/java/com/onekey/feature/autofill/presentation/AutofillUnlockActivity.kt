@@ -64,7 +64,7 @@ import javax.inject.Inject
  *
  * Invariants:
  *  - `FLAG_SECURE` is set unconditionally and never cleared. The "Allow
- *    screenshots" preference does not extend to the autofill picker — the
+ *    screenshots" preference does not extend to the autofill picker - the
  *    picker surfaces arbitrary vault entries the user did not explicitly
  *    consent to expose to Recent Apps thumbnails or screen recorders.
  *  - The result Intent uses `AutofillManager.EXTRA_AUTHENTICATION_RESULT`
@@ -125,7 +125,7 @@ class AutofillUnlockActivity : FragmentActivity() {
         // a fresh task with the new extras.
         //
         // Cancel any in-flight biometric prompt FIRST so the dismissed
-        // callback fires while the activity is still alive — otherwise the
+        // callback fires while the activity is still alive - otherwise the
         // BiometricFragment's callback can post into a destroyed lifecycle.
         biometricController?.cancel()
         setResult(RESULT_CANCELED)
@@ -134,7 +134,7 @@ class AutofillUnlockActivity : FragmentActivity() {
 
     override fun onDestroy() {
         // Cancel any active biometric prompt and release the inactivity
-        // suppression. Idempotent — `cancel()` is a no-op if the prompt
+        // suppression. Idempotent - `cancel()` is a no-op if the prompt
         // already terminated.
         biometricController?.cancel()
         biometricController = null
@@ -159,7 +159,7 @@ class AutofillUnlockActivity : FragmentActivity() {
         biometricController = BiometricPromptController(this, autoLockManager)
 
         if (viewModel.initial is AutofillUnlockViewModel.InitialState.Invalid) {
-            // Missing or malformed extras — finish quietly. The framework
+            // Missing or malformed extras - finish quietly. The framework
             // shows no error; the chip just no-ops.
             setResult(RESULT_CANCELED)
             finish()
@@ -216,7 +216,7 @@ private fun UnlockGate(
     val crossHostFor by unlockViewModel.crossHostFor.collectAsStateWithLifecycle()
 
     // Once unlocked, kick off exact-host match load AND the decrypted vault
-    // snapshot. Both are idempotent inside the ViewModel — relock clears
+    // snapshot. Both are idempotent inside the ViewModel - relock clears
     // them, and the LaunchedEffect fires again on re-unlock.
     LaunchedEffect(isUnlocked) {
         if (isUnlocked) {
@@ -514,7 +514,7 @@ private fun CrossHostConfirmSurface(
             }
             Text(
                 text = "1Key only fills automatically when the saved site matches the form. " +
-                    "This credential was saved for a different site — only continue if you're " +
+                    "This credential was saved for a different site - only continue if you're " +
                     "certain they're the same login.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -564,7 +564,7 @@ private fun CredentialRow(
 }
 
 /**
- * Horizontally-scrolling filter chips for the autofill search screen — only
+ * Horizontally-scrolling filter chips for the autofill search screen - only
  * rendered when the user has opted into the category filter AND has at least
  * one tag. Single-select with tap-again-to-clear semantics: re-tapping the
  * active chip returns to "All" (the clear-filter state).

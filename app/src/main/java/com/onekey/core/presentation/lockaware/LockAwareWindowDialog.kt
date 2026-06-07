@@ -11,7 +11,7 @@ import androidx.compose.ui.window.DialogProperties
  * [Modifier.lockAware] into the dialog's content root.
  *
  * Used for the cases where the M3 [androidx.compose.material3.AlertDialog] (and
- * thus [LockAwareDialog]) doesn't fit — full-bleed custom content, multi-phase
+ * thus [LockAwareDialog]) doesn't fit - full-bleed custom content, multi-phase
  * dialogs, anything that needs `usePlatformDefaultWidth = false` and a custom
  * Card/Surface as the body. The import-preview dialog in `BackupScreen` is the
  * canonical example.

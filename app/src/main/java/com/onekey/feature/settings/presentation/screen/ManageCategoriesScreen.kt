@@ -142,7 +142,7 @@ fun ManageCategoriesScreen(
                     Text("The “${tag.name}” category will be permanently removed.")
                     Text(
                         "Any passwords currently tagged with it will have the category quietly " +
-                            "stripped away — your passwords themselves stay completely safe " +
+                            "stripped away - your passwords themselves stay completely safe " +
                             "and nothing else will change.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

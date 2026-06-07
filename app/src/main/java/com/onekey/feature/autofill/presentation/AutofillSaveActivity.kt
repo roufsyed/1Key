@@ -58,7 +58,7 @@ import javax.inject.Inject
  *    plaintext payload lives in [com.onekey.feature.autofill.domain.AutofillCaptureBuffer]
  *    in-process and is consumed at most once.
  *  - On a missing or already-consumed token (process death recovery), the
- *    activity finishes silently. No error UI — the system has no save flow to
+ *    activity finishes silently. No error UI - the system has no save flow to
  *    "fail back to" once we're outside its bottom-sheet.
  *  - Locked vault: routes through [AutofillLockedSurface], the same shared
  *    biometric/PIN/master-password unlock surface used by [AutofillUnlockActivity].
@@ -67,7 +67,7 @@ import javax.inject.Inject
  *
  * Window flags:
  *  - `FLAG_SECURE` is set unconditionally and never cleared. The user's
- *    "Allow screenshots" preference does NOT extend to autofill surfaces —
+ *    "Allow screenshots" preference does NOT extend to autofill surfaces -
  *    these show the captured credential pair and the unlock affordances.
  *  - `filterTouchesWhenObscured = true` defends against overlay tap-jacking
  *    on the unlock and save-confirm controls.
@@ -87,7 +87,7 @@ class AutofillSaveActivity : FragmentActivity() {
 
     /**
      * Activity-scoped controller for the [androidx.biometric.BiometricPrompt].
-     * See [AutofillUnlockActivity.biometricController] — same rationale: a
+     * See [AutofillUnlockActivity.biometricController] - same rationale: a
      * configuration change cannot drop the cancel handle, and the controller
      * wraps the [AutoLockManager] inactivity-suppression pair so the idle
      * timer doesn't relock the vault mid-prompt.
@@ -108,7 +108,7 @@ class AutofillSaveActivity : FragmentActivity() {
         // The save activity is `singleInstance` (manifest), so a second
         // save request would re-enter this instance with a new token while
         // the user is still on the prior flow. Cancel the prompt and finish
-        // cleanly — the framework starts a fresh task with the new extras.
+        // cleanly - the framework starts a fresh task with the new extras.
         biometricController?.cancel()
         setResult(RESULT_CANCELED)
         finish()
@@ -123,7 +123,7 @@ class AutofillSaveActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // FLAG_SECURE unconditionally — the save sheet displays the captured
+        // FLAG_SECURE unconditionally - the save sheet displays the captured
         // username and a masked password, plus surfaces master-password /
         // PIN unlock fields. Consistent with [AutofillUnlockActivity], the
         // user's "Allow screenshots" preference does NOT extend to autofill
@@ -194,7 +194,7 @@ private fun SaveGate(
 
     when (val state = capture) {
         AutofillSaveViewModel.SaveState.Idle -> {
-            // Brief loading pane — hydrate is synchronous from the activity
+            // Brief loading pane - hydrate is synchronous from the activity
             // but a recreated viewmodel can still observe Idle for a frame.
             CenteredText("Preparing…")
         }
@@ -203,14 +203,14 @@ private fun SaveGate(
             // service's store(...) and the activity's hydrate, leaving the
             // capture buffer empty on restore; or (b) a second app's save
             // submission overwrote the slot during a slow unlock. Either way
-            // we have nothing to save — but silently finishing leaves the
+            // we have nothing to save - but silently finishing leaves the
             // user confused. A short Toast tells them to retry; the dismiss
             // path is otherwise unchanged.
             val ctx = LocalContext.current
             LaunchedEffect(Unit) {
                 Toast.makeText(
                     ctx,
-                    "Save request expired — please try again.",
+                    "Save request expired - please try again.",
                     Toast.LENGTH_LONG,
                 ).show()
                 onAbort()

@@ -124,7 +124,7 @@ class VaultImporterImpl @Inject constructor(
                             ?: (normalized["favorite"] as? Boolean) ?: false,
                         customFields = allCustomFields,
                         // Foreign exports may encode timestamps as ISO strings, RFC dates,
-                        // or epoch sec/μs/ns rather than the ms Long we write — TimestampParser
+                        // or epoch sec/μs/ns rather than the ms Long we write - TimestampParser
                         // normalises every shape. Unrecognised input → fall through to `now`.
                         createdAt = TimestampParser.parseToEpochMillis(normalized["created_at"]) ?: now,
                         updatedAt = TimestampParser.parseToEpochMillis(normalized["updated_at"]) ?: now,
@@ -134,7 +134,7 @@ class VaultImporterImpl @Inject constructor(
                         // Round-trip the recycle-bin marker so a backup→restore preserves
                         // bin state. Older exports without the field stay active (null).
                         deletedAt = TimestampParser.parseToEpochMillis(normalized["deleted_at"]),
-                        // Optional — null when the source export didn't carry a
+                        // Optional - null when the source export didn't carry a
                         // last-used timestamp (e.g. our own pre-DB-v10 backups).
                         accessedAt = TimestampParser.parseToEpochMillis(normalized["accessed_at"]),
                     )
@@ -233,10 +233,10 @@ class VaultImporterImpl @Inject constructor(
      * Parse the `totp_secret` import column into [OtpParams]. Two shapes are
      * accepted to round-trip exports from this app and from third-party tools:
      *
-     * - `otpauth://...` URI — extended exports (post-C8) and Aegis / 2FAS / 1Password
+     * - `otpauth://...` URI - extended exports (post-C8) and Aegis / 2FAS / 1Password
      *   files use this. We delegate to [OtpAuthUriParser], which carries algorithm,
      *   digits, period, counter, and Steam auto-detection through verbatim.
-     * - Bare base32 secret — pre-C8 exports and CSV files from sources that only
+     * - Bare base32 secret - pre-C8 exports and CSV files from sources that only
      *   store the secret. We default everything else to TOTP / SHA-1 / 6 / 30,
      *   the same fallback the QR scanner used before C3.
      *
@@ -293,8 +293,8 @@ class VaultImporterImpl @Inject constructor(
         // exposing as custom fields. Firefox writes these on every entry and
         // they have no UX value to a 1Key user.
         private val JSON_KEY_IGNORED = setOf(
-            "httpRealm",         // Firefox — HTTP basic-auth realm
-            "formActionOrigin",  // Firefox — form-submission URL
+            "httpRealm",         // Firefox - HTTP basic-auth realm
+            "formActionOrigin",  // Firefox - form-submission URL
         )
 
         private val CSV_HEADER_MAP = mapOf(

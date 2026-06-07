@@ -173,7 +173,7 @@ fun SettingsGeneralScreen(
                                     if (isRecycleBinEnabled)
                                         "Deleted credentials wait in the bin so you can restore them if you change your mind."
                                     else
-                                        "Off — every delete is permanent the moment you confirm it. There's no undo.",
+                                        "Off - every delete is permanent the moment you confirm it. There's no undo.",
                                 )
                             },
                             leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
@@ -251,7 +251,7 @@ fun SettingsGeneralScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
                         "From now on, deleting a credential removes it immediately. " +
-                            "There'll be no way to undo it — not even from this device.",
+                            "There'll be no way to undo it - not even from this device.",
                     )
                     Text(
                         "Anything already in the bin stays there. You can restore or empty those " +
@@ -315,7 +315,7 @@ fun SettingsGeneralScreen(
                                 Text(option.label, style = MaterialTheme.typography.bodyMedium)
                                 if (option == RecycleBinRetention.DAYS_30) {
                                     Text(
-                                        "Default — recommended",
+                                        "Default - recommended",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )

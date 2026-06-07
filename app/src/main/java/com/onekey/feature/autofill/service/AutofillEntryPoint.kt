@@ -17,7 +17,7 @@ import dagger.hilt.components.SingletonComponent
  * Hilt entry point for [OneKeyAutofillService]. `AutofillService` is not a
  * Hilt-supported component type, so we resolve dependencies manually via
  * `EntryPointAccessors.fromApplication(context, AutofillEntryPoint::class.java)`
- * in `onCreate`. Every dependency listed here is `@Singleton`-scoped — there
+ * in `onCreate`. Every dependency listed here is `@Singleton`-scoped - there
  * is no per-request graph; the service is bound by the OS, runs briefly,
  * then unbinds.
  */

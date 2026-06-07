@@ -118,7 +118,7 @@ private class CapturingFakeAuth : AuthRepository {
         return AppResult.Success(Unit)
     }
 
-    // ── unused in this test — fail loudly if accidentally invoked ──
+    // ── unused in this test - fail loudly if accidentally invoked ──
     override fun isSetupComplete(): Flow<Boolean> = flowOf(false)
     override suspend fun unlockWithPassword(password: CharArray): AppResult<Unit> = unused()
     override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = unused()
@@ -136,7 +136,7 @@ private class CapturingFakeAuth : AuthRepository {
     private fun unused(): Nothing = error("not used by SetupFromBackupUseCase")
 }
 
-/** Fake CredentialRepository — only [importCredentials] is reachable, and it's a no-op
+/** Fake CredentialRepository - only [importCredentials] is reachable, and it's a no-op
  *  because the test's parsed import is empty. */
 private class NoopFakeCreds : CredentialRepository {
     override suspend fun importCredentials(credentials: List<Credential>): AppResult<Int> =

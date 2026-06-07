@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>1Key — White paper</title>
-<meta name="description" content="A local-first password manager for Android — technical and strategic white paper." />
+<title>1Key - White paper</title>
+<meta name="description" content="A local-first password manager for Android - technical and strategic white paper." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
@@ -166,8 +166,8 @@
   <article class="prose">
 
     <h2 id="summary"><span class="num">01</span>Executive summary</h2>
-    <p>1Key is an Android password manager that stores nothing in the cloud and requires no account. The vault lives on a single device, encrypted with modern primitives — Argon2id for password-derived keys, AES-256-GCM for authenticated encryption — and bound to that device's hardware-backed Android Keystore. There is no sign-up, no telemetry, no recovery server, and no <code>INTERNET</code> permission in the manifest.</p>
-    <p>This paper is written for two audiences: privacy-conscious individuals deciding whether 1Key fits their threat model, and security-minded reviewers who want to understand exactly how the cryptographic stack is assembled. It is deliberately blunt about trade-offs. <b>1Key does not synchronise across devices. It does not offer team sharing. It does not support recovery if the master password is forgotten.</b> These are not omissions — they are direct consequences of the design decision that the vault should never leave the device.</p>
+    <p>1Key is an Android password manager that stores nothing in the cloud and requires no account. The vault lives on a single device, encrypted with modern primitives - Argon2id for password-derived keys, AES-256-GCM for authenticated encryption - and bound to that device's hardware-backed Android Keystore. There is no sign-up, no telemetry, no recovery server, and no <code>INTERNET</code> permission in the manifest.</p>
+    <p>This paper is written for two audiences: privacy-conscious individuals deciding whether 1Key fits their threat model, and security-minded reviewers who want to understand exactly how the cryptographic stack is assembled. It is deliberately blunt about trade-offs. <b>1Key does not synchronise across devices. It does not offer team sharing. It does not support recovery if the master password is forgotten.</b> These are not omissions - they are direct consequences of the design decision that the vault should never leave the device.</p>
     <p>Within those constraints, 1Key matches the modern cryptographic baseline used by the leading cloud-vault products and adds local-only hardening tailored to the Android threat model: a leaked database file alone cannot be brute-forced offline, because the password verifier is held in Keystore-bound <code>EncryptedSharedPreferences</code> rather than alongside the encrypted vault. The product is free, has no premium tier, and is released as open source under the GNU General Public License v3.0. The "1Key" name and icon are reserved as trademarks of the author; forks must rebrand before redistribution.</p>
 
     <div class="callout primary" style="margin-top:32px">
@@ -176,9 +176,9 @@
         Headline takeaways
       </div>
       <ul style="margin:0; padding-left:20px">
-        <li>The Android manifest declares no <code>INTERNET</code> permission. The OS sandbox enforces this — even if a future bug introduced a network call, it would be denied at the system layer.</li>
+        <li>The Android manifest declares no <code>INTERNET</code> permission. The OS sandbox enforces this - even if a future bug introduced a network call, it would be denied at the system layer.</li>
         <li>The master-password verifier sits in <code>EncryptedSharedPreferences</code>, encrypted under an Android Keystore-bound master key. <b>Offline brute-force against an exfiltrated database file is structurally closed</b> on devices with a working Keystore.</li>
-        <li>The cryptographic primitives match the cloud-vault category (Argon2id, AES-256-GCM, HKDF-SHA256). 1Key's distinction is operational — no server, no account — not cryptographic.</li>
+        <li>The cryptographic primitives match the cloud-vault category (Argon2id, AES-256-GCM, HKDF-SHA256). 1Key's distinction is operational - no server, no account - not cryptographic.</li>
       </ul>
     </div>
 
@@ -189,9 +189,9 @@
       <li><b>Recovery.</b> A forgotten master password is the leading reason users abandon a password manager entirely. Cloud vendors layer recovery codes, secret keys, or social recovery on top of the encrypted blob.</li>
       <li><b>Onboarding.</b> Account creation, even when E2EE (end-to-end encrypted), gives the vendor a stable identity to attach billing, support, and feature flags to.</li>
     </ol>
-    <p>The cost of this architecture is rarely surfaced clearly. Even with E2EE, the vendor holds the encrypted vault blob and an authentication ciphertext that gates access to it. This is a real attack surface: documented incidents in the past 24 months — including the LastPass 2022 breach, in which encrypted vault backups were exfiltrated alongside customer URL data — have involved exfiltration of an encrypted vault blob followed by offline brute-forcing against weak master passwords. The cryptographic guarantees are not wrong; the threat model assumes a sufficiently strong master password, which a non-trivial fraction of users do not have.</p>
-    <p>For users who do not need sync — who carry one phone, who would rather export a backup file once a quarter than trust a server — the cloud auth blob is attack surface they did not ask for. <b>1Key exists for this user.</b> This is a deliberately narrow audience; users who need cross-device sync, sharing, or recovery should choose a hosted product.</p>
-    <p>The secondary problem is commercial. The features that distinguish a basic password manager from a useful one — built-in TOTP generation, secure export, custom fields, biometric unlock — are paywalled by most vendors. The result is a population of users who either pay £25–£100 per year for a category of software that should be commoditised, or who keep using the browser-native manager their laptop's vendor happens to ship.</p>
+    <p>The cost of this architecture is rarely surfaced clearly. Even with E2EE, the vendor holds the encrypted vault blob and an authentication ciphertext that gates access to it. This is a real attack surface: documented incidents in the past 24 months - including the LastPass 2022 breach, in which encrypted vault backups were exfiltrated alongside customer URL data - have involved exfiltration of an encrypted vault blob followed by offline brute-forcing against weak master passwords. The cryptographic guarantees are not wrong; the threat model assumes a sufficiently strong master password, which a non-trivial fraction of users do not have.</p>
+    <p>For users who do not need sync - who carry one phone, who would rather export a backup file once a quarter than trust a server - the cloud auth blob is attack surface they did not ask for. <b>1Key exists for this user.</b> This is a deliberately narrow audience; users who need cross-device sync, sharing, or recovery should choose a hosted product.</p>
+    <p>The secondary problem is commercial. The features that distinguish a basic password manager from a useful one - built-in TOTP generation, secure export, custom fields, biometric unlock - are paywalled by most vendors. The result is a population of users who either pay £25–£100 per year for a category of software that should be commoditised, or who keep using the browser-native manager their laptop's vendor happens to ship.</p>
 
     <h2 id="approach"><span class="num">03</span>The 1Key approach: <em>local-first, account-free</em></h2>
     <p>1Key takes three positions, in descending order of strength.</p>
@@ -199,7 +199,7 @@
     <h3 id="approach-1"><span class="num">3.1</span> The vault never leaves the device</h3>
     <p>There is no server. There is no vendor backend. There is no sync protocol. The encrypted vault lives in a Room/SQLite database in the application's private storage, and the only way data leaves the device is through an explicit user-initiated export.</p>
     <p>Confirmed in <code>app/src/main/AndroidManifest.xml</code>: the manifest declares no <code>INTERNET</code> permission. Confirmed in <code>app/build.gradle.kts</code> (lines 127–132): the ML Kit dependencies that would otherwise pull in Google's Firelog telemetry transitively are explicitly excluded via Gradle's <code>exclude(group = "com.google.android.datatransport")</code> directive. On-device inference (OCR, barcode scanning) does not need network access.</p>
-    <p class="muted">A note on temporal honesty: the no-<code>INTERNET</code> property is true of current builds. Earlier APKs inherited <code>INTERNET</code> and <code>ACCESS_NETWORK_STATE</code> transitively from the same Firelog subgraph. The runtime never actually opened a socket — there was no code path that called the transport — but the permission was declared in the merged manifest. Users who want full assurance should run a build dated May 2026 or later.</p>
+    <p class="muted">A note on temporal honesty: the no-<code>INTERNET</code> property is true of current builds. Earlier APKs inherited <code>INTERNET</code> and <code>ACCESS_NETWORK_STATE</code> transitively from the same Firelog subgraph. The runtime never actually opened a socket - there was no code path that called the transport - but the permission was declared in the merged manifest. Users who want full assurance should run a build dated May 2026 or later.</p>
 
     <h3 id="approach-2"><span class="num">3.2</span> No account exists to compromise</h3>
     <p>Onboarding is a single screen that asks the user to choose a master password. There is no email address, no recovery question, no telemetry opt-in, no terms-of-service signature. The application has no notion of "user" beyond <em>"the person who knows the master password for this device's vault."</em></p>
@@ -207,7 +207,7 @@
 
     <h3 id="approach-3"><span class="num">3.3</span> Free, GPL-3.0, single-maintainer</h3>
     <p>1Key is distributed without cost and with no in-app purchases. The full source is published at <a href="https://github.com/roufsyed/1Key" target="_blank" rel="noopener">github.com/roufsyed/1Key</a> under the GNU General Public License v3.0, with a separate <code>TRADEMARKS.md</code> reserving the name and icon. The build script is the entire setup procedure: clone, run <code>./gradlew assembleDebug</code>, install the resulting APK.</p>
-    <p>1Key is currently maintained by a single developer. This is an honest constraint: there is no on-call rotation, no enterprise SLA, and no commitment to indefinite future development. <b>Because the app is local-only and the user holds the only copy of the encrypted vault, the user's data is not at risk if development pauses</b> — there is no server to shut down and no account to lose. Users can export to standard CSV or JSON at any time and migrate to any other manager.</p>
+    <p>1Key is currently maintained by a single developer. This is an honest constraint: there is no on-call rotation, no enterprise SLA, and no commitment to indefinite future development. <b>Because the app is local-only and the user holds the only copy of the encrypted vault, the user's data is not at risk if development pauses</b> - there is no server to shut down and no account to lose. Users can export to standard CSV or JSON at any time and migrate to any other manager.</p>
 
     <h2 id="crypto"><span class="num">04</span>Cryptographic architecture</h2>
     <p>This section walks through the cryptographic stack from the moment the user types their master password to the moment a credential field is decrypted. Every parameter cited here is verifiable in the source files listed in the Editor's Notes.</p>
@@ -238,24 +238,24 @@
 
     <h3 id="crypto-3"><span class="num">4.3</span> Vault-key wrapping</h3>
     <p>The Argon2id-derived key is <b>not</b> the key that encrypts the database. Instead, 1Key generates a 256-bit AES vault key uniformly at random and wraps it with a key stored in the Android Keystore.</p>
-    <p>The Android Keystore keeps the wrapping key inside the device's TEE — Trusted Execution Environment — or, on devices that ship one, the StrongBox secure element. The wrapping key is non-exportable: the only way to use it is to ask the Keystore to perform an operation. On Android 9+ (API level 28), 1Key sets <code>setUnlockedDeviceRequired(true)</code> on the Keystore key (<code>CryptoManager.kt</code> line 75), so the wrapping key is unusable while the device is locked. Existing installs migrate to this stronger configuration silently after the first successful unlock following the upgrade (<code>AuthRepositoryImpl.kt</code> lines 414–426).</p>
+    <p>The Android Keystore keeps the wrapping key inside the device's TEE - Trusted Execution Environment - or, on devices that ship one, the StrongBox secure element. The wrapping key is non-exportable: the only way to use it is to ask the Keystore to perform an operation. On Android 9+ (API level 28), 1Key sets <code>setUnlockedDeviceRequired(true)</code> on the Keystore key (<code>CryptoManager.kt</code> line 75), so the wrapping key is unusable while the device is locked. Existing installs migrate to this stronger configuration silently after the first successful unlock following the upgrade (<code>AuthRepositoryImpl.kt</code> lines 414–426).</p>
 
     <h3 id="crypto-4"><span class="num">4.4</span> The verifier, and why it lives in EncryptedSharedPreferences</h3>
-    <p>When the user types their master password, 1Key needs to check whether it is correct before unwrapping the vault key. A naive implementation would store an Argon2id hash and compare. 1Key does something stronger: it stores a small ciphertext — the bytes <code>"VALID"</code> encrypted under an Argon2id-derived key — inside <code>EncryptedSharedPreferences</code> (<code>AuthRepositoryImpl.kt</code> lines 196–204).</p>
+    <p>When the user types their master password, 1Key needs to check whether it is correct before unwrapping the vault key. A naive implementation would store an Argon2id hash and compare. 1Key does something stronger: it stores a small ciphertext - the bytes <code>"VALID"</code> encrypted under an Argon2id-derived key - inside <code>EncryptedSharedPreferences</code> (<code>AuthRepositoryImpl.kt</code> lines 196–204).</p>
     <p><code>EncryptedSharedPreferences</code> is part of AndroidX security-crypto 1.1.0. The file on disk is itself encrypted with a master key held in the Android Keystore. Reading the verifier therefore requires live Keystore access on the device that wrote it.</p>
     <p>The consequence: <b>a leaked database file alone cannot be brute-forced offline.</b> An attacker with the SQLite database but no Keystore access has no oracle to test password guesses against. They cannot extract the verifier from the encrypted preferences file without first compromising the Keystore-backed master key, and the Keystore master key is bound to the device's hardware. This closes the offline brute-force surface that cloud vaults inherently expose by storing an authentication ciphertext alongside (or in lieu of) the vault blob.</p>
 
     <h3 id="crypto-5"><span class="num">4.5</span> Per-field encryption with AAD binding</h3>
-    <p>Every credential field — title, username, password, URL, notes, TOTP secret, custom fields — is encrypted independently with AES-256-GCM. The IV is 12 bytes (96 bits, the AES-GCM standard) and the auth tag is 128 bits (<code>CryptoManager.kt</code> line 32).</p>
-    <p>Each encryption call passes AAD that ties the ciphertext to its row and column. The format is <code>1k:v1|&lt;credentialId&gt;|&lt;fieldName&gt;</code> for credential fields and <code>1k:v2|&lt;credentialId&gt;|title</code> for titles (<code>CredentialRepositoryImpl.kt</code> lines 505–509). If an attacker with database write access tries to swap the encrypted password from row A into the password column of row B, decryption fails — the AAD seen at decrypt time will not match the AAD baked into the auth tag at encrypt time.</p>
-    <p class="muted">This is defence-in-depth, not a unique competitive feature. Cloud-vault products typically encrypt the whole credential record as a single blob, which already prevents within-record field swapping via the GCM/HMAC tag. Per-field AAD additionally blocks cross-record swap attacks against the local database — a narrow gain against an attacker who already has database write access (and therefore likely has process memory anyway). It is documented here because the implementation is open to inspection, not because it represents a category of protection competitors lack.</p>
+    <p>Every credential field - title, username, password, URL, notes, TOTP secret, custom fields - is encrypted independently with AES-256-GCM. The IV is 12 bytes (96 bits, the AES-GCM standard) and the auth tag is 128 bits (<code>CryptoManager.kt</code> line 32).</p>
+    <p>Each encryption call passes AAD that ties the ciphertext to its row and column. The format is <code>1k:v1|&lt;credentialId&gt;|&lt;fieldName&gt;</code> for credential fields and <code>1k:v2|&lt;credentialId&gt;|title</code> for titles (<code>CredentialRepositoryImpl.kt</code> lines 505–509). If an attacker with database write access tries to swap the encrypted password from row A into the password column of row B, decryption fails - the AAD seen at decrypt time will not match the AAD baked into the auth tag at encrypt time.</p>
+    <p class="muted">This is defence-in-depth, not a unique competitive feature. Cloud-vault products typically encrypt the whole credential record as a single blob, which already prevents within-record field swapping via the GCM/HMAC tag. Per-field AAD additionally blocks cross-record swap attacks against the local database - a narrow gain against an attacker who already has database write access (and therefore likely has process memory anyway). It is documented here because the implementation is open to inspection, not because it represents a category of protection competitors lack.</p>
 
     <h3 id="crypto-6"><span class="num">4.6</span> HKDF subkey separation</h3>
     <p>Using one master key for multiple purposes is a known anti-pattern. 1Key derives purpose-specific subkeys from the vault master key using HKDF-SHA256 (<code>CryptoManager.kt</code> lines 215–226).</p>
     <p>Two labels are currently in use, both versioned so a future cipher rotation can occur without label collision:</p>
     <ul>
-      <li><code>1key-field-enc-v1</code> — encrypts non-title credential fields</li>
-      <li><code>1key-title-enc-v1</code> — encrypts titles</li>
+      <li><code>1key-field-enc-v1</code> - encrypts non-title credential fields</li>
+      <li><code>1key-title-enc-v1</code> - encrypts titles</li>
     </ul>
     <p>Because the vault key is already a uniformly random 256-bit AES key, the implementation skips the HKDF-Extract step (RFC 5869 section 3.3 explicitly permits this when the input is uniform) and emits a single 32-byte HKDF-Expand block: <code>T(1) = HMAC-SHA256(masterKey, info || 0x01)</code>.</p>
 
@@ -297,7 +297,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
       <thead><tr><th>Threat</th><th>Defence</th></tr></thead>
       <tbody>
         <tr><td>Lost or stolen device, screen locked</td><td>Keystore wrap key requires <code>UNLOCKED_DEVICE</code> on API 28+. Vault is unreadable while the device is locked.</td></tr>
-        <tr><td>Lost or stolen device, screen unlocked, user idle</td><td>Configurable inactivity auto-lock (default 5 min). Tiered cooldowns — 30 s, 5 min, 1 hour at 3, 5, 10 wrong attempts.</td></tr>
+        <tr><td>Lost or stolen device, screen unlocked, user idle</td><td>Configurable inactivity auto-lock (default 5 min). Tiered cooldowns - 30 s, 5 min, 1 hour at 3, 5, 10 wrong attempts.</td></tr>
         <tr><td>Database file extraction (ADB backup, root, forensic image)</td><td>Verifier sits in <code>EncryptedSharedPreferences</code>, not next to the database. Without live Keystore access, the attacker has no oracle. <b>Offline brute-force closed</b> on devices with hardware-backed Keystore.</td></tr>
         <tr><td>Database tampering at the row level</td><td>Per-field AAD binds each ciphertext to its row ID and column name. Swapping ciphertexts invalidates the auth tag.</td></tr>
         <tr><td>Backup file leaked</td><td>V4 envelope is AES-256-GCM under an Argon2id-derived key. Header AAD prevents timestamp tampering and replay.</td></tr>
@@ -344,7 +344,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <p>A single-device user who treats her phone as her primary computer and refuses any cloud password manager because she does not want her authentication state in a vendor database. <b>Before:</b> plaintext passwords in a notes app, reused across thirty-plus accounts, no TOTP because of authenticator-app friction. <b>After:</b> all credentials in an Argon2id-protected vault, TOTP codes in the same record as the password they protect, no subscription. <b>Outcome:</b> eliminated reuse across the audited account set; adopted 2FA on twelve accounts that previously used SMS-only or no second factor.</p>
 
     <h3 id="use-2"><span class="num">6.2</span> The journalist on a hardened device</h3>
-    <p>An investigative reporter working with sources whose safety depends on his operational security. Has been advised that any cloud-resident auth blob is attack surface — a state-level adversary can subpoena a vendor or compromise a server. <b>Before:</b> paper notebook in a safe plus a cloud manager for low-sensitivity accounts; the bifurcation itself was a leak. <b>After:</b> a single vault on the hardened device, with no <code>INTERNET</code> permission so the OS itself enforces that no telemetry can reach a server, and no account for an adversary to subpoena. <b>Outcome:</b> auth metadata (which accounts exist, when they were created, which device unlocked them) never leaves the device.</p>
+    <p>An investigative reporter working with sources whose safety depends on his operational security. Has been advised that any cloud-resident auth blob is attack surface - a state-level adversary can subpoena a vendor or compromise a server. <b>Before:</b> paper notebook in a safe plus a cloud manager for low-sensitivity accounts; the bifurcation itself was a leak. <b>After:</b> a single vault on the hardened device, with no <code>INTERNET</code> permission so the OS itself enforces that no telemetry can reach a server, and no account for an adversary to subpoena. <b>Outcome:</b> auth metadata (which accounts exist, when they were created, which device unlocked them) never leaves the device.</p>
 
     <h3 id="use-3"><span class="num">6.3</span> The developer tired of subscriptions</h3>
     <p>A senior engineer who has cycled through three cloud password managers in five years as pricing and acquisitions reshape the market, tired of paying £35–£60/year for autofill. <b>Before:</b> a premium subscription primarily to unlock TOTP and secure export. <b>After:</b> a self-built APK; imported the existing vault via CSV; verified the absent <code>INTERNET</code> permission and Firelog exclusion in <code>app/build.gradle.kts</code> herself. <b>Outcome:</b> zero recurring cost, auditable cryptographic stack of roughly 230 lines of Kotlin, CSV importer auto-detected the source format with no manual mapping.</p>
@@ -353,7 +353,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <p>This section replaces the SaaS-style "Implementation &amp; Integration" template. There are no APIs, SSO connectors, or IdP integrations to configure. There is an APK, a master password, and an importer.</p>
 
     <h3 id="install-1"><span class="num">7.1</span> Installing the APK</h3>
-    <p>1Key is distributed as a free Android APK. The current channel is <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">GitHub Releases</a>; F-Droid distribution is planned but not yet active. Release builds carry the author's signing certificate. Users uncomfortable with sideloading can build from source — clone the repository, run <code>./gradlew assembleDebug</code>, install the resulting <code>app-debug.apk</code>.</p>
+    <p>1Key is distributed as a free Android APK. The current channel is <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">GitHub Releases</a>; F-Droid distribution is planned but not yet active. Release builds carry the author's signing certificate. Users uncomfortable with sideloading can build from source - clone the repository, run <code>./gradlew assembleDebug</code>, install the resulting <code>app-debug.apk</code>.</p>
     <p>Minimum supported Android version is API 26 (Android 8.0 Oreo). Compile and target SDK is 36 (<code>app/build.gradle.kts</code> lines 11, 16–18).</p>
 
     <h3 id="install-2"><span class="num">7.2</span> First-run setup</h3>
@@ -375,11 +375,11 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     </div>
 
     <h3 id="install-3"><span class="num">7.3</span> Importing from an incumbent password manager</h3>
-    <p>1Key includes an import flow that auto-detects format and column headers — no manual mapping is required. Confirmed support: <b>Google Passwords, LastPass, KeePass, Safari / iCloud Keychain, 1Password, Dashlane, NordPass</b> (all CSV).</p>
+    <p>1Key includes an import flow that auto-detects format and column headers - no manual mapping is required. Confirmed support: <b>Google Passwords, LastPass, KeePass, Safari / iCloud Keychain, 1Password, Dashlane, NordPass</b> (all CSV).</p>
     <p>Duplicate credentials are detected by exact match of title plus username and skipped. The CSV file is read once into memory, parsed, and discarded; nothing transits the network.</p>
 
     <h3 id="install-4"><span class="num">7.4</span> Encrypted backups</h3>
-    <p>The user can export the vault as a <code>.1key</code> V4-envelope encrypted file (section 4.7) or as plain CSV/JSON for inspection. The encrypted envelope requires the master password to restore. <b>There is no recovery path</b> — losing both the device and the backup password is unrecoverable.</p>
+    <p>The user can export the vault as a <code>.1key</code> V4-envelope encrypted file (section 4.7) or as plain CSV/JSON for inspection. The encrypted envelope requires the master password to restore. <b>There is no recovery path</b> - losing both the device and the backup password is unrecoverable.</p>
     <p>Recommended migration discipline: export once after initial setup, store the encrypted backup off-device on physical media (USB stick, external SSD, encrypted cloud storage of the user's choice), and refresh on a personal cadence.</p>
 
     <h2 id="compare"><span class="num">08</span>Comparison framework</h2>
@@ -390,7 +390,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
       <tbody>
         <tr><td>Account required</td><td>Yes, with email</td><td><b>No</b></td></tr>
         <tr><td><code>INTERNET</code> permission</td><td>Yes</td><td><b>No</b> (current builds)</td></tr>
-        <tr><td>Vault stored on vendor servers</td><td>Yes (E2EE)</td><td><b>No — local only</b></td></tr>
+        <tr><td>Vault stored on vendor servers</td><td>Yes (E2EE)</td><td><b>No - local only</b></td></tr>
         <tr><td>Account metadata held off-device</td><td>Email, billing, devices</td><td><b>None</b></td></tr>
         <tr><td>Telemetry / analytics</td><td>Opt-out (some opt-in)</td><td><b>None</b></td></tr>
         <tr><td>Cross-device sync</td><td>Yes</td><td>No</td></tr>
@@ -398,7 +398,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
         <tr><td>Built-in TOTP</td><td>Sometimes premium-tier</td><td><b>Yes, free</b></td></tr>
         <tr><td>Secure export</td><td>Sometimes premium-tier</td><td><b>Yes, free</b></td></tr>
         <tr><td>Cost</td><td>$2–$10/month typical</td><td><b>Free</b></td></tr>
-        <tr><td>Offline brute-force surface</td><td>Cloud auth blob</td><td><b>None — verifier in Keystore-bound storage</b></td></tr>
+        <tr><td>Offline brute-force surface</td><td>Cloud auth blob</td><td><b>None - verifier in Keystore-bound storage</b></td></tr>
         <tr><td>Independent security audit</td><td>Yes (Cure53, Recurity Labs)</td><td>None</td></tr>
       </tbody>
     </table>
@@ -408,7 +408,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <p>Browser-native password managers are zero-friction and free, but tie the vault to a browser identity (Google account, Apple ID, Firefox account) and sync through the browser vendor's cloud. They generally do not offer TOTP, secure notes, custom fields, OCR capture, or encrypted export. <b>1Key is a strict superset on features and a strict subset on integration surface.</b></p>
 
     <h3 id="compare-3"><span class="num">8.3</span> 1Key vs hardware tokens</h3>
-    <p>Hardware tokens and password managers are not substitutes — they are complements. A hardware token holds a small number of WebAuthn credentials and TOTP secrets in tamper-resistant hardware. A password manager stores arbitrarily many username/password pairs plus other structured data. The right architecture for a security-conscious user is hardware tokens for high-value accounts (email, banking) plus a password manager for the long tail.</p>
+    <p>Hardware tokens and password managers are not substitutes - they are complements. A hardware token holds a small number of WebAuthn credentials and TOTP secrets in tamper-resistant hardware. A password manager stores arbitrarily many username/password pairs plus other structured data. The right architecture for a security-conscious user is hardware tokens for high-value accounts (email, banking) plus a password manager for the long tail.</p>
 
     <h2 id="roadmap"><span class="num">09</span>Roadmap and honest limitations</h2>
 
@@ -416,7 +416,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
 
     <div class="lim-card closed">
       <h4><span class="tag">Closed</span> Auto-backup</h4>
-      <p>Permanently decided against. Auto-backup would require persisting the master password (or a key derived from it) somewhere that runs without user interaction — a daemon, a JobScheduler task, a system listener.</p>
+      <p>Permanently decided against. Auto-backup would require persisting the master password (or a key derived from it) somewhere that runs without user interaction - a daemon, a JobScheduler task, a system listener.</p>
       <p>Any such persistence undermines the central property that the master password exists only in memory between unlock and lock.</p>
     </div>
 
@@ -430,13 +430,13 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <div class="lim-card parked">
       <h4><span class="tag">Parked</span> LAN sync</h4>
       <p>A peer-to-peer protocol over local Wi-Fi using the master password and a 4-digit short authentication string (SAS) for pairing. Designed; awaiting build-or-skip decision.</p>
-      <p>A LAN sync feature would require re-introducing some form of local-network permission — confirm whether the no-<code>INTERNET</code> property survives the design before the feature ships.</p>
+      <p>A LAN sync feature would require re-introducing some form of local-network permission - confirm whether the no-<code>INTERNET</code> property survives the design before the feature ships.</p>
     </div>
 
     <div class="lim-card parked">
       <h4><span class="tag">Parked</span> Autofill</h4>
       <p>Native-app autofill via Android's <code>AutofillService</code> is offline-safe along the "fill from explicit user-picked credential" path.</p>
-      <p>Locked-vault matching has been deferred to post-unlock with a generic chip, because matching across the vault while locked would require either a plaintext index or a partial unlock — both of which weaken the threat model.</p>
+      <p>Locked-vault matching has been deferred to post-unlock with a generic chip, because matching across the vault while locked would require either a plaintext index or a partial unlock - both of which weaken the threat model.</p>
     </div>
 
     <h3 id="roadmap-3"><span class="num">9.3</span> Open / under consideration</h3>
@@ -478,13 +478,13 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <details class="qa" open>
       <summary>Is this stronger crypto than the leading cloud password managers?</summary>
       <div class="qa-body">
-        <p>No. The cryptographic primitives are at parity — Argon2id, AES-256-GCM, HKDF — and the largest cloud vendor's Secret Key construction in particular remains a defence against offline brute force that no KDF can match. What 1Key offers is not stronger crypto but a smaller perimeter: nothing leaves the device, so there is no off-device blob to brute-force in the first place.</p>
+        <p>No. The cryptographic primitives are at parity - Argon2id, AES-256-GCM, HKDF - and the largest cloud vendor's Secret Key construction in particular remains a defence against offline brute force that no KDF can match. What 1Key offers is not stronger crypto but a smaller perimeter: nothing leaves the device, so there is no off-device blob to brute-force in the first place.</p>
       </div>
     </details>
     <details class="qa">
       <summary>How do I sync across devices?</summary>
       <div class="qa-body">
-        <p>You do not. If you need sync, choose a cloud manager — they exist for good reasons. 1Key is for users who do not want sync.</p>
+        <p>You do not. If you need sync, choose a cloud manager - they exist for good reasons. 1Key is for users who do not want sync.</p>
       </div>
     </details>
     <details class="qa">
@@ -502,7 +502,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <details class="qa">
       <summary>Can I trust that there is really no telemetry?</summary>
       <div class="qa-body">
-        <p>The strongest evidence is structural. Current builds declare no <code>INTERNET</code> permission in <code>app/src/main/AndroidManifest.xml</code>. The OS sandbox enforces this — even if a future bug introduced a network call, it would be denied at the system layer. The Gradle build also explicitly excludes the Firelog telemetry subgraph that ML Kit pulls in transitively, so even the local telemetry-queueing code is absent from the binary.</p>
+        <p>The strongest evidence is structural. Current builds declare no <code>INTERNET</code> permission in <code>app/src/main/AndroidManifest.xml</code>. The OS sandbox enforces this - even if a future bug introduced a network call, it would be denied at the system layer. The Gradle build also explicitly excludes the Firelog telemetry subgraph that ML Kit pulls in transitively, so even the local telemetry-queueing code is absent from the binary.</p>
       </div>
     </details>
     <details class="qa">
@@ -520,29 +520,29 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <details class="qa">
       <summary>Why an Android-only product?</summary>
       <div class="qa-body">
-        <p>The platform-specific guarantees 1Key's threat model relies on — Keystore-backed <code>EncryptedSharedPreferences</code>, <code>FLAG_SECURE</code>, the <code>INTERNET</code> permission model, <code>setUnlockedDeviceRequired</code> — are Android primitives. A faithful port elsewhere would require finding equivalents on each platform.</p>
+        <p>The platform-specific guarantees 1Key's threat model relies on - Keystore-backed <code>EncryptedSharedPreferences</code>, <code>FLAG_SECURE</code>, the <code>INTERNET</code> permission model, <code>setUnlockedDeviceRequired</code> - are Android primitives. A faithful port elsewhere would require finding equivalents on each platform.</p>
       </div>
     </details>
 
-    <h2 id="editor"><span class="num">11</span>Editor's notes — verified facts</h2>
+    <h2 id="editor"><span class="num">11</span>Editor's notes - verified facts</h2>
     <p>These items have been verified against the current source tree and require no further confirmation:</p>
     <ul>
       <li>License: <b>GNU General Public License v3.0</b>, plus <code>TRADEMARKS.md</code> for the name and icon.</li>
       <li>Repository: <a href="https://github.com/roufsyed/1Key" target="_blank" rel="noopener">github.com/roufsyed/1Key</a>.</li>
-      <li>Argon2id parameters m=64 MiB, t=3, p=1, output 32 bytes — <code>CryptoManager.kt</code> lines 41–44.</li>
-      <li>AES-256-GCM with 12-byte IV and 128-bit tag — <code>CryptoManager.kt</code> lines 31–32.</li>
-      <li>AAD format <code>1k:v1|&lt;id&gt;|&lt;field&gt;</code> (fields) and <code>1k:v2|&lt;id&gt;|title</code> (titles) — <code>CredentialRepositoryImpl.kt</code> lines 505–509.</li>
-      <li><code>EncryptedSharedPreferences</code> for verifier and wrapped vault key — <code>AuthRepositoryImpl.kt</code> lines 196–204.</li>
-      <li><code>setUnlockedDeviceRequired(true)</code> on API ≥ 28 with silent migration — <code>CryptoManager.kt</code> line 75; <code>AuthRepositoryImpl.kt</code> lines 414–426.</li>
-      <li>HKDF labels <code>1key-field-enc-v1</code> and <code>1key-title-enc-v1</code> — <code>CryptoManager.kt</code> lines 231–232.</li>
-      <li>V4 backup envelope with timestamp + vault version in AAD — <code>BackupEncryption.kt</code>.</li>
-      <li>No <code>INTERNET</code> permission in current builds — <code>AndroidManifest.xml</code> + Firelog Gradle exclusion at <code>app/build.gradle.kts</code> lines 127–132.</li>
-      <li>minSdk 26, compileSdk 36, targetSdk 36 — <code>app/build.gradle.kts</code> lines 11, 16–18.</li>
+      <li>Argon2id parameters m=64 MiB, t=3, p=1, output 32 bytes - <code>CryptoManager.kt</code> lines 41–44.</li>
+      <li>AES-256-GCM with 12-byte IV and 128-bit tag - <code>CryptoManager.kt</code> lines 31–32.</li>
+      <li>AAD format <code>1k:v1|&lt;id&gt;|&lt;field&gt;</code> (fields) and <code>1k:v2|&lt;id&gt;|title</code> (titles) - <code>CredentialRepositoryImpl.kt</code> lines 505–509.</li>
+      <li><code>EncryptedSharedPreferences</code> for verifier and wrapped vault key - <code>AuthRepositoryImpl.kt</code> lines 196–204.</li>
+      <li><code>setUnlockedDeviceRequired(true)</code> on API ≥ 28 with silent migration - <code>CryptoManager.kt</code> line 75; <code>AuthRepositoryImpl.kt</code> lines 414–426.</li>
+      <li>HKDF labels <code>1key-field-enc-v1</code> and <code>1key-title-enc-v1</code> - <code>CryptoManager.kt</code> lines 231–232.</li>
+      <li>V4 backup envelope with timestamp + vault version in AAD - <code>BackupEncryption.kt</code>.</li>
+      <li>No <code>INTERNET</code> permission in current builds - <code>AndroidManifest.xml</code> + Firelog Gradle exclusion at <code>app/build.gradle.kts</code> lines 127–132.</li>
+      <li>minSdk 26, compileSdk 36, targetSdk 36 - <code>app/build.gradle.kts</code> lines 11, 16–18.</li>
       <li>Tiered lockouts at 3 / 5 / 10 attempts → 30 s / 5 min / 1 hour.</li>
       <li>Free, no tiers, no in-app purchases.</li>
     </ul>
 
-    <p style="margin-top:48px; text-align:center; font-family:var(--font-serif); font-style:italic; font-size:18px; color:var(--muted);">— End of paper —</p>
+    <p style="margin-top:48px; text-align:center; font-family:var(--font-serif); font-style:italic; font-size:18px; color:var(--muted);">- End of paper -</p>
 
   </article>
 </main>

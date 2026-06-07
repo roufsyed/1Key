@@ -12,7 +12,7 @@ import javax.inject.Inject
  * Permanently removes recycle-bin items deleted more than the user's configured
  * retention window ago, along with their history. Run on every vault unlock.
  *
- * If the user has chosen [RecycleBinRetention.NEVER] this is a no-op — items in
+ * If the user has chosen [RecycleBinRetention.NEVER] this is a no-op - items in
  * the bin then stay until the user empties them manually.
  */
 class PurgeExpiredRecycleBinUseCase @Inject constructor(

@@ -20,7 +20,7 @@ import kotlinx.coroutines.delay
  *
  * Replaces the prior `val now = remember { System.currentTimeMillis() }`
  * pattern in the autofill panes, which captured `now` at composition time and
- * never re-evaluated — meaning the field stayed disabled long after the
+ * never re-evaluated - meaning the field stayed disabled long after the
  * window had expired (and conversely could appear enabled in the first frame
  * before the StateFlow had propagated). Identical to the inline blocks in
  * `LockScreen.PinUnlockSection` and `LockScreen.PasswordUnlockSection`,

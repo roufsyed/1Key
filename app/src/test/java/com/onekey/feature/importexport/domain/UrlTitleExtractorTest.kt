@@ -64,7 +64,7 @@ class UrlTitleExtractorTest {
     }
 
     @Test fun multi_label_tld_drops_only_last_label() {
-        // Documented limitation — without a public-suffix list, `.co.uk` keeps
+        // Documented limitation - without a public-suffix list, `.co.uk` keeps
         // `co` along with the brand. Acceptable: still readable, never blank.
         assertEquals("Bbc.co", UrlTitleExtractor.extractTitle("https://www.bbc.co.uk/news"))
     }

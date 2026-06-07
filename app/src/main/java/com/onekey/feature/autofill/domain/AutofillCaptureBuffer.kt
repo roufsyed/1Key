@@ -7,14 +7,14 @@ import java.util.concurrent.atomic.AtomicReference
  * Process-local single-slot buffer for captured save submissions. Lives in
  * the app process (NOT a separate persisted store) so plaintext credential
  * bytes cannot survive a process death. The save activity reads the slot via
- * the opaque token from its Intent extras, then [consume]s it — which
+ * the opaque token from its Intent extras, then [consume]s it - which
  * atomically returns the value and clears the slot in one CAS.
  *
  * Why single-slot: at any moment there's only one save submission in flight.
  * If a new submission arrives before the prior one was consumed (e.g. the
  * user dismissed the save UI, or a second app's autofill landed before the
  * first user finished unlocking), the new one replaces the old. That matches
- * user intent — the most-recent submission wins.
+ * user intent - the most-recent submission wins.
  *
  * Concurrency: backed by [AtomicReference] so `consume` is a true atomic
  * compare-and-set, NOT a `@Volatile`-protected read-modify-write. The prior
@@ -28,7 +28,7 @@ object AutofillCaptureBuffer {
     private val pending = AtomicReference<PendingCapture?>(null)
 
     /**
-     * Stores a new pending capture (overwriting any prior one — most-recent
+     * Stores a new pending capture (overwriting any prior one - most-recent
      * wins) and returns its opaque token. The token is the activity's only
      * handle into this slot; the payload itself never rides Intent extras.
      */
@@ -59,7 +59,7 @@ object AutofillCaptureBuffer {
      * the new value is by definition for a different submission and this
      * token can't claim it).
      *
-     * The CAS loop is bounded — at most one retry can succeed before either
+     * The CAS loop is bounded - at most one retry can succeed before either
      * the matching value is consumed or the slot has moved on to a new
      * (non-matching) token. No spin is possible.
      */
@@ -68,7 +68,7 @@ object AutofillCaptureBuffer {
             val current = pending.get() ?: return null
             if (current.token != token) return null
             if (pending.compareAndSet(current, null)) return current
-            // CAS failed — a concurrent store(...) replaced the slot. Loop
+            // CAS failed - a concurrent store(...) replaced the slot. Loop
             // and re-read; the new value will not match `token` either, so
             // the next iteration returns null cleanly.
         }

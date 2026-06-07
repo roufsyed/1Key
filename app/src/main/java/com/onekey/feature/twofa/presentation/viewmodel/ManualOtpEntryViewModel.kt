@@ -75,7 +75,7 @@ class ManualOtpEntryViewModel @Inject constructor(
      *
      * Steam detection: if [issuer] equals "Steam" (case-insensitive) and the
      * user picked TOTP, we auto-promote to [OtpType.STEAM]. This is the manual
-     * counterpart to [OtpAuthUriParser]'s Steam auto-detection — users who type
+     * counterpart to [OtpAuthUriParser]'s Steam auto-detection - users who type
      * `Steam` as the issuer get the right code shape without a separate toggle.
      * HOTP entries don't get the promotion (Steam doesn't use counter-based codes).
      */
@@ -121,7 +121,7 @@ class ManualOtpEntryViewModel @Inject constructor(
     }
 
     private fun buildTitle(issuer: String, account: String): String =
-        if (account.isNotEmpty()) "$issuer — $account" else issuer
+        if (account.isNotEmpty()) "$issuer - $account" else issuer
 
     private companion object {
         const val URI_SCHEME_PREFIX = "otpauth://"

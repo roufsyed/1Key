@@ -11,11 +11,11 @@ import javax.crypto.spec.SecretKeySpec
 /**
  * Locks in the synchronous ordering of [VaultKeyHolder.lock]:
  *
- *   STEP 1 — snapshotHook.onLockBeforeKeyZero() fires
- *   STEP 2 — _isUnlocked.value = false
- *   STEP 3 — _keyBytes.fill(0) and _key = null
+ *   STEP 1 - snapshotHook.onLockBeforeKeyZero() fires
+ *   STEP 2 - _isUnlocked.value = false
+ *   STEP 3 - _keyBytes.fill(0) and _key = null
  *
- * Plain JVM — no Robolectric — to assert behaviour on the lock() caller's
+ * Plain JVM - no Robolectric - to assert behaviour on the lock() caller's
  * thread directly. The hook is `@Volatile` and `lock()` calls it
  * synchronously, so we can observe the in-progress state from inside the
  * hook callback without any cross-coroutine ceremony.
@@ -63,7 +63,7 @@ class VaultKeyHolderLockOrderTest {
         holder.snapshotHook = VaultLockHook {
             // Reflection-read the private _keyBytes field. Inside the hook,
             // before STEP 3 (`_keyBytes.fill(0)`) has executed, the bytes
-            // must still hold the originals — not all zeros.
+            // must still hold the originals - not all zeros.
             keyBytesSnapshotInsideHook = readPrivateKeyBytes(holder)?.copyOf()
         }
 
@@ -83,7 +83,7 @@ class VaultKeyHolderLockOrderTest {
         val holder = freshUnlockedHolder()
         assertNull("Sanity: no hook installed", holder.snapshotHook)
 
-        // Should not throw NPE — `snapshotHook?.onLockBeforeKeyZero()` is
+        // Should not throw NPE - `snapshotHook?.onLockBeforeKeyZero()` is
         // null-safe in lock()'s body.
         holder.lock()
 
@@ -97,7 +97,7 @@ class VaultKeyHolderLockOrderTest {
         holder.snapshotHook = VaultLockHook { fireCount++ }
 
         holder.lock()
-        // Re-unlock and lock again — hook should fire each time.
+        // Re-unlock and lock again - hook should fire each time.
         holder.setKey(SecretKeySpec(ByteArray(32) { (it + 5).toByte() }, "AES"))
         holder.lock()
 

@@ -112,7 +112,7 @@ class AutofillUnlockViewModelTest {
     }
 
     @Test fun search_query_not_seeded_when_already_persisted() = runTest(testDispatcher) {
-        // Simulate process death — SavedStateHandle re-creation pre-loaded
+        // Simulate process death - SavedStateHandle re-creation pre-loaded
         // with a prior query the user typed.
         val saved = SavedStateHandle(
             mapOf(
@@ -161,13 +161,13 @@ class AutofillUnlockViewModelTest {
         vm.onSearchQueryChanged("goo")
         advanceTimeBy(20)
         vm.onSearchQueryChanged("googl")
-        // Still inside debounce — results haven't refreshed for the new query yet.
+        // Still inside debounce - results haven't refreshed for the new query yet.
         advanceTimeBy(50)
         vm.onSearchQueryChanged("google")
         advanceUntilIdle()
         // After idle, the latest query is what's reflected.
         val results = vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded
-        // Both credentials contain "google" — host substring band.
+        // Both credentials contain "google" - host substring band.
         assertEquals(2, results.credentials.size)
     }
 
@@ -184,7 +184,7 @@ class AutofillUnlockViewModelTest {
         auth.unlocked.value = false
         advanceUntilIdle()
         assertTrue(vm.searchResults.value is AutofillUnlockViewModel.SearchState.Idle)
-        // Query is preserved — the user shouldn't have to retype after re-unlock.
+        // Query is preserved - the user shouldn't have to retype after re-unlock.
         assertEquals("git", vm.searchQuery.value)
     }
 
@@ -393,7 +393,7 @@ class AutofillUnlockViewModelTest {
             credential("1", "Chase", "u", "https://chase.com", tags = listOf("Banking")),
             credential("2", "GitHub", "u", "https://github.com", tags = listOf("Work")),
         )
-        // startInSearch = false so the query stays empty — we're asserting
+        // startInSearch = false so the query stays empty - we're asserting
         // that the tag selection alone narrows the result list.
         val vm = buildVm(parsed = parsed(webDomain = "chase.com"), startInSearch = false)
         auth.unlocked.value = true
@@ -427,7 +427,7 @@ class AutofillUnlockViewModelTest {
         advanceUntilIdle()
         assertEquals("Banking", vm.selectedTag.value)
 
-        // User toggles the pref off — retained selection becomes meaningless.
+        // User toggles the pref off - retained selection becomes meaningless.
         prefs.categoryFilterEnabled.value = false
         advanceUntilIdle()
         assertNull(vm.selectedTag.value)
@@ -505,7 +505,7 @@ class AutofillUnlockViewModelTest {
         val tagsWithCounts = MutableStateFlow<List<TagWithCount>>(emptyList())
 
         override fun observeTags(): Flow<List<Tag>> =
-            error("unused — VM only reads observeTagsWithCounts")
+            error("unused - VM only reads observeTagsWithCounts")
         override fun observeTagsWithCounts(): Flow<List<TagWithCount>> = tagsWithCounts
         override suspend fun getTags(): AppResult<List<Tag>> = error("unused")
         override suspend fun addTag(tag: Tag): AppResult<Unit> = error("unused")
@@ -513,7 +513,7 @@ class AutofillUnlockViewModelTest {
     }
 
     /**
-     * Minimal preferences fake — the autofill VM only reads
+     * Minimal preferences fake - the autofill VM only reads
      * `isAutofillCategoryFilterEnabled()`. Everything else throws so any
      * accidental new dependency is loud rather than silent.
      */

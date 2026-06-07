@@ -23,7 +23,7 @@ kotlin {
 
 dependencies {
     compileOnly(libs.lint.api)
-    // Test deps for the Detector contract — lint-tests provides the
+    // Test deps for the Detector contract - lint-tests provides the
     // `lint().files(...).run().expect(...)` DSL so we can lock the
     // detector to specific input → output mappings.
     testImplementation(libs.junit)

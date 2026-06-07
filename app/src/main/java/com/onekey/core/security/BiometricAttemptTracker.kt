@@ -23,7 +23,7 @@ private val KEY_FAILED_BIOMETRIC_ATTEMPTS = intPreferencesKey("biometric_failed_
  *    the attempt budget. Persistence shares the counter across all surfaces.
  *  - Swipe-from-recents between failures must not reset the counter.
  *
- * Threshold semantics — *unlike* [PinAttemptTracker]/[PasswordAttemptTracker]
+ * Threshold semantics - *unlike* [PinAttemptTracker]/[PasswordAttemptTracker]
  * this tracker does NOT define a tiered cooldown. The OS [BiometricPrompt]
  * imposes its own per-sensor lockout (typically 30s after 5 hardware wrong
  * reads, escalating). Our counter is the app-level "after 3 wrong, force
@@ -31,7 +31,7 @@ private val KEY_FAILED_BIOMETRIC_ATTEMPTS = intPreferencesKey("biometric_failed_
  * platform; our store only persists the count.
  *
  * The counter resets on a successful biometric unlock OR a successful
- * master-password unlock — both are "user proved identity" signals consistent
+ * master-password unlock - both are "user proved identity" signals consistent
  * with [PinAttemptTracker.reset].
  */
 @Singleton

@@ -212,7 +212,7 @@ fun VaultScreen(
 
                 // ── Recycle bin ───────────────────────────────────────────────────
                 // Render when the bin is enabled, OR when items still live in it after
-                // the user disabled the toggle — the disable-confirmation dialog promises
+                // the user disabled the toggle - the disable-confirmation dialog promises
                 // those residuals stay restorable, so the entry has to remain reachable
                 // until the bin drains. Once empty + disabled, the tile hides cleanly.
                 if (isRecycleBinEnabled || recycleBinCount > 0) {
@@ -255,7 +255,7 @@ fun VaultScreen(
 
 /**
  * Shared "What are you saving?" type-picker sheet. Used by Vault home and the tagged-list
- * screen's TAG_ALL / TAG_FAVORITES branches — anywhere there's no implicit credential type
+ * screen's TAG_ALL / TAG_FAVORITES branches - anywhere there's no implicit credential type
  * from the surrounding context.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -344,7 +344,7 @@ private fun SearchResultsContent(
     when (state) {
         is VaultViewModel.SearchState.Idle -> {
             // Reached with a non-blank query only when the snapshot reports
-            // Locked — which can only happen during the lock-screen overlay
+            // Locked - which can only happen during the lock-screen overlay
             // transition. Show the spinner so an in-flight transition reads
             // as "settling" rather than "nothing to search".
             CenteredSpinner(padding)

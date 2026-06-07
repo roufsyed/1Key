@@ -68,7 +68,7 @@ class VaultExporterImpl @Inject constructor(
 
     /**
      * Encode a credential's OTP enrolment as a string fit for the `totp_secret`
-     * export column. The shape is `otpauth://...?...` for any enrolled entry —
+     * export column. The shape is `otpauth://...?...` for any enrolled entry -
      * the spec format Aegis / 2FAS / Bitwarden / 1Password understand on import,
      * carrying every field needed to reproduce codes (algorithm, digits, period,
      * counter, type). Empty string when there's no OTP, matching the prior

@@ -24,9 +24,9 @@ interface VaultImporter {
      * Decrypts and parses an encrypted backup file.
      *
      * **Consumes [password]:** the [CharArray] is zeroed in place during decryption
-     * (via [BackupEncryption.decrypt]). Callers that need the password again — e.g.
+     * (via [BackupEncryption.decrypt]). Callers that need the password again - e.g.
      * to also call [com.onekey.core.domain.repository.AuthRepository.setupMasterPassword]
-     * during onboarding-from-backup — MUST pass a copy created with [CharArray.copyOf].
+     * during onboarding-from-backup - MUST pass a copy created with [CharArray.copyOf].
      * Failing to do so leaves the next consumer reading ASCII-space input, which silently
      * corrupts the master-password contract (vault becomes unrecoverable on next unlock).
      */

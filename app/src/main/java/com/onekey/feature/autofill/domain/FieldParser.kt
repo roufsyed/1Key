@@ -11,7 +11,7 @@ import javax.inject.Singleton
  * email / password fields in the form (if any).
  *
  * Strategy is intentionally conservative for v1:
- *  1. `View.AUTOFILL_HINT_*` constants take precedence — they're what the
+ *  1. `View.AUTOFILL_HINT_*` constants take precedence - they're what the
  *     host app explicitly told us.
  *  2. WebView nodes use HTML `name` / `type` / `autocomplete` attributes
  *     against a small, well-known vocabulary.
@@ -23,7 +23,7 @@ import javax.inject.Singleton
  *     filter, or numeric-only fields).
  *
  * Multi-language keyword corpora and sign-up detection are out of scope for
- * v1 — see `project_autofill.md` for the deferred list.
+ * v1 - see `project_autofill.md` for the deferred list.
  */
 @Singleton
 class FieldParser @Inject constructor() {
@@ -56,7 +56,7 @@ class FieldParser @Inject constructor() {
         }
 
         // Pass 2: heuristic substring rescue for un-hinted text inputs. Only
-        // applied when nothing explicit matched a slot — never overrides a
+        // applied when nothing explicit matched a slot - never overrides a
         // confident pass-1 classification.
         nodes.forEach { node ->
             val type = classifyHeuristic(node) ?: return@forEach
@@ -92,7 +92,7 @@ class FieldParser @Inject constructor() {
     }
 
     private fun classifyDirect(node: RawNode): AutofillField.Type? {
-        // Hints first. Compare case-insensitively — the framework constants are
+        // Hints first. Compare case-insensitively - the framework constants are
         // camelCase ("emailAddress", "postalAddress", "newPassword"), and we
         // can't assume host apps preserve the casing when echoing them back.
         node.autofillHints.forEach { hint ->
@@ -129,7 +129,7 @@ class FieldParser @Inject constructor() {
     }
 
     private fun classifyHeuristic(node: RawNode): AutofillField.Type? {
-        // Already classified directly — handled by caller, so just check the
+        // Already classified directly - handled by caller, so just check the
         // substring corpora here.
         val haystack = buildString {
             node.idEntry?.let { append(it.lowercase()); append(' ') }

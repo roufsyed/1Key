@@ -24,7 +24,7 @@ import javax.inject.Singleton
  * a vault could stay unlocked under an idle user.
  *
  * `ACTION_SCREEN_OFF` is a stable Android system broadcast that fires the moment
- * the device display turns off — power button, display timeout, AOD transition.
+ * the device display turns off - power button, display timeout, AOD transition.
  * That's an unambiguous "user is no longer looking at this device" signal that
  * doesn't depend on any of our compensation working correctly.
  *
@@ -36,7 +36,7 @@ import javax.inject.Singleton
  *
  * Locking is gated on `keyHolder.isUnlocked()` so a `SCREEN_OFF` while the vault
  * is already locked is a cheap no-op rather than a redundant DB write. The
- * `authRepository.lock()` itself is also idempotent — this gate is purely an
+ * `authRepository.lock()` itself is also idempotent - this gate is purely an
  * optimisation.
  */
 @Singleton
@@ -59,7 +59,7 @@ class ScreenOffLockReceiver @Inject constructor(
     }
 
     /**
-     * Idempotent. Safe to call multiple times — the second registration would
+     * Idempotent. Safe to call multiple times - the second registration would
      * leak duplicate receivers, so guard with [registered]. In practice
      * [register] is called exactly once from [com.onekey.OneKeyApp.onCreate].
      */

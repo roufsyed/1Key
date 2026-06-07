@@ -43,7 +43,7 @@ import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 
 /**
  * Where an OCR-extracted text block can be routed. The launching screen passes a list
- * of targets sized to its credential type — SECURE_NOTE only offers [Notes], BANK_ACCOUNT
+ * of targets sized to its credential type - SECURE_NOTE only offers [Notes], BANK_ACCOUNT
  * offers [Username] + [Password] + several [CustomField]s + [Notes], etc.
  */
 sealed class OcrTarget(val label: String) {
@@ -177,7 +177,7 @@ fun OcrScannerSheet(
         if (!hasPermission) permissionLauncher.launch(android.Manifest.permission.CAMERA)
     }
 
-    // ── ML Kit recogniser — closed when sheet leaves composition ───────────
+    // ── ML Kit recogniser - closed when sheet leaves composition ───────────
     val textRecognizer = remember { TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS) }
     DisposableEffect(Unit) { onDispose { textRecognizer.close() } }
 
@@ -195,7 +195,7 @@ fun OcrScannerSheet(
      * field. Drives the discard guard on every dismiss path so a stray swipe
      * doesn't throw away the work the user did selecting blocks.
      *
-     * State checks (`Selecting`) aren't part of this — the assignments live
+     * State checks (`Selecting`) aren't part of this - the assignments live
      * across state transitions (e.g. Retake clears them, NoText shouldn't
      * have any). We rely directly on the assignment containers.
      */
@@ -248,7 +248,7 @@ fun OcrScannerSheet(
     // Block hide-attempts (swipe-down, scrim tap, system back) when the user
     // has accumulated assignments; surface the discard dialog instead. The
     // success path through the "Done" button calls `onResult` then `onDismiss`
-    // which flips the parent's `showSheet` flag — that programmatic dismissal
+    // which flips the parent's `showSheet` flag - that programmatic dismissal
     // tears down without going through `confirmValueChange`, so no bypass flag
     // is needed.
     val sheetState = rememberModalBottomSheetState(
@@ -498,7 +498,7 @@ private fun buildAssignments(
 }
 
 // ---------------------------------------------------------------------------
-// Camera preview — binds ImageCapture to lifecycle; clears ref on dispose
+// Camera preview - binds ImageCapture to lifecycle; clears ref on dispose
 // ---------------------------------------------------------------------------
 
 @Composable
@@ -565,7 +565,7 @@ private fun OcrSelectionContent(
     Column(modifier = Modifier.fillMaxWidth()) {
 
         // Compact summary: one chip per assigned target. Skipped entirely when nothing's
-        // been picked yet — keeps the empty state tidy.
+        // been picked yet - keeps the empty state tidy.
         val assignedSummary = targets.mapNotNull { target ->
             when (target) {
                 OcrTarget.Notes -> if (notesBlocks.isNotEmpty()) {
@@ -750,7 +750,7 @@ private fun OcrSlotCard(label: String, value: String?, modifier: Modifier = Modi
                 modifier = Modifier.weight(0.4f),
             )
             Text(
-                text = value ?: "—",
+                text = value ?: "-",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (value != null) MaterialTheme.colorScheme.onSurface
                         else MaterialTheme.colorScheme.onSurfaceVariant,

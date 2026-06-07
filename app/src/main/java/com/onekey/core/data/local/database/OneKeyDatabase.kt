@@ -45,7 +45,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
 val MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         // Add encrypted URL columns. The vault key isn't available during migration, so
-        // legacy plaintext url stays in place — `CredentialRepositoryImpl.toDomain()`
+        // legacy plaintext url stays in place - `CredentialRepositoryImpl.toDomain()`
         // reads url_encrypted when present and falls back to the legacy `url` column,
         // and saves rewrite to encrypted form (clearing `url`). That gives us a lazy
         // upgrade per credential without losing pre-v4 URLs at migration time.
@@ -96,7 +96,7 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
 // identity hash. Without a version bump, existing installs crash at openHelper.checkIdentity
 // because room_master_table still holds the prior hash. The actual SQLite columns already
 // have DEFAULT clauses from MIGRATION_1_2 / MIGRATION_2_3 / MIGRATION_5_6, so no schema
-// rewrite is needed — just a version bump for Room to re-store the new hash.
+// rewrite is needed - just a version bump for Room to re-store the new hash.
 val MIGRATION_7_8 = object : Migration(7, 8) {
     override fun migrate(db: SupportSQLiteDatabase) {
         // intentionally empty
@@ -106,7 +106,7 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
 // Adds 2FA params columns: otp_type, algorithm, digits, period, hotp_counter. Each
 // non-null column ships a DEFAULT matching the constants the previous TotpGenerator
 // hard-coded (TOTP / SHA1 / 6 digits / 30s) so pre-v9 entries decode bit-identically.
-// hotp_counter stays nullable — only HOTP entries populate it.
+// hotp_counter stays nullable - only HOTP entries populate it.
 //
 // This unlocks Option C (full RFC 6238 + HOTP + Steam Guard). Storing as plaintext
 // columns instead of an encrypted JSON blob is deliberate: these are metadata, not
@@ -123,8 +123,8 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
 }
 
 // Adds `accessed_at` to carry the "last used / accessed" timestamp from
-// foreign exports (Firefox's `timeLastUsed`, etc.). Nullable — no DEFAULT
-// clause — so existing rows stay null instead of being misread as "accessed
+// foreign exports (Firefox's `timeLastUsed`, etc.). Nullable - no DEFAULT
+// clause - so existing rows stay null instead of being misread as "accessed
 // at epoch 0".
 val MIGRATION_9_10 = object : Migration(9, 10) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -135,7 +135,7 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
 // `accessed_at` is now a first-class, always-present field used for display
 // and (in future) sort. Backfill any null rows with their `updated_at` so
 // existing entries have a sensible "last used" value immediately after
-// upgrade — same heuristic Firefox / Bitwarden / 1Password use when
+// upgrade - same heuristic Firefox / Bitwarden / 1Password use when
 // migrating older entries that pre-date their last-used tracking. New
 // manually-created rows default to `now` via toEntity().
 val MIGRATION_10_11 = object : Migration(10, 11) {
@@ -168,7 +168,7 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
 
 // Extends L4+H3+H1 to the credential_history snapshots. Pre-v14 history rows
 // stored plaintext titles and used the raw vault key for username/password/url
-// — defeating the credentials table's protections any time a row got snapshotted.
+// - defeating the credentials table's protections any time a row got snapshotted.
 // Adds the same three columns that DB v12+v13 added to `credentials`; new
 // snapshots write v2 directly; existing rows migrate v0 -> v2 in-place via
 // CredentialCipherMigrator on the next unlock.

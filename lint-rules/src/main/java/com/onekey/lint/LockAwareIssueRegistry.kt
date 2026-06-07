@@ -14,7 +14,7 @@ import com.android.tools.lint.detector.api.Issue
  * `api = CURRENT_API` pins the registry to the lint API version it was compiled
  * against. AGP refuses to load registries built against a newer lint API to
  * prevent runtime ABI breakage. `minApi` lets us tolerate older lint runners
- * loading us — kept reasonably low so a developer running an older Studio
+ * loading us - kept reasonably low so a developer running an older Studio
  * build doesn't get "registry too new" warnings.
  */
 class LockAwareIssueRegistry : IssueRegistry() {

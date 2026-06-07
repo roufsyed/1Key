@@ -184,7 +184,7 @@ private fun BinHeader(count: Int, retention: RecycleBinRetention) {
 
 private fun retentionHeaderText(retention: RecycleBinRetention): String = when (retention) {
     RecycleBinRetention.NEVER ->
-        "Items here stay until you delete or empty them. Auto-clear is off — change it in Settings."
+        "Items here stay until you delete or empty them. Auto-clear is off - change it in Settings."
     else ->
         "Items here are kept for ${retention.label.lowercase()}, then deleted automatically. You can restore any of them before that."
 }
@@ -251,7 +251,7 @@ private fun RecycleBinRow(
 private fun EmptyBinState(modifier: Modifier = Modifier, retention: RecycleBinRetention) {
     val subtitle = when (retention) {
         RecycleBinRetention.NEVER ->
-            "Deleted credentials will wait here until you remove them — auto-clear is off."
+            "Deleted credentials will wait here until you remove them - auto-clear is off."
         else ->
             "Deleted credentials wait here for ${retention.label.lowercase()} before being removed for good."
     }

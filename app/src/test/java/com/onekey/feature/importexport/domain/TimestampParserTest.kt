@@ -6,7 +6,7 @@ import org.junit.Test
 
 class TimestampParserTest {
 
-    // 2024-05-06T13:34:54Z — reference instant the numeric tests pivot around.
+    // 2024-05-06T13:34:54Z - reference instant the numeric tests pivot around.
     private val REFERENCE_MILLIS = 1715002494000L
 
     // ── Numeric epoch (with magnitude-based unit detection) ─────────────────

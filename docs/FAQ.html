@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>1Key — FAQ</title>
-<meta name="description" content="Frequently asked questions about 1Key — encryption, passwords, backups, sync, and security model." />
+<title>1Key - FAQ</title>
+<meta name="description" content="Frequently asked questions about 1Key - encryption, passwords, backups, sync, and security model." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
@@ -34,7 +34,7 @@
 <header class="doc-hero wrap">
   <span class="eyebrow">FAQ</span>
   <h1>Short answers to the <em>questions</em> people actually ask.</h1>
-  <p class="lede">Encryption, passwords, backups, sync, and the security model — explained without marketing voice.</p>
+  <p class="lede">Encryption, passwords, backups, sync, and the security model - explained without marketing voice.</p>
   <div class="doc-meta">
     <span class="pill">25 questions</span>
     <span>· Last updated <b>May 2026</b></span>
@@ -63,9 +63,9 @@
     <details class="qa" open>
       <summary>How are my passwords encrypted?</summary>
       <div class="qa-body">
-        <p>Every credential field is encrypted on disk with <b>AES-256-GCM</b> — the same authenticated cipher used by Signal, WhatsApp, and modern TLS. Authenticated means tampering with the encrypted bytes is detected on decryption rather than producing scrambled output.</p>
-        <p>The encryption key is derived from your master password using <b>Argon2id</b> — a memory-hard algorithm that allocates 64 MiB of RAM per attempt. Memory-hard means it can't be cheaply parallelised on GPUs or rented cloud farms the way older algorithms (like PBKDF2) can. Even with your encrypted blobs in hand, brute-forcing a decent password is unrealistic on consumer hardware.</p>
-        <p>Each individual field — title, username, password, URL, notes, custom fields, TOTP secret — is also bound to its row and column when encrypted, so an attacker who somehow tampered with the database file couldn't swap one field's encrypted blob into another column or another account.</p>
+        <p>Every credential field is encrypted on disk with <b>AES-256-GCM</b> - the same authenticated cipher used by Signal, WhatsApp, and modern TLS. Authenticated means tampering with the encrypted bytes is detected on decryption rather than producing scrambled output.</p>
+        <p>The encryption key is derived from your master password using <b>Argon2id</b> - a memory-hard algorithm that allocates 64 MiB of RAM per attempt. Memory-hard means it can't be cheaply parallelised on GPUs or rented cloud farms the way older algorithms (like PBKDF2) can. Even with your encrypted blobs in hand, brute-forcing a decent password is unrealistic on consumer hardware.</p>
+        <p>Each individual field - title, username, password, URL, notes, custom fields, TOTP secret - is also bound to its row and column when encrypted, so an attacker who somehow tampered with the database file couldn't swap one field's encrypted blob into another column or another account.</p>
       </div>
     </details>
 
@@ -73,14 +73,14 @@
       <summary>Where is my master password stored?</summary>
       <div class="qa-body">
         <p>Nowhere. We don't store it as plaintext, as a hash, or in any other form.</p>
-        <p>To check whether the password you typed is correct, 1Key keeps a small <b>verifier</b> — a piece of ciphertext that only the right password can decrypt. The verifier itself is stored in <code>EncryptedSharedPreferences</code>, which is encrypted at rest by a key bound to your phone's Android Keystore (the secure hardware enclave, TEE / StrongBox). So even if someone extracted your phone's storage, they couldn't read the verifier blob without live access to the Keystore — meaning <b>offline brute-forcing of your password is not possible</b>.</p>
+        <p>To check whether the password you typed is correct, 1Key keeps a small <b>verifier</b> - a piece of ciphertext that only the right password can decrypt. The verifier itself is stored in <code>EncryptedSharedPreferences</code>, which is encrypted at rest by a key bound to your phone's Android Keystore (the secure hardware enclave, TEE / StrongBox). So even if someone extracted your phone's storage, they couldn't read the verifier blob without live access to the Keystore - meaning <b>offline brute-forcing of your password is not possible</b>.</p>
       </div>
     </details>
 
     <details class="qa">
       <summary>What happens if I forget my master password?</summary>
       <div class="qa-body">
-        <p>Your data is unrecoverable. There's no "forgot password" link because there's no server and no recovery copy of your key anywhere. Only you can decrypt your vault — that's what makes it truly private.</p>
+        <p>Your data is unrecoverable. There's no "forgot password" link because there's no server and no recovery copy of your key anywhere. Only you can decrypt your vault - that's what makes it truly private.</p>
       </div>
     </details>
 
@@ -93,7 +93,7 @@
           <li>Auth metadata (verifier, PIN hash, wrapped vault key) is moved from regular storage into <code>EncryptedSharedPreferences</code>.</li>
           <li>Existing credentials are re-encrypted in the background under the new HKDF subkey scheme with per-field authentication. Your <code>updated_at</code> timestamps are preserved.</li>
         </ul>
-        <p>You don't need to do anything — none of this changes your master password, your vault, or your saved credentials.</p>
+        <p>You don't need to do anything - none of this changes your master password, your vault, or your saved credentials.</p>
       </div>
     </details>
 
@@ -102,14 +102,14 @@
     <details class="qa">
       <summary>What does the app keep in memory while running?</summary>
       <div class="qa-body">
-        <p>Only the encryption key for the unlocked session and whatever you're actively viewing — the visible list of credentials, the field you have open. Decrypted passwords are never written to disk and they're released from memory when you navigate away or the vault locks. The encryption key itself is dropped from memory the moment the vault locks.</p>
+        <p>Only the encryption key for the unlocked session and whatever you're actively viewing - the visible list of credentials, the field you have open. Decrypted passwords are never written to disk and they're released from memory when you navigate away or the vault locks. The encryption key itself is dropped from memory the moment the vault locks.</p>
       </div>
     </details>
 
     <details class="qa">
       <summary>Why does unlocking or creating a vault take a few seconds?</summary>
       <div class="qa-body">
-        <p>That delay is <b>Argon2id</b> allocating 64 MiB of RAM and running three passes over it to turn your master password into the encryption key. The slowness <em>is</em> the feature — it makes guessing your password too expensive to be practical, even for an attacker with serious hardware.</p>
+        <p>That delay is <b>Argon2id</b> allocating 64 MiB of RAM and running three passes over it to turn your master password into the encryption key. The slowness <em>is</em> the feature - it makes guessing your password too expensive to be practical, even for an attacker with serious hardware.</p>
       </div>
     </details>
 
@@ -125,7 +125,7 @@
     <details class="qa">
       <summary>What happens to my data if I uninstall the app?</summary>
       <div class="qa-body">
-        <p>It goes with the app. Android removes the app's private storage on uninstall — your vault, your settings, everything. <b>Export an encrypted backup first</b> if you want to keep it.</p>
+        <p>It goes with the app. Android removes the app's private storage on uninstall - your vault, your settings, everything. <b>Export an encrypted backup first</b> if you want to keep it.</p>
       </div>
     </details>
 
@@ -141,7 +141,7 @@
     <details class="qa">
       <summary>Can the developer (or anyone else) see my passwords?</summary>
       <div class="qa-body">
-        <p>No. Your data never leaves your device, so there's literally no path for anyone — developer, Google, your network — to access it. Decryption requires your master password, which only you have.</p>
+        <p>No. Your data never leaves your device, so there's literally no path for anyone - developer, Google, your network - to access it. Decryption requires your master password, which only you have.</p>
       </div>
     </details>
 
@@ -164,7 +164,7 @@
     <details class="qa">
       <summary>What happens after I enter a wrong PIN or master password?</summary>
       <div class="qa-body">
-        <p>Wrong attempts are counted persistently — killing and reopening the app cannot reset them — and trigger escalating cooldowns:</p>
+        <p>Wrong attempts are counted persistently - killing and reopening the app cannot reset them - and trigger escalating cooldowns:</p>
         <table>
           <thead><tr><th>Wrong attempts</th><th>Cooldown</th></tr></thead>
           <tbody>
@@ -174,7 +174,7 @@
           </tbody>
         </table>
         <p>For PIN specifically: after 3 wrong PINs, the PIN unlock is disabled until you successfully enter your master password. This forces a real identity check before the easier shortcut resumes. Successfully entering the master password resets both counters.</p>
-        <p>Biometric attempts also have a 3-strike counter that triggers the same fallback — if biometric fails three times in a row, the next unlock has to be the master password.</p>
+        <p>Biometric attempts also have a 3-strike counter that triggers the same fallback - if biometric fails three times in a row, the next unlock has to be the master password.</p>
       </div>
     </details>
 
@@ -190,7 +190,7 @@
     <details class="qa">
       <summary>Why is there a recycle bin? Are bin items still encrypted?</summary>
       <div class="qa-body">
-        <p>Accidentally deleting a credential you need is worse than briefly storing one you've deleted. The bin holds deleted items for 30 days by default (configurable: 1 week, 30 days, 6 months, 1 year, or never) so you can restore them. They're encrypted with the same protections as active items — the only difference is they're filtered out of normal views.</p>
+        <p>Accidentally deleting a credential you need is worse than briefly storing one you've deleted. The bin holds deleted items for 30 days by default (configurable: 1 week, 30 days, 6 months, 1 year, or never) so you can restore them. They're encrypted with the same protections as active items - the only difference is they're filtered out of normal views.</p>
       </div>
     </details>
 
@@ -200,16 +200,16 @@
       <summary>Why doesn't 1Key support automatic backups, and will it ever?</summary>
       <div class="qa-body">
         <p>No, and we don't plan to. Here's why.</p>
-        <p>Backup files are encrypted with your master password. For a backup to run automatically — especially on the unlock methods most people use day to day, biometric and PIN — 1Key would need to keep your master password on the device in some retrievable form, even if hardware-protected.</p>
+        <p>Backup files are encrypted with your master password. For a backup to run automatically - especially on the unlock methods most people use day to day, biometric and PIN - 1Key would need to keep your master password on the device in some retrievable form, even if hardware-protected.</p>
         <p>That conflicts with our core promise: <b>your master password lives only in your head, never on this device.</b> It's the one secret we keep out of storage entirely, and we're not breaking that for any feature, no matter how convenient it would be.</p>
-        <p>What we offer instead: one-tap manual backup from Settings. You save the encrypted file wherever suits you — a local folder, a USB drive, or a cloud-synced folder you control. We recommend backing up after big changes (new accounts, password updates, before app updates). The whole flow takes about ten seconds.</p>
+        <p>What we offer instead: one-tap manual backup from Settings. You save the encrypted file wherever suits you - a local folder, a USB drive, or a cloud-synced folder you control. We recommend backing up after big changes (new accounts, password updates, before app updates). The whole flow takes about ten seconds.</p>
       </div>
     </details>
 
     <details class="qa">
       <summary>What's the difference between an encrypted backup and a plain export?</summary>
       <div class="qa-body">
-        <p>An encrypted <code>.1key</code> backup is locked with your master password — useless to anyone without it. JSON or CSV exports are plain text — anyone who finds the file can read your passwords. Use encrypted backups unless you're migrating to another app that can't read the encrypted format.</p>
+        <p>An encrypted <code>.1key</code> backup is locked with your master password - useless to anyone without it. JSON or CSV exports are plain text - anyone who finds the file can read your passwords. Use encrypted backups unless you're migrating to another app that can't read the encrypted format.</p>
         <p>The encrypted backup format also binds the export timestamp and your vault's version counter into the encryption authentication tag, so a backup file can't be silently tampered with, swapped for a different file, or replayed against a newer vault state without detection.</p>
       </div>
     </details>

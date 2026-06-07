@@ -28,7 +28,7 @@ class OtpGeneratorTest {
 
     private val gen = OtpGenerator()
 
-    // ── RFC 6238 Appendix B — TOTP / SHA-1 ─────────────────────────────────────
+    // ── RFC 6238 Appendix B - TOTP / SHA-1 ─────────────────────────────────────
     // Times converted to ms (the spec uses Unix seconds).
     @Test fun totp_sha1_sample1_59s() = assertCode("94287082", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 59_000L)
     @Test fun totp_sha1_sample2_1111111109s() = assertCode("07081804", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 1_111_111_109_000L)
@@ -37,16 +37,16 @@ class OtpGeneratorTest {
     @Test fun totp_sha1_sample5_2000000000s() = assertCode("69279037", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 2_000_000_000_000L)
     @Test fun totp_sha1_sample6_20000000000s() = assertCode("65353130", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 20_000_000_000_000L)
 
-    // ── RFC 6238 Appendix B — TOTP / SHA-256 ───────────────────────────────────
+    // ── RFC 6238 Appendix B - TOTP / SHA-256 ───────────────────────────────────
     @Test fun totp_sha256_sample1_59s() = assertCode("46119246", SHA256_SECRET_B32, OtpAlgorithm.SHA256, 8, time = 59_000L)
     @Test fun totp_sha256_sample2_1111111109s() = assertCode("68084774", SHA256_SECRET_B32, OtpAlgorithm.SHA256, 8, time = 1_111_111_109_000L)
     @Test fun totp_sha256_sample3_1234567890s() = assertCode("91819424", SHA256_SECRET_B32, OtpAlgorithm.SHA256, 8, time = 1_234_567_890_000L)
 
-    // ── RFC 6238 Appendix B — TOTP / SHA-512 ───────────────────────────────────
+    // ── RFC 6238 Appendix B - TOTP / SHA-512 ───────────────────────────────────
     @Test fun totp_sha512_sample1_59s() = assertCode("90693936", SHA512_SECRET_B32, OtpAlgorithm.SHA512, 8, time = 59_000L)
     @Test fun totp_sha512_sample2_1234567890s() = assertCode("93441116", SHA512_SECRET_B32, OtpAlgorithm.SHA512, 8, time = 1_234_567_890_000L)
 
-    // ── RFC 4226 Appendix D — HOTP / SHA-1 ─────────────────────────────────────
+    // ── RFC 4226 Appendix D - HOTP / SHA-1 ─────────────────────────────────────
     // Counter values 0..9 against the same 20-byte ASCII secret.
     @Test fun hotp_counter_0() = assertHotp("755224", 0L)
     @Test fun hotp_counter_1() = assertHotp("287082", 1L)
@@ -77,7 +77,7 @@ class OtpGeneratorTest {
         out.code.forEach { ch ->
             assertTrue("Code character $ch must be in Steam alphabet", ch in STEAM_ALPHABET)
         }
-        // Steam still rotates on a 30-second clock — UI consumers rely on this.
+        // Steam still rotates on a 30-second clock - UI consumers rely on this.
         assertNotNull(out.remainingSeconds)
         assertNotNull(out.progress)
     }

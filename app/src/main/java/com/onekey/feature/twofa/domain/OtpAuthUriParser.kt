@@ -36,10 +36,10 @@ data class ParsedOtpAuthUri(
  *
  * Robustness notes:
  *  - Returns `null` (rather than throwing) for any unparseable URI. The QR scanner
- *    treats null as "not a 2FA QR — try another," and the manual-entry sheet uses it
+ *    treats null as "not a 2FA QR - try another," and the manual-entry sheet uses it
  *    to skip the auto-fill path when the secret field doesn't contain a URI.
  *  - Out-of-range digits / non-positive period collapse onto defaults rather than
- *    failing — pragmatic compatibility with mildly non-conforming issuers.
+ *    failing - pragmatic compatibility with mildly non-conforming issuers.
  *  - Unknown `algorithm` strings collapse to SHA-1 via [OtpAlgorithm.fromNameOrDefault].
  *  - The `secret` query parameter is normalised: trimmed, uppercased, padding stripped.
  *    [OtpParams]'s `init` block enforces the "non-empty" invariant after normalisation;

@@ -26,8 +26,8 @@ fun BulkDeleteDialog(
         if (count == 1) "It moves to the recycle bin. You can restore it within 30 days."
         else "They move to the recycle bin. You can restore them within 30 days."
     } else {
-        if (count == 1) "This is permanent — there's no recycle bin to restore from."
-        else "This is permanent for all $count items — there's no recycle bin to restore from."
+        if (count == 1) "This is permanent - there's no recycle bin to restore from."
+        else "This is permanent for all $count items - there's no recycle bin to restore from."
     }
     LockAwareDialog(
         onDismissRequest = onCancel,

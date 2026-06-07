@@ -2,7 +2,7 @@ package com.onekey.core.domain.wordlist
 
 /**
  * Source of word lists used by the password generator. Domain-side abstraction so that
- * `GeneratePasswordUseCase` can stay free of `android.content.Context` — the loading is
+ * `GeneratePasswordUseCase` can stay free of `android.content.Context` - the loading is
  * an infrastructure concern (assets, in this app) handled in the data layer.
  */
 interface WordlistProvider {

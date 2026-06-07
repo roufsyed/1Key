@@ -106,7 +106,7 @@ fun OneKeyNavGraph(
     // Navigate to Lock whenever the vault locks mid-session.
     // Skip if already on Lock or Onboarding to avoid redundant navigation.
     // When "restore last screen" is enabled we just push Lock on top of the existing
-    // back stack — popping it on unlock returns the user to whatever they were on.
+    // back stack - popping it on unlock returns the user to whatever they were on.
     // When disabled we pop back to start (Vault) so unlock always lands on Vault.
     LaunchedEffect(isUnlocked) {
         if (!isUnlocked &&
@@ -190,7 +190,7 @@ fun OneKeyNavGraph(
                         appViewModel = appViewModel,
                         onUnlocked = {
                             if (restoreLastScreenOnUnlock) {
-                                // Pop Lock off the top — the screen the user was on before
+                                // Pop Lock off the top - the screen the user was on before
                                 // auto-lock is right underneath, so this returns them there.
                                 val popped = navController.popBackStack(Screen.Lock.route, inclusive = true)
                                 // Cold-start fallback: if Lock was the only entry on the stack

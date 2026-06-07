@@ -12,7 +12,7 @@ package com.onekey.core.domain.model
  *
  * The string form ([name]) is what the entity column persists. [fromNameOrDefault]
  * falls back to [SHA1] for unknown strings so a downgrade from a future schema doesn't
- * crash decode — the worst case is wrong codes the user re-enters once.
+ * crash decode - the worst case is wrong codes the user re-enters once.
  */
 enum class OtpAlgorithm(val javaName: String) {
     SHA1("HmacSHA1"),

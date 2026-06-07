@@ -26,7 +26,7 @@ class ExportVaultUseCase @Inject constructor(
     /**
      * Active + recycle-bin credentials together. Bin items carry deletedAt so a round-trip
      * (export → restore from this backup) preserves the recycle bin instead of silently
-     * dropping it. CSV exports drop deletedAt at the format level — that's fine, CSV is for
+     * dropping it. CSV exports drop deletedAt at the format level - that's fine, CSV is for
      * cross-tool migration where the bin concept doesn't exist.
      */
     private suspend fun collectAll(): List<Credential>? {

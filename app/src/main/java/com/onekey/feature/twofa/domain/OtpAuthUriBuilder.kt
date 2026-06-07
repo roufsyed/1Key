@@ -11,7 +11,7 @@ import com.onekey.core.domain.model.OtpType
  * Used by the plaintext exporter so non-default params (SHA-256, 8 digits,
  * 60s period, HOTP counter, Steam type) survive a round-trip through CSV / JSON
  * to other authenticator apps (Aegis, 2FAS) and back. Without this, an export
- * silently flattens every entry to SHA-1 / 30s / 6 — corrupting the user's
+ * silently flattens every entry to SHA-1 / 30s / 6 - corrupting the user's
  * data the moment they hit "Export".
  *
  * Steam entries: per the Steam Guard convention, the URI lists `issuer=Steam`
@@ -29,7 +29,7 @@ object OtpAuthUriBuilder {
     fun build(params: OtpParams, issuer: String, account: String): String {
         val host = when (params.type) {
             OtpType.HOTP -> HOST_HOTP
-            // Steam is wire-compatible with TOTP — issuer string carries the variant.
+            // Steam is wire-compatible with TOTP - issuer string carries the variant.
             OtpType.TOTP, OtpType.STEAM -> HOST_TOTP
         }
         // Issuer-prefixed label is the canonical form. Falls back to account-only

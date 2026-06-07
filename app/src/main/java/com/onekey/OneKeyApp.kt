@@ -22,7 +22,7 @@ class OneKeyApp : Application() {
 
     /**
      * Defence-in-depth backstop for the inactivity auto-lock. See the class
-     * KDoc — fires when the device display turns off, regardless of whether
+     * KDoc - fires when the device display turns off, regardless of whether
      * the in-app `Modifier.lockAware()` compensation is correct or complete.
      */
     @Inject lateinit var screenOffLockReceiver: ScreenOffLockReceiver
@@ -35,7 +35,7 @@ class OneKeyApp : Application() {
 
     /**
      * Shared decrypted vault snapshot. Injected here (with no other consumers in
-     * this PR) so Hilt instantiates it on app startup — the store's `init` block
+     * this PR) so Hilt instantiates it on app startup - the store's `init` block
      * installs the synchronous `VaultLockHook` on [com.onekey.core.security.VaultKeyHolder].
      * Without this injection the hook never registers and the lock-clear guarantee
      * the store provides is silently absent on first lock(). Field is unused beyond

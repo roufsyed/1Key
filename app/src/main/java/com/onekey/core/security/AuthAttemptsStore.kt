@@ -14,7 +14,7 @@ import javax.inject.Singleton
  * vault lock/unlock cycles since [LockReasonStore] takes over from there.
  *
  * Backed by AtomicInteger so the counter stays correct if a future caller invokes
- * from a non-Main dispatcher — the read-modify-write of `++` on a plain Int would
+ * from a non-Main dispatcher - the read-modify-write of `++` on a plain Int would
  * lose updates and let a user exceed the lockout cap.
  */
 @Singleton

@@ -154,9 +154,9 @@ fun BackupScreen(
                 is ImportExportEvent.ExportPasswordFailed -> {
                     isVerifyingExportPassword = false
                     exportPasswordError = if (event.attemptsRemaining == 1)
-                        "Wrong password — 1 attempt remaining before the vault locks."
+                        "Wrong password - 1 attempt remaining before the vault locks."
                     else
-                        "Wrong password — ${event.attemptsRemaining} attempts remaining."
+                        "Wrong password - ${event.attemptsRemaining} attempts remaining."
                 }
                 is ImportExportEvent.ExportVaultLocked -> {
                     isVerifyingExportPassword = false
@@ -178,7 +178,7 @@ fun BackupScreen(
         if (state is ImportExportUiState.ImportPreview) {
             importDialogOpen = true
         }
-        // While the import dialog is open it owns its own success/error rendering —
+        // While the import dialog is open it owns its own success/error rendering -
         // suppress the generic result dialog so they don't stack.
         if (importDialogOpen) return@LaunchedEffect
         when (val s = state) {
@@ -239,7 +239,7 @@ fun BackupScreen(
                     Text("Encrypt export", style = MaterialTheme.typography.bodyMedium)
                     Text(
                         if (encryptExport) "Protected with your master password"
-                        else "Unprotected — anyone can read it",
+                        else "Unprotected - anyone can read it",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -265,7 +265,7 @@ fun BackupScreen(
                 )
             } else {
                 Text(
-                    "NOT encrypted — anyone who gets this file can read all your passwords.",
+                    "NOT encrypted - anyone who gets this file can read all your passwords.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -291,7 +291,7 @@ fun BackupScreen(
             BackupSectionHeader("Import")
 
             Text(
-                "Picks up your file format automatically — just select any .json or .csv credential export.",
+                "Picks up your file format automatically - just select any .json or .csv credential export.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -382,8 +382,8 @@ fun BackupScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        "Unencrypted exports are plain readable files. Anyone who finds your backup — " +
-                            "on your device, in cloud storage, or sent by mistake — can read every " +
+                        "Unencrypted exports are plain readable files. Anyone who finds your backup - " +
+                            "on your device, in cloud storage, or sent by mistake - can read every " +
                             "password without any tools or technical knowledge.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -736,7 +736,7 @@ private fun ImportGuideCard() {
                     ) {
                         Text(
                             "Use AirDrop, a USB cable, email-to-self, or cloud storage (iCloud Drive, Google Drive). " +
-                                "The exported file is plain text — handle it carefully and delete it once the import is done.",
+                                "The exported file is plain text - handle it carefully and delete it once the import is done.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -750,7 +750,7 @@ private fun ImportGuideCard() {
                     ) {
                         Text(
                             "Tap \"Import Credentials\" above and pick your file. " +
-                                "1Key detects JSON and CSV automatically — no format selection needed.",
+                                "1Key detects JSON and CSV automatically - no format selection needed.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -765,7 +765,7 @@ private fun ImportGuideCard() {
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         TransferRow(good = true, "Titles, usernames, passwords, URLs, and notes")
-                        TransferRow(good = true, "Folders and groups — imported as 1Key categories")
+                        TransferRow(good = true, "Folders and groups - imported as 1Key categories")
                         TransferRow(good = true, "TOTP / 2FA secrets, if included in the export")
                         TransferRow(good = true, "Duplicates are detected and skipped automatically")
                     }
@@ -778,19 +778,19 @@ private fun ImportGuideCard() {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         TransferRow(
                             good = false,
-                            "Google Passwords never exports TOTP secrets — you'll need to re-scan those QR codes manually",
+                            "Google Passwords never exports TOTP secrets - you'll need to re-scan those QR codes manually",
                         )
                         TransferRow(
                             good = false,
-                            "File attachments and documents don't transfer — text credentials only",
+                            "File attachments and documents don't transfer - text credentials only",
                         )
                         TransferRow(
                             good = false,
-                            "Credit cards, addresses, and identity items become generic credentials with custom fields — they may look different",
+                            "Credit cards, addresses, and identity items become generic credentials with custom fields - they may look different",
                         )
                         TransferRow(
                             good = false,
-                            "Proprietary encrypted formats (.1pux from 1Password, .kdbx from KeePass) can't be imported directly — export as CSV from those apps instead",
+                            "Proprietary encrypted formats (.1pux from 1Password, .kdbx from KeePass) can't be imported directly - export as CSV from those apps instead",
                         )
                         TransferRow(
                             good = false,
@@ -912,7 +912,7 @@ private fun ImportPreviewDialog(
         onDismissRequest = { if (phase == ImportDialogPhase.Preview) onCancelPreview() },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            // Back-press only closes during Preview — other phases require explicit
+            // Back-press only closes during Preview - other phases require explicit
             // user choice so we don't lose state mid-transaction.
             dismissOnBackPress = phase == ImportDialogPhase.Preview,
             dismissOnClickOutside = false,
@@ -933,7 +933,7 @@ private fun ImportPreviewDialog(
                 )
                 HorizontalDivider()
 
-                // Body — animated phase transitions. Default fade+scale gives a
+                // Body - animated phase transitions. Default fade+scale gives a
                 // gentle handoff between phases without a structural reflow.
                 AnimatedContent(
                     targetState = phase,
@@ -1077,7 +1077,7 @@ private fun ImportDialogActions(
                 }
             }
             ImportDialogPhase.Importing -> {
-                // No actions while the save is in flight — leaving the dialog mid-write
+                // No actions while the save is in flight - leaving the dialog mid-write
                 // could orphan partial state.
                 Spacer(modifier = Modifier.weight(1f).height(40.dp))
             }
@@ -1360,7 +1360,7 @@ private fun ReviewPhaseBody(
             )
             plan.conflicts.forEach { conflict ->
                 Text(
-                    "• ${conflict.existing.title.ifBlank { "(untitled)" }} — " +
+                    "• ${conflict.existing.title.ifBlank { "(untitled)" }} - " +
                         conflict.conflictingFields.joinToString(", ") + " differ" +
                         if (conflict.restoreFromBin) " · in recycle bin" else "",
                     style = MaterialTheme.typography.bodySmall,
@@ -1502,7 +1502,7 @@ private fun ErrorPhaseBody(message: String) {
                 textAlign = TextAlign.Center,
             )
             Text(
-                "Your data is unchanged. Try again or cancel — your file selection and choices are preserved.",
+                "Your data is unchanged. Try again or cancel - your file selection and choices are preserved.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -1547,7 +1547,7 @@ private fun ResultBreakdownCard(result: ImportResult) {
                             result.skipped.forEach { sk ->
                                 Text(
                                     sk.title.ifBlank { "(no title)" } +
-                                        if (sk.username.isNotBlank()) " — ${sk.username}" else "",
+                                        if (sk.username.isNotBlank()) " - ${sk.username}" else "",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(start = 48.dp, end = 16.dp, top = 2.dp, bottom = 2.dp),
@@ -1680,7 +1680,7 @@ private fun CountUpText(
 
 /**
  * Horizontally scrolling preview band. Cards are 82% of dialog width so the next card
- * "peeks" in — that's the affordance for "swipe to see more". Pager counter shows
+ * "peeks" in - that's the affordance for "swipe to see more". Pager counter shows
  * "n of total" below the row when there's more than one sample.
  */
 @Composable
@@ -1798,7 +1798,7 @@ private fun PreviewCredentialCard(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            // Title row with type icon — always shown.
+            // Title row with type icon - always shown.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -1839,7 +1839,7 @@ private fun PreviewCredentialCard(
             }
 
             // Each row wraps in AnimatedVisibility so toggle flips animate the row in/out
-            // while the user can see the card. This is the "live cross-talk" — the panel
+            // while the user can see the card. This is the "live cross-talk" - the panel
             // below the card (toggles) directly drives motion in the card above.
             AnimatedRow(visible = opts.username && credential.username.isNotBlank()) {
                 PreviewFieldRow(Icons.Default.Person, credential.username)
@@ -1898,7 +1898,7 @@ private fun PreviewCredentialCard(
                 }
             }
 
-            // Empty-state — shown when every optional field is toggled off.
+            // Empty-state - shown when every optional field is toggled off.
             val anyVisible = (opts.username && credential.username.isNotBlank()) ||
                 (opts.password && credential.password.isNotBlank()) ||
                 (opts.url && credential.url.isNotBlank()) ||
@@ -1990,7 +1990,7 @@ private fun ImportSummaryRow(
         )
         if (result.skipped.isNotEmpty()) {
             Text(
-                "${result.skipped.size} skipped — tap to view",
+                "${result.skipped.size} skipped - tap to view",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textDecoration = TextDecoration.Underline,
@@ -1999,7 +1999,7 @@ private fun ImportSummaryRow(
         }
         if (result.failed.isNotEmpty()) {
             Text(
-                "${result.failed.size} failed to parse — tap to view",
+                "${result.failed.size} failed to parse - tap to view",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 textDecoration = TextDecoration.Underline,

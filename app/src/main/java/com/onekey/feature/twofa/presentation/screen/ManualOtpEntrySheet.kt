@@ -79,7 +79,7 @@ fun ManualOtpEntrySheet(
     /**
      * True when the form holds anything the user typed or any non-default
      * advanced setting. Drives the "Discard 2FA entry?" guard on every dismiss
-     * path — Cancel button, swipe-to-hide, scrim tap, system back. We compare
+     * path - Cancel button, swipe-to-hide, scrim tap, system back. We compare
      * advanced fields against the literal default values rather than tracking
      * a "has touched" flag because rememberSaveable only persists values, not
      * touch history; equality with defaults is the source of truth that
@@ -146,8 +146,8 @@ fun ManualOtpEntrySheet(
     /**
      * Block hide-attempts (swipe-down, scrim tap, system back) when the form
      * is dirty by returning `false` and surfacing the discard dialog instead.
-     * Programmatic dismissal — when [onDismiss] / [onSaved] flips the parent's
-     * `showSheet` flag — bypasses this guard entirely because the sheet is
+     * Programmatic dismissal - when [onDismiss] / [onSaved] flips the parent's
+     * `showSheet` flag - bypasses this guard entirely because the sheet is
      * removed from composition without going through `animateToDismiss`, which
      * is the only call site Material3 consults `confirmValueChange` from.
      *
@@ -168,7 +168,7 @@ fun ManualOtpEntrySheet(
 
     /**
      * System-back inside an open `ModalBottomSheet` runs through the sheet's
-     * own predictive-back handling, which calls `confirmValueChange` — so the
+     * own predictive-back handling, which calls `confirmValueChange` - so the
      * guard above is sufficient. We still install a [BackHandler] gated on the
      * discard dialog being open: with the dialog up, system-back should close
      * the dialog ("Keep editing"), not unwind the discard flow.
@@ -354,7 +354,7 @@ private fun SecretField(
         OtpSecretValidator.Result.Invalid.Empty -> null
         OtpSecretValidator.Result.Invalid.GeneratorFailure -> "This setup key isn't usable. Double-check the value."
         OtpSecretValidator.Result.Invalid.TooShort ->
-            "Too short — needs at least ${OtpSecretValidator.MIN_BASE32_CHARS} characters."
+            "Too short - needs at least ${OtpSecretValidator.MIN_BASE32_CHARS} characters."
         else -> null
     }
     Column {
@@ -421,7 +421,7 @@ private fun AdvancedSection(
     AnimatedVisibility(visible = expanded) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // Type radio. STEAM is auto-detected by issuer name, so we expose only
-            // the two RFC types here — keeps the UI pickup-and-go friendly.
+            // the two RFC types here - keeps the UI pickup-and-go friendly.
             Column {
                 Text(
                     text = "Type",
@@ -492,7 +492,7 @@ private fun AdvancedSection(
 }
 
 /**
- * Small dropdown helper used for Algorithm and Digits — both are bounded enums
+ * Small dropdown helper used for Algorithm and Digits - both are bounded enums
  * the validator already constrains, so the UI need only present the legal set.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -540,7 +540,7 @@ private const val SECRET_VALIDATION_DEBOUNCE_MILLIS = 250L
 
 /**
  * Initial text for the HOTP counter field. Compared against `counter` to
- * decide whether the user has touched it — kept as a constant so the
+ * decide whether the user has touched it - kept as a constant so the
  * `hasChanges` derivation and the field's initialiser can't drift.
  */
 private const val DEFAULT_COUNTER_TEXT = "0"

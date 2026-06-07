@@ -6,7 +6,7 @@ import com.onekey.core.domain.model.OtpType
 /**
  * Validates a user-supplied 2FA secret string before it's wrapped in [OtpParams] and
  * persisted. Mirrors the normalisation [OtpAuthUriParser] applies to QR-scanned URIs
- * — strip whitespace, uppercase, drop padding — so a manually-typed secret matches a
+ * - strip whitespace, uppercase, drop padding - so a manually-typed secret matches a
  * scanned one byte-for-byte.
  *
  * Stays a stateless `object` because the validation is pure (no Hilt graph, no
@@ -16,7 +16,7 @@ import com.onekey.core.domain.model.OtpType
  *
  * The result is a sealed type rather than `String?` / `Boolean` so the manual-entry
  * sheet can render type-specific error copy ("contains characters that aren't a-z or
- * 2-7", "too short — needs at least 16 characters") without inventing message strings
+ * 2-7", "too short - needs at least 16 characters") without inventing message strings
  * at the validation site.
  */
 object OtpSecretValidator {
@@ -44,7 +44,7 @@ object OtpSecretValidator {
             /**
              * The secret normalised cleanly but the generator couldn't produce a
              * code (e.g. base32 decoded to zero bytes after the alphabet filter).
-             * Catches edge cases the character-by-character check misses — for
+             * Catches edge cases the character-by-character check misses - for
              * instance a secret consisting entirely of `=` padding.
              */
             data object GeneratorFailure : Invalid()
@@ -52,7 +52,7 @@ object OtpSecretValidator {
     }
 
     /**
-     * @param input raw user input — may have spaces, mixed case, padding.
+     * @param input raw user input - may have spaces, mixed case, padding.
      * @param generator used for the smoke-test code generation. Injected rather than
      *   instantiated so the validator stays stateless and tests can swap it.
      */
@@ -70,8 +70,8 @@ object OtpSecretValidator {
 
         // Last-line-of-defence smoke test. We construct OtpParams with default
         // TOTP params (matching what the manual-entry MVP saves) and try to
-        // generate one code. Any exception — base32 decoding to zero bytes, an
-        // unexpected Mac failure — collapses to GeneratorFailure rather than
+        // generate one code. Any exception - base32 decoding to zero bytes, an
+        // unexpected Mac failure - collapses to GeneratorFailure rather than
         // crashing the validator.
         val smokeOk = runCatching {
             generator.generate(OtpParams(type = OtpType.TOTP, secret = cleaned))

@@ -17,7 +17,7 @@ private val KEY_VAULT_VERSION = intPreferencesKey("vault_version")
  * fields across files with different version counters will fail GCM authentication.
  *
  * Counter starts at 0 for new vaults and existing vaults that predate this field.
- * It is intentionally not decremented or reset — only ever incremented.
+ * It is intentionally not decremented or reset - only ever incremented.
  */
 @Singleton
 class VaultVersionTracker @Inject constructor(

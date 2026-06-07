@@ -41,11 +41,11 @@ import androidx.compose.ui.text.input.VisualTransformation
  * if the user pastes a long string (one event), or types char-by-char
  * (many events), the 5-second throttle inside
  * [com.onekey.core.security.AutoLockManager.onUserActivity] caps the actual
- * timer-reset rate — pinging cheaply per keystroke is fine.
+ * timer-reset rate - pinging cheaply per keystroke is fine.
  */
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OutlinedTextField — String
+// OutlinedTextField - String
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -106,7 +106,7 @@ fun LockAwareOutlinedTextField(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// OutlinedTextField — TextFieldValue
+// OutlinedTextField - TextFieldValue
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -167,7 +167,7 @@ fun LockAwareOutlinedTextField(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TextField (filled) — String
+// TextField (filled) - String
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
@@ -228,7 +228,7 @@ fun LockAwareTextField(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TextField (filled) — TextFieldValue
+// TextField (filled) - TextFieldValue
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Composable

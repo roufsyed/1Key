@@ -43,13 +43,13 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Behavioural locks for [VaultViewModel.searchResults] — the SearchState
+ * Behavioural locks for [VaultViewModel.searchResults] - the SearchState
  * sealed flow derived from the shared
  * [com.onekey.core.data.snapshot.VaultSnapshotStore]:
  *
  *  - blank query yields Idle regardless of snapshot state,
  *  - snapshot Locked with non-blank query yields Idle (lock-screen overlay
- *    transition window — the search composable should not be reachable
+ *    transition window - the search composable should not be reachable
  *    while truly locked, but Idle is the safe terminal),
  *  - snapshot Loading with non-blank query yields Loading (never flashes
  *    "No results" before the first decrypt pass completes),
@@ -134,7 +134,7 @@ class VaultViewModelTest {
     }
 
     @Test fun snapshot_Loaded_does_not_filter_by_username_only_title() = runTest(testDispatcher) {
-        // Pre-PR3 vault search filtered on title only (legacy slow-path) —
+        // Pre-PR3 vault search filtered on title only (legacy slow-path) -
         // preserve that semantic. Autofill's broader title+username search
         // is a deliberately distinct surface.
         snapshot.value = SnapshotState.Loaded(
@@ -219,7 +219,7 @@ class VaultViewModelTest {
 
     @Test fun snapshot_Loaded_empty_with_query_yields_Loaded_empty() = runTest(testDispatcher) {
         // Unlocked, decrypted, but the vault is empty. The search composable
-        // should reach the "No results for X" branch — same UX as pre-PR3.
+        // should reach the "No results for X" branch - same UX as pre-PR3.
         snapshot.value = SnapshotState.Loaded(emptyList())
         val vm = buildVm()
         vm.setSearchQuery("g")
@@ -233,7 +233,7 @@ class VaultViewModelTest {
         val vm = buildVm()
         vm.setSearchQuery("   ")
         advanceUntilIdle()
-        // String.isBlank() is true for whitespace-only — must not run a real
+        // String.isBlank() is true for whitespace-only - must not run a real
         // filter pass that would surface every credential whose title contains
         // a space (i.e. almost all of them).
         assertTrue(vm.searchResults.value is VaultViewModel.SearchState.Idle)
@@ -243,7 +243,7 @@ class VaultViewModelTest {
         // Simulates a save / toggle / delete that fires Room invalidation but
         // doesn't change the filtered slice for the active query. With
         // distinctUntilChanged on the combine output, the VM must NOT publish
-        // a fresh Loaded — gratuitous Compose State churn otherwise.
+        // a fresh Loaded - gratuitous Compose State churn otherwise.
         val initial = listOf(
             snap("1", "GitHub", 1_000),
             snap("2", "Gmail", 2_000),
@@ -271,7 +271,7 @@ class VaultViewModelTest {
     @Test fun migration_in_flight_then_settled_promotes_to_Loaded() = runTest(testDispatcher) {
         // Reproduces the cipher-migration window: snapshot reports Loading
         // while CredentialCipherMigrator rewrites legacy rows. UI must show
-        // the spinner — never the empty state — for the duration.
+        // the spinner - never the empty state - for the duration.
         snapshot.value = SnapshotState.Loading
         val vm = buildVm()
         vm.setSearchQuery("g")
@@ -329,7 +329,7 @@ class VaultViewModelTest {
             query: String,
             tag: String,
             sortOrder: CredentialSortOrder,
-        ): Flow<PagingData<Credential>> = error("unused — VaultViewModel uses snapshot path")
+        ): Flow<PagingData<Credential>> = error("unused - VaultViewModel uses snapshot path")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")
         override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = error("unused")
         override suspend fun getCredential(id: String): AppResult<Credential> = error("unused")

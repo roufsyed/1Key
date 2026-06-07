@@ -18,15 +18,15 @@ private const val CLIPBOARD_CLEAR_SECONDS = 30
 /**
  * Application-singleton clipboard manager for sensitive values. Provides:
  *
- *  1. **Sensitive marking** — on API 33+ the clip carries [ClipDescription.EXTRA_IS_SENSITIVE]
+ *  1. **Sensitive marking** - on API 33+ the clip carries [ClipDescription.EXTRA_IS_SENSITIVE]
  *     so the OS paste-preview toast doesn't display the value and the clipboard manager
  *     skips persisting the entry.
- *  2. **Conditional auto-clear** — after [CLIPBOARD_CLEAR_SECONDS] the clipboard is wiped
+ *  2. **Conditional auto-clear** - after [CLIPBOARD_CLEAR_SECONDS] the clipboard is wiped
  *     only if it still contains the value we put there. If the user copied something else
  *     from another app in the meantime, we leave their content alone.
- *  3. **Navigation-safe scheduling** — the clear coroutine runs in this singleton's
+ *  3. **Navigation-safe scheduling** - the clear coroutine runs in this singleton's
  *     scope, so it survives screen navigation, app backgrounding, and vault auto-lock.
- *  4. **Visible countdown** — [countdown] emits the remaining seconds so UI can display
+ *  4. **Visible countdown** - [countdown] emits the remaining seconds so UI can display
  *     a "Clipboard clears in Xs" badge while the auto-clear is pending.
  */
 @Singleton

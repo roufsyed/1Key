@@ -5,7 +5,7 @@ package com.onekey.core.domain.model
  *
  * - [TOTP] is RFC 6238 time-based, the de-facto standard 99% of issuers use.
  * - [HOTP] is RFC 4226 counter-based, common on hardware tokens and a few legacy systems.
- *   Codes only advance when the user explicitly taps "generate next" — they never rotate
+ *   Codes only advance when the user explicitly taps "generate next" - they never rotate
  *   on a timer.
  * - [STEAM] is Steam's proprietary variant: TOTP under the hood, but the truncated bytes
  *   are mapped onto a custom 26-letter alphabet so codes look like `RXKBC` instead of

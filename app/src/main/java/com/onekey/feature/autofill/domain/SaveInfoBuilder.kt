@@ -14,7 +14,7 @@ import javax.inject.Singleton
  *
  *  - `SAVE_DATA_TYPE_*` bits are computed dynamically from what the parser
  *    found. A password-reset form with only password fields ships
- *    `SAVE_DATA_TYPE_PASSWORD` alone — combining with `_USERNAME` would
+ *    `SAVE_DATA_TYPE_PASSWORD` alone - combining with `_USERNAME` would
  *    cause the framework to suppress the save prompt when no username is
  *    present (the required-IDs contract is "all listed must change").
  *
@@ -22,7 +22,7 @@ import javax.inject.Singleton
  *    `FLAG_COMPATIBILITY_MODE_REQUEST`, password values arrive masked
  *    (asterisks) at save time. Persisting those would write garbage into
  *    the vault. We return `null` so no save prompt fires for that flow.
- *    Fill still works in compat mode — only save is suppressed.
+ *    Fill still works in compat mode - only save is suppressed.
  *
  *  - `FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE` is always set so multi-screen
  *    sign-up flows still produce one consolidated save prompt.
@@ -56,7 +56,7 @@ class SaveInfoBuilder @Inject constructor() {
         if (identityId != null) {
             // Both username and email collapse to the SAVE_DATA_TYPE_USERNAME bit
             // when present alongside a password (Android does not have a
-            // SAVE_DATA_TYPE_EMAIL — emails ride the username bit).
+            // SAVE_DATA_TYPE_EMAIL - emails ride the username bit).
             typeBits = typeBits or SaveInfo.SAVE_DATA_TYPE_USERNAME
             required += identityId
         }

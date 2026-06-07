@@ -22,7 +22,7 @@ import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 /**
  * Bottom-sheet picker shown when the 2FA list FAB is tapped. Two choices:
  * scan a QR code or enter the secret manually. Modeled after Google
- * Authenticator's add-account sheet — the most familiar pattern for users
+ * Authenticator's add-account sheet - the most familiar pattern for users
  * coming from another authenticator.
  *
  * Composable rather than a NavHost route because both follow-up flows

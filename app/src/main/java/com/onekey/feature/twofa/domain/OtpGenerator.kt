@@ -16,7 +16,7 @@ import kotlin.math.pow
  * counter-based, or Steam-shaped.
  *
  * Stateless: every call decodes the secret fresh and allocates a [Mac] instance.
- * That's deliberate — a cache keyed by secret would have to invalidate on user-driven
+ * That's deliberate - a cache keyed by secret would have to invalidate on user-driven
  * secret changes and survive multi-thread access; the per-generate cost (microseconds)
  * isn't worth that complexity. If profiling ever shows otherwise, a per-secret cache
  * fits cleanly here without changing the public surface.
@@ -31,7 +31,7 @@ class OtpGenerator @Inject constructor() {
 
     /**
      * @param timeMillis system time used for TOTP/STEAM counter derivation. Ignored
-     * for HOTP. Caller-supplied for testability — production calls take the default.
+     * for HOTP. Caller-supplied for testability - production calls take the default.
      */
     fun generate(params: OtpParams, timeMillis: Long = System.currentTimeMillis()): OtpCode {
         val counter = when (params.type) {
@@ -57,7 +57,7 @@ class OtpGenerator @Inject constructor() {
 
     /**
      * Milliseconds until the current TOTP/STEAM rotation window ends. Used by UI
-     * timers that align their tick to the rollover. Undefined for HOTP — caller
+     * timers that align their tick to the rollover. Undefined for HOTP - caller
      * shouldn't ask.
      */
     fun getRemainingMillis(periodSeconds: Long, timeMillis: Long = System.currentTimeMillis()): Long {
@@ -109,7 +109,7 @@ class OtpGenerator @Inject constructor() {
 
 /**
  * The generator's output. [remainingSeconds] and [progress] are non-null for
- * time-based variants (TOTP, STEAM) and null for HOTP — HOTP advances per tap,
+ * time-based variants (TOTP, STEAM) and null for HOTP - HOTP advances per tap,
  * not per second, so a "remaining" value is meaningless. Forcing UI to handle
  * the null branches makes "don't show a timer for HOTP" structurally enforced
  * rather than relying on convention.

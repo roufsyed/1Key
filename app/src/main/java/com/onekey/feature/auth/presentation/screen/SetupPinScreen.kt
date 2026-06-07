@@ -52,18 +52,18 @@ fun SetupPinScreen(
     var newPinInput by rememberSaveable { mutableStateOf("") }
     var confirmPinInput by rememberSaveable { mutableStateOf("") }
 
-    // Set when the user uses the Forgot-PIN escape hatch — back-navigation from STEP_ENTER_NEW
+    // Set when the user uses the Forgot-PIN escape hatch - back-navigation from STEP_ENTER_NEW
     // exits the screen rather than returning to STEP_VERIFY_CURRENT (no point re-asking
     // for the current PIN once master-password proof has bypassed it).
     var bypassedCurrentPin by rememberSaveable { mutableStateOf(false) }
     var currentPinError by rememberSaveable { mutableStateOf<String?>(null) }
     // Soft cap: 3 wrong current PINs disables the field but doesn't lock the vault. The
-    // user is already inside an unlocked vault — full lockout would be UX-hostile.
+    // user is already inside an unlocked vault - full lockout would be UX-hostile.
     var currentPinExhausted by rememberSaveable { mutableStateOf(false) }
     var showMismatch by rememberSaveable { mutableStateOf(false) }
 
     var showForgotPinDialog by rememberSaveable { mutableStateOf(false) }
-    // SecurePasswordFieldState rather than rememberSaveable String — reduces the window during
+    // SecurePasswordFieldState rather than rememberSaveable String - reduces the window during
     // which the master-password String lives on the JVM heap. Does not survive rotation
     // (intentional: passwords should not persist in InstanceState).
     val forgotPinPasswordState = rememberSecurePasswordFieldState()
@@ -97,9 +97,9 @@ fun SetupPinScreen(
                 is AuthEvent.CurrentPinFailed -> {
                     currentPinInput = ""
                     currentPinError = if (event.remaining == 1)
-                        "Wrong PIN — 1 attempt remaining."
+                        "Wrong PIN - 1 attempt remaining."
                     else
-                        "Wrong PIN — ${event.remaining} attempts remaining."
+                        "Wrong PIN - ${event.remaining} attempts remaining."
                 }
                 AuthEvent.CurrentPinExhausted -> {
                     currentPinInput = ""
@@ -129,7 +129,7 @@ fun SetupPinScreen(
                     forgotPinPasswordError = false
                     forgotPinAttemptsRemaining = 3
                     // The "Vault Locked" explanation is handled on LockScreen via
-                    // LockReasonStore — the auto-lock observer routes us there.
+                    // LockReasonStore - the auto-lock observer routes us there.
                 }
                 else -> Unit
             }
@@ -323,7 +323,7 @@ fun SetupPinScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         "Enter your master password to bypass the current-PIN check. " +
-                            "Once verified you can set a new PIN — the existing one will be replaced.",
+                            "Once verified you can set a new PIN - the existing one will be replaced.",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
@@ -340,8 +340,8 @@ fun SetupPinScreen(
                             {
                                 val remaining = forgotPinAttemptsRemaining
                                 Text(
-                                    if (remaining == 1) "Incorrect password — 1 attempt remaining before vault locks."
-                                    else "Incorrect password — $remaining attempts remaining."
+                                    if (remaining == 1) "Incorrect password - 1 attempt remaining before vault locks."
+                                    else "Incorrect password - $remaining attempts remaining."
                                 )
                             }
                         } else null,

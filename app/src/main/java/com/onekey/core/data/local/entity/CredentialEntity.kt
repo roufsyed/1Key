@@ -16,7 +16,7 @@ data class CredentialEntity(
     @PrimaryKey val id: String,
     // Plaintext title (legacy). Read for v0/v1 rows; cleared and ignored on
     // v2+ rows in favour of `titleEncrypted`. Kept as a non-null column for
-    // schema compat — empty string for v2 rows. See `cipherVersion` doc.
+    // schema compat - empty string for v2 rows. See `cipherVersion` doc.
     @ColumnInfo(name = "title") val title: String,
     // Title ciphertext + IV. Populated on cipher_version >= 2; null otherwise.
     // Encrypted under the HKDF title-subkey ("1key-title-enc-v1") with
@@ -38,7 +38,7 @@ data class CredentialEntity(
     // Last "used" timestamp from the source export (Firefox `timeLastUsed`,
     // similar in others). Nullable so legacy rows that pre-date DB v10 stay
     // null instead of being misread as "accessed at epoch 0". Not auto-updated
-    // when the user views a credential — purely import-driven for now.
+    // when the user views a credential - purely import-driven for now.
     @ColumnInfo(name = "accessed_at") val accessedAt: Long? = null,
     @ColumnInfo(name = "iv_username") val ivUsername: ByteArray,
     @ColumnInfo(name = "iv_password") val ivPassword: ByteArray,
@@ -55,12 +55,12 @@ data class CredentialEntity(
     @ColumnInfo(name = "deleted_at") val deletedAt: Long? = null,
     // ── 2FA params (added in DB v9) ──────────────────────────────────────────
     // These are *metadata* describing how to use `totpSecretEncrypted`, not secrets
-    // themselves — algorithm/period/digits/counter being plaintext doesn't help an
+    // themselves - algorithm/period/digits/counter being plaintext doesn't help an
     // attacker without the secret. Storing them as columns (vs. an encrypted blob)
     // lets the DAO partition rotating-vs-HOTP entries with a WHERE clause, which is
     // load-bearing for keeping HOTP out of the per-second recompute loop.
     //
-    // For pre-v9 rows the DEFAULT clauses on MIGRATION_8_9 yield TOTP / SHA1 / 6 / 30 —
+    // For pre-v9 rows the DEFAULT clauses on MIGRATION_8_9 yield TOTP / SHA1 / 6 / 30 -
     // exactly the constants the old `TotpGenerator` hard-coded, so existing entries
     // produce bit-identical codes.
     @ColumnInfo(name = "otp_type", defaultValue = "TOTP") val otpType: String = "TOTP",
@@ -68,7 +68,7 @@ data class CredentialEntity(
     @ColumnInfo(name = "totp_digits", defaultValue = "6") val totpDigits: Int = 6,
     @ColumnInfo(name = "totp_period", defaultValue = "30") val totpPeriod: Long = 30L,
     // Null for non-HOTP entries; persisted counter for HOTP. Increment is a transactional
-    // DAO write (CredentialDao.atomicIncrementHotpCounter) — never mutated in memory.
+    // DAO write (CredentialDao.atomicIncrementHotpCounter) - never mutated in memory.
     @ColumnInfo(name = "hotp_counter") val hotpCounter: Long? = null,
     // ── Cipher version (added in DB v12) ─────────────────────────────────────
     // 0 = legacy: AES-GCM with the raw vault key, no AAD on credential fields.
@@ -80,7 +80,7 @@ data class CredentialEntity(
     //
     // Read path dispatches on this value; write path always emits v2. Existing
     // rows are silently re-encrypted to v2 on the next unlock by
-    // CredentialCipherMigrator — without bumping `updated_at`.
+    // CredentialCipherMigrator - without bumping `updated_at`.
     @ColumnInfo(name = "cipher_version", defaultValue = "0") val cipherVersion: Int = 0,
 ) {
     override fun equals(other: Any?): Boolean {
