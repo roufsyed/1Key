@@ -25,6 +25,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -59,6 +60,19 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        // Read the user's dark-theme preference synchronously before the first
+        // composition. Without this, `collectAsStateWithLifecycle` would render
+        // one frame with `initialValue = false` (light) before the real value
+        // arrives - producing a white flash on every rotation when the user
+        // actually has dark mode enabled. The `prefs` StateFlow in
+        // AppPreferencesRepositoryImpl is Eagerly started at app construction
+        // (Hilt @Singleton via OneKeyApp field injection), so the cached value
+        // is already in memory by the time MainActivity.onCreate runs - this
+        // first() returns in microseconds on rotation. On the very first app
+        // launch it may briefly block while DataStore loads its file, which is
+        // acceptable for that one-time cold-start path.
+        val initialDarkTheme = runBlocking { appPrefs.isDarkTheme().first() }
+
         setContent {
             // Read isSetupComplete ONCE for the lifetime of this Activity composition.
             // NavHost.startDestination is one-shot per graph instance, but if we tracked
@@ -73,7 +87,7 @@ class MainActivity : FragmentActivity() {
                 initialSetupComplete = authRepository.isSetupComplete().first()
             }
             val isDarkTheme by appPrefs.isDarkTheme()
-                .collectAsStateWithLifecycle(initialValue = false)
+                .collectAsStateWithLifecycle(initialValue = initialDarkTheme)
 
             OneKeyTheme(darkTheme = isDarkTheme) {
                 // Provide the user-activity ping at the composition root so every

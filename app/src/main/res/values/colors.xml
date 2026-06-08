@@ -12,4 +12,13 @@
     <color name="autofill_chip_accent">#1A56DB</color>
     <color name="autofill_chip_icon_bg">#1A56DB</color>
     <color name="autofill_chip_icon_fg">#FFFFFF</color>
+
+    <!--
+        Activity window background. Mirrors MaterialTheme.colorScheme.background
+        in Theme.kt's LightColorScheme so the frames painted during Activity
+        recreation (e.g. rotation) match the Compose Surface that will replace
+        them - no white flash. The night variant in values-night/colors.xml
+        carries the dark equivalent.
+    -->
+    <color name="window_background">#F8FAFF</color>
 </resources>

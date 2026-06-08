@@ -15,4 +15,11 @@
     <color name="autofill_chip_accent">#7BA9FF</color>
     <color name="autofill_chip_icon_bg">#2A5FE0</color>
     <color name="autofill_chip_icon_fg">#FFFFFF</color>
+
+    <!--
+        Mirrors MaterialTheme.colorScheme.background in Theme.kt's
+        DarkColorScheme (the 1Password-neutral palette). See the comment in
+        values/colors.xml for why this exists.
+    -->
+    <color name="window_background">#1E1F24</color>
 </resources>

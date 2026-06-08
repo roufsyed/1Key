@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.OneKey" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.OneKey" parent="android:Theme.Material.Light.NoActionBar">
+        <!--
+            Activity window background. Without this, rotation (which recreates
+            MainActivity) shows the platform default of Theme.Material.Light -
+            a white surface - for the few frames between the old Compose
+            content tearing down and the new one drawing. Pointing at our
+            own @color/window_background, which has a values-night/ override,
+            makes the gap match the Compose Surface that lands on top.
+        -->
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
 </resources>
