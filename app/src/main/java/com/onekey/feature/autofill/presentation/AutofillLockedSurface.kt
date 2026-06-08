@@ -1,5 +1,7 @@
 package com.onekey.feature.autofill.presentation
 
+import android.app.Activity
+import android.view.ViewTreeObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,17 +28,28 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import com.onekey.core.presentation.lockaware.PasswordUnlockSection
 import com.onekey.core.presentation.lockaware.PinUnlockSection
 import com.onekey.core.presentation.util.BiometricPromptController
@@ -45,6 +58,16 @@ import com.onekey.core.security.LockReason
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
+
+/**
+ * Same-frame jitter absorber applied AFTER the auto-trigger observes window
+ * focus returned. See `LockScreen.POST_FOCUS_SETTLE_MS` for the rationale -
+ * the two surfaces share the same race against power-press-driven onPause,
+ * and both gate on `View.hasWindowFocus()` which empirically dispatches on
+ * the main looper before `onPause` does, paired with `repeatOnLifecycle`
+ * and a re-check after the settle for defense in depth.
+ */
+private const val POST_FOCUS_SETTLE_MS = 50L
 
 /**
  * Shared lock surface for the autofill activities, replacing the per-activity
@@ -105,8 +128,12 @@ fun AutofillLockedSurface(
     // user back to the PIN screen while they're typing their password.
     var forcePasswordFallback by rememberSaveable { mutableStateOf(false) }
 
-    // Single-shot biometric auto-trigger flag. rememberSaveable so a rotation
-    // does not re-fire the prompt under a user who already dismissed it.
+    // Single-shot biometric auto-trigger flag.
+    //
+    // `rememberSaveable` so a rotation does not re-fire the prompt under a user
+    // who already dismissed it; the companion ON_PAUSE observer below resets it
+    // when the activity is actually going to background (screen-off, finish,
+    // navigation away) so the next ON_RESUME re-fires cleanly.
     var autoTriggeredBiometric by rememberSaveable { mutableStateOf(false) }
 
     // Listen for the PinAttemptsExhausted event so the autofill surface flips
@@ -134,29 +161,120 @@ fun AutofillLockedSurface(
 
     val context = LocalContext.current
 
-    // Auto-trigger biometric exactly once per surface entry, when:
-    //  - we haven't fired yet (rememberSaveable),
+    // Window-focus gate: a redundant guard on top of `repeatOnLifecycle(RESUMED)`
+    // that catches power-press races the lifecycle gate alone misses.
+    //
+    // Both the window-focus dispatch and `onPause` ride the main looper. In
+    // practice the focus-loss dispatch lands earlier on a power-press, so
+    // observing `hasWindowFocus == false` is an earlier "user has stopped
+    // looking" signal than the lifecycle's `RESUMED -> STARTED` transition.
+    // The combination survives heavy main-thread load (the autofill lock()
+    // path can block main for several hundred ms).
+    //
+    // Re-read `view.hasWindowFocus()` immediately after attaching the
+    // listener so the initial state catches up if focus was lost between
+    // the `remember` snapshot and the attach.
+    val view = LocalView.current
+    var hasWindowFocus by remember { mutableStateOf(view.hasWindowFocus()) }
+    DisposableEffect(view) {
+        val listener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            hasWindowFocus = focused
+        }
+        val attachedObserver = view.viewTreeObserver
+        attachedObserver.addOnWindowFocusChangeListener(listener)
+        hasWindowFocus = view.hasWindowFocus()
+        onDispose {
+            // Use the observer we attached to; if it has been killed (merged
+            // into a parent on view detach), fall back to the View's current
+            // ViewTreeObserver and swallow the documented IllegalStateException
+            // a dead observer raises on removal.
+            val target = if (attachedObserver.isAlive) attachedObserver else view.viewTreeObserver
+            try {
+                target.removeOnWindowFocusChangeListener(listener)
+            } catch (_: IllegalStateException) {
+                // Observer killed between the isAlive check and the call.
+                // The listener is unreachable anyway.
+            }
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // Reset the single-shot flag on real background transitions but NOT on
+    // configuration changes. The bug this fixes: pressing power on the
+    // autofill picker fires `biometricController.show()` while the activity
+    // is moving through ON_PAUSE -> ON_STOP; the system cancels that prompt,
+    // but `rememberSaveable` keeps `autoTriggeredBiometric == true`, so on
+    // screen-wake nothing re-fires and the user has to tap "Use biometric"
+    // manually. The `isChangingConfigurations` guard preserves the rotation
+    // invariant: rotating mid-prompt does not re-fire under a typing user.
+    //
+    // `biometricController.cancel()` is idempotent (BiometricPromptController.kt)
+    // and atomically releases the AutoLockManager inactivity suppression.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) {
+                val isConfigChange = (context as? Activity)?.isChangingConfigurations == true
+                if (!isConfigChange) {
+                    biometricController.cancel()
+                    autoTriggeredBiometric = false
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Auto-trigger biometric exactly once per surface entry.
+    //
+    // Two gates compose into the trigger:
+    //   1. `repeatOnLifecycle(RESUMED)` cancels the coroutine on ON_PAUSE.
+    //   2. `snapshotFlow { hasWindowFocus }.filter { it }.first()` suspends
+    //      until our window actually has user focus.
+    // Each gate alone is insufficient: a lifecycle-only gate races onPause
+    // dispatch (same main looper our lock() path can saturate), and a
+    // focus-only check would have a small read-vs-listener race. The
+    // combination catches the power-press race that the previous time-based
+    // delay missed under heavy main-thread load.
+    //
+    // The settle delay absorbs same-frame jitter. After settle, we re-check
+    // `hasWindowFocus` in the gate body: between `first()` and the body,
+    // a queued focus-loss could have flipped the flag back to false, and
+    // without the re-check we would fire on an unfocused window.
+    //
+    // The `autoTriggeredBiometric = true` latch is set AFTER
+    // `biometricController.show(...)` returns. A failure-to-mount (exception,
+    // host-cast misuse) leaves the latch unset so the next ON_RESUME cycle
+    // can retry.
+    //
+    // Gates inside the block (post-settle):
+    //  - we haven't fired yet (`rememberSaveable` flag),
+    //  - window focus is still ours (re-check vs `first()` race),
     //  - the unified atomic gate from AuthViewModel says biometric is OK
     //    (biometric pref on AND no lock reason - read together to avoid the
     //    cold-start race where one half flipped first),
-    //  - the OS reports biometric is currently available, AND
+    //  - the OS reports biometric is currently available,
     //  - the master-password recheck interval has not elapsed,
-    //  - the VM is sitting in Idle (avoids re-fire during a Loading→Unlocked
+    //  - the VM is sitting in Idle (avoids re-fire during a Loading->Unlocked
     //    transition where the gate momentarily re-emits the same value).
-    LaunchedEffect(biometricUnlockGate, requiresMasterPasswordRecheck, state) {
-        if (!autoTriggeredBiometric &&
-            state is AuthUiState.Idle &&
-            biometricUnlockGate.biometricEnabled &&
-            !biometricUnlockGate.lockReasonSet &&
-            canUseBiometric &&
-            !requiresMasterPasswordRecheck
-        ) {
-            autoTriggeredBiometric = true
-            biometricController.show(
-                onSuccess = { authViewModel.unlockWithBiometric() },
-                onError = { msg -> authViewModel.setBiometricError(msg) },
-                onAuthFailed = { authViewModel.recordBiometricFailure() },
-            )
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            snapshotFlow { hasWindowFocus }.filter { it }.first()
+            delay(POST_FOCUS_SETTLE_MS)
+            if (!autoTriggeredBiometric &&
+                hasWindowFocus &&
+                state is AuthUiState.Idle &&
+                biometricUnlockGate.biometricEnabled &&
+                !biometricUnlockGate.lockReasonSet &&
+                canUseBiometric &&
+                !requiresMasterPasswordRecheck
+            ) {
+                biometricController.show(
+                    onSuccess = { authViewModel.unlockWithBiometric() },
+                    onError = { msg -> authViewModel.setBiometricError(msg) },
+                    onAuthFailed = { authViewModel.recordBiometricFailure() },
+                )
+                autoTriggeredBiometric = true
+            }
         }
     }
 
