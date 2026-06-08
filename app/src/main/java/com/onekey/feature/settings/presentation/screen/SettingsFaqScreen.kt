@@ -198,22 +198,16 @@ fun SettingsFaqScreen(
             Spacer(Modifier.height(8.dp))
             FaqGroup("Backup & migration") {
                 FaqItem(
-                    question = "Why doesn't 1Key support automatic backups, and will it ever?",
-                    answer = "No, and we don't plan to. Here's why.\n\n" +
-                        "Backup files are encrypted with your master password. For a backup to " +
-                        "run automatically - especially on the unlock methods most people use " +
-                        "day to day, biometric and PIN - 1Key would need to keep your master " +
-                        "password on the device in some retrievable form, even if " +
-                        "hardware-protected.\n\n" +
-                        "That conflicts with our core promise: your master password lives only " +
-                        "in your head, never on this device. It's the one secret we keep out of " +
-                        "storage entirely, and we're not breaking that for any feature, no " +
-                        "matter how convenient it would be.\n\n" +
-                        "What we offer instead: one-tap manual backup from Settings. You save " +
-                        "the encrypted file wherever suits you - a local folder, a USB drive, " +
-                        "or a cloud-synced folder you control. We recommend backing up after " +
-                        "big changes (new accounts, password updates, before app updates). The " +
-                        "whole flow takes about ten seconds.",
+                    question = "Does 1Key support automatic backups?",
+                    answer = "Yes, with a clear constraint. Turn on Sync in Settings - it writes " +
+                        "an encrypted backup of your vault every time you unlock by typing your " +
+                        "master password. Biometric and PIN unlocks do NOT trigger a backup, by " +
+                        "design: those unlock methods do not hand the app your password, and we " +
+                        "will not invent a workaround that stores a copy. See the Sync section " +
+                        "below for the full picture.\n\n" +
+                        "If you'd rather back up explicitly, the manual Export now button in " +
+                        "Settings does the same thing on demand. Either path requires your " +
+                        "master password.",
                 )
                 FaqItem(
                     question = "What's the difference between an encrypted backup and a plain export?",
@@ -232,6 +226,144 @@ fun SettingsFaqScreen(
                     answer = "Yes. Export an encrypted backup from this device, install 1Key on " +
                         "the new one, and choose \"Restore from backup\" during setup. The " +
                         "backup password becomes your new master password.",
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            FaqGroup("Sync") {
+                FaqItem(
+                    question = "What does Sync actually do?",
+                    answer = "It writes an encrypted backup of your vault to a folder you pick, " +
+                        "each time you unlock the app by typing your master password. You see a " +
+                        "small \"Syncing...\" bar at the top, then \"Synced\" with a tick, then " +
+                        "it disappears. That is the whole feature.",
+                )
+                FaqItem(
+                    question = "Why does Sync only run on master-password unlock?",
+                    answer = "Backups have to be encrypted with your master password. When you " +
+                        "unlock with biometric or PIN, the app does not have your master " +
+                        "password - by design, we never store it. So there is nothing to " +
+                        "encrypt a backup with on those unlocks, and we will not invent a " +
+                        "workaround that stores a copy. Type your master password to trigger " +
+                        "a sync, or use Export now from Settings if you need an on-demand " +
+                        "backup.",
+                )
+                FaqItem(
+                    question = "Does enabling Sync change anything about how my master password is stored?",
+                    answer = "No. The app uses your master password only in the brief moment " +
+                        "between you typing it to unlock the vault and the backup file being " +
+                        "written. As soon as the encryption finishes, the memory holding the " +
+                        "password is zeroed - the same way the existing manual export works " +
+                        "today. Nothing about Sync requires us to keep your password anywhere " +
+                        "on the device.",
+                )
+                FaqItem(
+                    question = "Where does the backup go?",
+                    answer = "A folder you pick when you turn the feature on. It can be local " +
+                        "storage, a USB drive, or a folder synced by another app (Google " +
+                        "Drive, Dropbox, Nextcloud, OneDrive, etc.). The file is encrypted " +
+                        "with your master password before it leaves the app, so the cloud " +
+                        "provider sees only random bytes. The filename is fixed: " +
+                        "vault-backup.1key.",
+                )
+                FaqItem(
+                    question = "If I put backups in a cloud folder, can the cloud provider read my passwords?",
+                    answer = "No. The file is AES-256-GCM ciphertext under an Argon2id-derived " +
+                        "key from your master password. Without the password, the file is " +
+                        "indistinguishable from random bytes. What the cloud provider can see " +
+                        "is metadata: the file's name, its size, and the time you uploaded " +
+                        "it. If those signals matter to you (for example, the upload cadence " +
+                        "reveals when you typically use the app), keep backups on local " +
+                        "storage or a USB drive instead.",
+                )
+                FaqItem(
+                    question = "Why does each sync overwrite the previous file? Can I keep a history?",
+                    answer = "Sync is meant as a continuously fresh copy, not a version log. " +
+                        "Each sync replaces the previous vault-backup.1key safely - we write " +
+                        "to a temp file first and only swap it in once the full file is on " +
+                        "disk. If you need a history (e.g. before a big change or before " +
+                        "changing your master password), do an Export now to a different " +
+                        "filename. Most cloud providers (Google Drive, Dropbox) also keep " +
+                        "file version history on their side for at least 30 days, which gives " +
+                        "you a rollback if you need one.",
+                )
+                FaqItem(
+                    question = "Does Sync slow down unlock?",
+                    answer = "No. The vault unlocks and the UI is responsive immediately. " +
+                        "Sync runs in the background; only the small bar at the top shows it " +
+                        "is happening. A typical sync takes one to three seconds depending on " +
+                        "your vault size and storage speed.",
+                )
+                FaqItem(
+                    question = "What if a sync fails?",
+                    answer = "You'll see an amber \"Backup didn't save\" bar that auto-dismisses " +
+                        "after a few seconds. Tap the bar to see the exact reason in Settings " +
+                        "- common causes are the chosen folder being unreachable (cloud app " +
+                        "uninstalled, USB drive removed) or the device being out of free " +
+                        "space. Your existing vault-backup.1key from the previous sync stays " +
+                        "intact - a failed sync never corrupts the previous good one because " +
+                        "we write to a temp file first.",
+                )
+                FaqItem(
+                    question = "Does Sync use the internet from 1Key?",
+                    answer = "No. 1Key still has no INTERNET permission - that has not " +
+                        "changed. We write the encrypted file to a folder on your device. If " +
+                        "that folder happens to be one another app synchronises to the cloud, " +
+                        "the upload is done by that other app, not us. We never see the " +
+                        "network.",
+                )
+                FaqItem(
+                    question = "Can I restore from a Sync backup on a different device?",
+                    answer = "Yes. The Sync file is the same format as the manual encrypted " +
+                        "backup. Install 1Key on the new device, choose \"Restore from " +
+                        "backup\" during setup, point at the file, and type your master " +
+                        "password. Done.",
+                )
+                FaqItem(
+                    question = "What happens to old sync backups if I change my master password?",
+                    answer = "Each sync writes a fresh backup encrypted with whatever the " +
+                        "master password is at that moment. After you change your password, " +
+                        "the next time you unlock with the new one and trigger a sync, the " +
+                        "file gets overwritten with one encrypted under the new password. " +
+                        "Until that next sync runs, the existing vault-backup.1key is still " +
+                        "locked with the old password - if you still remember it, you can " +
+                        "restore from that file. We do not re-encrypt or migrate older " +
+                        "backups in place; only the next sync rotates them.",
+                )
+                FaqItem(
+                    question = "Are deleted items in the recycle bin included in the backup?",
+                    answer = "Yes. Sync backs up both your active credentials and anything " +
+                        "currently in the recycle bin. Restoring from a backup brings the bin " +
+                        "back in the same state it was at sync time - so anything you deleted " +
+                        "but had not yet purged will reappear in the bin, ready to be " +
+                        "permanently deleted or restored from there. This matches how the " +
+                        "manual Export now flow already works; Sync is the same file format " +
+                        "and the same data scope.",
+                )
+                FaqItem(
+                    question = "What happens to my backup file if I uninstall 1Key?",
+                    answer = "It stays exactly where you put it. The file is yours - 1Key " +
+                        "only writes to it, never reaches in to delete or move it. If you " +
+                        "reinstall and pick the same SAF folder, the next sync overwrites the " +
+                        "existing file. If you reinstall and want to restore your vault, " +
+                        "choose Restore from backup during setup, point at the file, and " +
+                        "type your master password.",
+                )
+                FaqItem(
+                    question = "Can I open the sync backup with anything other than 1Key?",
+                    answer = "No, by design. The file is AES-256-GCM ciphertext under an " +
+                        "Argon2id-derived key from your master password. We don't ship a " +
+                        "separate decryption tool. To read it, install 1Key on any device, " +
+                        "use Restore from backup, and enter your master password. The file " +
+                        "format is the same as a manual encrypted backup - both restore " +
+                        "through the exact same flow.",
+                )
+                FaqItem(
+                    question = "Can I turn Sync off later?",
+                    answer = "Yes, any time. Turning it off stops new backups and releases " +
+                        "the folder permission. The existing vault-backup.1key file is left " +
+                        "where it is - we do not delete your file. You can keep it, move it, " +
+                        "or delete it yourself.",
                 )
             }
 
