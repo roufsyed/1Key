@@ -102,7 +102,9 @@
     <details class="qa">
       <summary>What does the app keep in memory while running?</summary>
       <div class="qa-body">
-        <p>Only the encryption key for the unlocked session and whatever you're actively viewing - the visible list of credentials, the field you have open. Decrypted passwords are never written to disk and they're released from memory when you navigate away or the vault locks. The encryption key itself is dropped from memory the moment the vault locks.</p>
+        <p>While the vault is unlocked, three things sit in memory: the encryption key, a lightweight index of your credentials (just titles, usernames, and tags - so the list and search feel instant), and whatever entry you currently have open.</p>
+        <p>Passwords, secure notes, and 2FA codes are never kept hot. They stay encrypted on disk and are only decrypted at the exact moment you open the entry that contains them - then released as soon as you navigate away.</p>
+        <p>The instant the vault locks, all three drop. Nothing decrypted survives a lock.</p>
       </div>
     </details>
 
