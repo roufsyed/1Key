@@ -295,6 +295,34 @@
     </details>
 
     <details class="qa">
+      <summary>What happens to old sync backups if I change my master password?</summary>
+      <div class="qa-body">
+        <p>Each sync writes a fresh backup encrypted with whatever the master password is at that moment. After you change your password, the next time you unlock with the new one and trigger a sync, the file gets overwritten with one encrypted under the new password. Until that next sync runs, the existing <code>vault-backup.1key</code> is still locked with the old password - if you still remember it, you can restore from that file. We do not re-encrypt or migrate older backups in place; only the next sync rotates them.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Are deleted items in the recycle bin included in the backup?</summary>
+      <div class="qa-body">
+        <p>Yes. Sync backs up both your active credentials and anything currently in the recycle bin. Restoring from a backup brings the bin back in the same state it was at sync time - so anything you deleted but had not yet purged will reappear in the bin, ready to be permanently deleted or restored from there. This matches how the manual <b>Export now</b> flow already works; Sync is the same file format and the same data scope.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>What happens to my backup file if I uninstall 1Key?</summary>
+      <div class="qa-body">
+        <p>It stays exactly where you put it. The file is yours - 1Key only writes to it, never reaches in to delete or move it. If you reinstall and pick the same SAF folder, the next sync overwrites the existing file. If you reinstall and want to restore your vault, choose <b>Restore from backup</b> during setup, point at the file, and type your master password.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Can I open the sync backup with anything other than 1Key?</summary>
+      <div class="qa-body">
+        <p>No, by design. The file is AES-256-GCM ciphertext under an Argon2id-derived key from your master password. We don't ship a separate decryption tool. To read it, install 1Key on any device, use <b>Restore from backup</b>, and enter your master password. The file format is the same as a manual encrypted backup - both restore through the exact same flow.</p>
+      </div>
+    </details>
+
+    <details class="qa">
       <summary>Can I turn Sync off later?</summary>
       <div class="qa-body">
         <p>Yes, any time. Turning it off stops new backups and releases the folder permission. The existing <code>vault-backup.1key</code> file is left where it is - we do not delete your file. You can keep it, move it, or delete it yourself.</p>
