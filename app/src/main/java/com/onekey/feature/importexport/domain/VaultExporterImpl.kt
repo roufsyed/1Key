@@ -45,6 +45,12 @@ class VaultExporterImpl @Inject constructor(
         File(path).writeBytes(BackupEncryption.encrypt(plaintext, password, format, crypto, createdAtMs, vaultVersion))
     }
 
+    override fun serializeForSync(credentials: List<Credential>, format: ExportFormat): ByteArray =
+        when (format) {
+            ExportFormat.JSON -> buildJsonString(credentials).toByteArray(Charsets.UTF_8)
+            ExportFormat.CSV -> buildCsvString(credentials).toByteArray(Charsets.UTF_8)
+        }
+
     // ── Serialisation helpers ─────────────────────────────────────────────────
 
     private fun buildJsonString(credentials: List<Credential>): String =

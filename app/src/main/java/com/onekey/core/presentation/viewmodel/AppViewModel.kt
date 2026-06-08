@@ -6,6 +6,8 @@ import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.usecase.PurgeExpiredRecycleBinUseCase
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
+import com.onekey.feature.sync.domain.SyncEngine
+import com.onekey.feature.sync.domain.SyncState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -20,6 +22,7 @@ class AppViewModel @Inject constructor(
     authRepository: AuthRepository,
     appPrefs: AppPreferencesRepository,
     private val purgeExpiredRecycleBin: PurgeExpiredRecycleBinUseCase,
+    private val syncEngine: SyncEngine,
 ) : ViewModel() {
 
     val isUnlocked: StateFlow<Boolean> = authRepository.isUnlocked()
@@ -34,6 +37,15 @@ class AppViewModel @Inject constructor(
     private val _unlockPhase =
         MutableStateFlow<UnlockTransitionPhase>(UnlockTransitionPhase.Idle)
     val unlockPhase: StateFlow<UnlockTransitionPhase> = _unlockPhase.asStateFlow()
+
+    /**
+     * Sync chip state for the top-bar feedback. Republished directly from
+     * [SyncEngine.state] - the engine is the source of truth for the actual
+     * transitions; this VM just hoists the flow so Compose can observe it
+     * via `collectAsStateWithLifecycle()`.
+     */
+    val syncChipState: StateFlow<SyncState> = syncEngine.state
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SyncState.Idle)
 
     init {
         // Vault locking mid-transition (auto-lock, manual lock) must drop the curtain so it
@@ -51,6 +63,8 @@ class AppViewModel @Inject constructor(
             }
         }
     }
+
+    fun dismissSyncChip() = syncEngine.dismissChip()
 
     fun beginUnlockMorph() {
         if (_unlockPhase.value !is UnlockTransitionPhase.Idle) return

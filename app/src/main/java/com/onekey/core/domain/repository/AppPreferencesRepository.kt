@@ -74,7 +74,47 @@ interface AppPreferencesRepository {
      * state. Use this for auto-biometric gating; the per-key flows are fine elsewhere.
      */
     fun getBiometricUnlockGate(): Flow<BiometricUnlockGate>
+
+    // ── Sync on Master Password Unlock ────────────────────────────────────────
+    //
+    // Single toggle plus three companion settings. When `syncEnabled` is true AND
+    // `syncLocationUri` is non-null, a successful master-password unlock triggers
+    // a one-shot encrypted backup write to the SAF tree URI. Biometric and PIN
+    // unlocks deliberately skip sync because they do not give the app the master
+    // password - persisting any MP-derived material would break PRIVACY.md:49.
+
+    fun isSyncEnabled(): Flow<Boolean>
+    suspend fun setSyncEnabled(enabled: Boolean)
+
+    /**
+     * Persisted SAF tree URI for the sync destination. Stored as a String because
+     * `android.net.Uri` is not directly serialisable via DataStore; the consumer
+     * (SafLocationManager) parses back via `Uri.parse`. `null` when the user has
+     * not yet picked a location, or after the user disables sync.
+     */
+    fun getSyncLocationUri(): Flow<String?>
+    suspend fun setSyncLocationUri(uri: String?)
+
+    /** Opt-in for the post-sync completion notification. Default `false` (privacy-by-default). */
+    fun isSyncCompletionNotificationEnabled(): Flow<Boolean>
+    suspend fun setSyncCompletionNotificationEnabled(enabled: Boolean)
+
+    /** Epoch-ms of the most recent successful sync; 0L means never. Set by the SyncEngine. */
+    fun getSyncLastSuccessAt(): Flow<Long>
+    suspend fun setSyncLastSuccessAt(timestamp: Long)
+
+    /**
+     * Race-free read of `syncEnabled` and `syncLocationUri` from the same snapshot.
+     * Used at unlock-fork time so a half-toggle (enabled flipped without location set,
+     * or vice versa) cannot leak through and trigger a useless sync.
+     */
+    suspend fun getSyncGateDirect(): SyncGate
 }
+
+data class SyncGate(
+    val enabled: Boolean,
+    val locationUri: String?,
+)
 
 data class BiometricUnlockGate(
     val biometricEnabled: Boolean,

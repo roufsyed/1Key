@@ -14,6 +14,7 @@ import com.onekey.core.security.KEYSTORE_ALIAS_V1
 import com.onekey.core.security.KEYSTORE_ALIAS_V2
 import com.onekey.core.security.VaultKeyHolder
 import com.onekey.core.security.VaultVersionTracker
+import com.onekey.feature.sync.domain.SyncEngine
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +66,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val crypto: CryptoManager,
     private val keyHolder: VaultKeyHolder,
     private val vaultVersionTracker: VaultVersionTracker,
+    private val syncEngine: SyncEngine,
     @ApplicationScope appScope: CoroutineScope,
 ) : AuthRepository {
 
@@ -216,6 +218,13 @@ class AuthRepositoryImpl @Inject constructor(
             val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
             val passwordForMigration = if (kdfVersion == KDF_PBKDF2) password.copyOf() else null
 
+            // Snapshot the password BEFORE verifyMasterPassword zeros it. This copy
+            // belongs to the SyncEngine - it consumes (zeros) the array inside
+            // `maybeTriggerSync`, regardless of whether sync is actually enabled.
+            // Taking the copy here (not after verifyMasterPassword) is the difference
+            // between "sync gets the real password" and "sync gets all-space ASCII".
+            val passwordForSync = password.copyOf()
+
             verifyMasterPassword(password, kdfVersion)
 
             val vaultKey = unwrapStoredKey()
@@ -237,6 +246,14 @@ class AuthRepositoryImpl @Inject constructor(
                 } catch (_: Exception) {
                 }
             }
+
+            // Fork the sync coroutine LAST so the user sees the unlock succeed
+            // immediately and the sync runs in the background. The engine reads
+            // sync preferences itself - if disabled or no location set, the
+            // passwordForSync array is zeroed and the engine returns without
+            // launching work. Master-password material never crosses this boundary
+            // as raw bytes; the engine derives a one-shot backup key internally.
+            syncEngine.maybeTriggerSync(passwordForSync)
         }
 
     override suspend fun unlockWithBiometric(): AppResult<Unit> = runCatchingResult {

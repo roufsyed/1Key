@@ -6,6 +6,7 @@ import com.onekey.core.security.EncryptedData
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
+import javax.crypto.spec.SecretKeySpec
 
 /**
  * Binary format for encrypted backups:
@@ -78,6 +79,51 @@ internal object BackupEncryption {
         val formatByte = if (format == ExportFormat.JSON) FORMAT_JSON else FORMAT_CSV
         val aad = buildHeaderAad(CURRENT_VERSION, formatByte, createdAtMs, vaultVersion)
         val enc = crypto.encrypt(plaintext, key, aad)
+        check(enc.iv.size == IV_LEN) { "Unexpected IV length: ${enc.iv.size}" }
+
+        return ByteArrayOutputStream(
+            MAGIC.size + 2 + TIMESTAMP_LEN + VAULT_VER_LEN + SALT_LEN + IV_LEN + enc.ciphertext.size
+        ).apply {
+            write(MAGIC)
+            write(CURRENT_VERSION.toInt())
+            write(formatByte.toInt())
+            write(ByteBuffer.allocate(TIMESTAMP_LEN).putLong(createdAtMs).array())
+            write(ByteBuffer.allocate(VAULT_VER_LEN).putInt(vaultVersion).array())
+            write(salt)
+            write(enc.iv)
+            write(enc.ciphertext)
+        }.toByteArray()
+    }
+
+    /**
+     * Variant of [encrypt] that takes a pre-derived 32-byte AES key and its salt
+     * instead of running Argon2id internally. Used by the Sync feature: the
+     * auth layer derives the key once (via `CryptoManager.deriveBackupKey`) at
+     * the moment of master-password unlock and hands the bytes to the sync
+     * coroutine. The master password never crosses the auth/sync boundary;
+     * only this caller-owned derived key does.
+     *
+     * **Does NOT zero [key]** - ownership stays with the caller (typically the
+     * sync coroutine's `finally` block). The salt is written verbatim into the
+     * V4 envelope so the restore path (which still types the master password)
+     * re-derives the same key via Argon2id over `salt + password`. Restore is
+     * unchanged.
+     */
+    fun encryptWithKey(
+        plaintext: ByteArray,
+        key: ByteArray,
+        salt: ByteArray,
+        format: ExportFormat,
+        crypto: CryptoManager,
+        createdAtMs: Long = System.currentTimeMillis(),
+        vaultVersion: Int = 0,
+    ): ByteArray {
+        require(key.size == 32) { "Backup key must be 32 bytes (AES-256), got ${key.size}" }
+        require(salt.size == SALT_LEN) { "Backup salt must be $SALT_LEN bytes, got ${salt.size}" }
+        val secretKey = SecretKeySpec(key, "AES")
+        val formatByte = if (format == ExportFormat.JSON) FORMAT_JSON else FORMAT_CSV
+        val aad = buildHeaderAad(CURRENT_VERSION, formatByte, createdAtMs, vaultVersion)
+        val enc = crypto.encrypt(plaintext, secretKey, aad)
         check(enc.iv.size == IV_LEN) { "Unexpected IV length: ${enc.iv.size}" }
 
         return ByteArrayOutputStream(

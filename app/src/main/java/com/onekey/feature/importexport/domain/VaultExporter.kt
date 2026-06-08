@@ -14,6 +14,14 @@ interface VaultExporter {
         createdAtMs: Long = System.currentTimeMillis(),
         vaultVersion: Int = 0,
     ): AppResult<Unit>
+
+    /**
+     * Returns the plaintext serialised bytes of [credentials] in [format] without writing
+     * to disk or encrypting. Used by the Sync feature to feed the already-derived backup
+     * encryption pipeline ([com.onekey.feature.importexport.domain.BackupEncryption.encryptWithKey])
+     * directly, instead of going through the path-based [exportEncrypted].
+     */
+    fun serializeForSync(credentials: List<Credential>, format: ExportFormat): ByteArray
 }
 
 interface VaultImporter {

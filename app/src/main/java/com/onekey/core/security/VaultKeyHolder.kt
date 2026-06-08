@@ -75,6 +75,20 @@ class VaultKeyHolder @Inject constructor() {
      */
     @Volatile internal var snapshotHook: VaultLockHook? = null
 
+    /**
+     * Optional synchronous hook fired right after [snapshotHook] in [lock] - still
+     * before the `isUnlocked` flag flip and before key bytes are zeroed. Installed
+     * by the SyncEngine during its DI construction so any in-flight backup write
+     * is cancelled deterministically on lock(): the engine sets its sync state to
+     * `Locked`, cancels the in-flight upstream Job, and `.fill(0)`s the per-sync
+     * derived backup key. Same contract as [snapshotHook] - see [VaultLockHook].
+     *
+     * Two named hook slots beat a multi-listener registry because the lock path
+     * is security-critical: `grep` finds every hook in a 5-second audit, no
+     * hidden ordering, no registration-order surprises.
+     */
+    @Volatile internal var syncHook: VaultLockHook? = null
+
     fun setKey(key: SecretKey) {
         // Zero any previously held copy before overwriting.
         _keyBytes?.fill(0)
@@ -102,6 +116,14 @@ class VaultKeyHolder @Inject constructor() {
         // [VaultLockHook] KDoc - hook implementations MUST NOT suspend or
         // block; this happens on Main.immediate in the typical path.
         snapshotHook?.onLockBeforeKeyZero()
+
+        // STEP 1b - Synchronous sync hook. Fires immediately after the snapshot
+        // hook so the SyncEngine can cancel any in-flight backup write and zero
+        // its per-sync derived backup key before the vault key is gone. Order
+        // between the two hooks is irrelevant (they touch independent state),
+        // but pinning sync second matches the doc ordering and makes lock()
+        // trivially auditable.
+        syncHook?.onLockBeforeKeyZero()
 
         // STEP 2 - Flip the unlocked flag. Subscribers gated on isUnlocked
         // (the credential observers in CredentialRepositoryImpl) get the

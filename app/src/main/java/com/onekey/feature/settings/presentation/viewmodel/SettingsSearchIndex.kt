@@ -15,7 +15,7 @@ sealed class SettingsAction {
 }
 
 enum class SettingsDestination {
-    General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword, Autofill
+    General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword, Autofill, Sync
 }
 
 // Only dialogs whose state lives in SettingsScreen itself.

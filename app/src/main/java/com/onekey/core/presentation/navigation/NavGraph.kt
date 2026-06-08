@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,6 +32,7 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.animation.UnlockOverlay
+import com.onekey.core.presentation.chip.SyncChip
 import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.feature.auth.presentation.screen.ChangePasswordScreen
 import com.onekey.feature.auth.presentation.screen.LockScreen
@@ -45,6 +47,7 @@ import com.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScre
 import com.onekey.feature.settings.presentation.screen.SettingsAutofillScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
+import com.onekey.feature.settings.presentation.screen.SettingsSyncScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
 import com.onekey.feature.twofa.presentation.screen.TwoFaListScreen
 import com.onekey.feature.vault.presentation.screen.CredentialDetailScreen
@@ -75,6 +78,7 @@ sealed class Screen(val route: String) {
     data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
     data object SettingsAutofill : Screen("settings/autofill")
+    data object SettingsSync : Screen("settings/sync")
     data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
     data object SettingsFaq : Screen("settings/faq")
     data object ManageCategories : Screen("manage_categories")
@@ -102,6 +106,7 @@ fun OneKeyNavGraph(
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
     val showBottomNav = currentRoute in BOTTOM_NAV_ROUTES
+    val syncChipState by appViewModel.syncChipState.collectAsStateWithLifecycle()
 
     // Navigate to Lock whenever the vault locks mid-session.
     // Skip if already on Lock or Onboarding to avoid redundant navigation.
@@ -282,6 +287,7 @@ fun OneKeyNavGraph(
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
                         onAutofill = { navController.navigate(Screen.SettingsAutofill.route) },
                         onBackup = { navController.navigate(Screen.Backup.route) },
+                        onSync = { navController.navigate(Screen.SettingsSync.route) },
                         onPrivacyPolicy = { navController.navigate(Screen.SettingsPrivacyPolicy.route) },
                         onFaq = { navController.navigate(Screen.SettingsFaq.route) },
                     )
@@ -304,6 +310,10 @@ fun OneKeyNavGraph(
 
                 composable(Screen.SettingsAutofill.route) {
                     SettingsAutofillScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(Screen.SettingsSync.route) {
+                    SettingsSyncScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.SettingsPrivacyPolicy.route) {
@@ -370,6 +380,19 @@ fun OneKeyNavGraph(
         }
 
         UnlockOverlay(appViewModel = appViewModel)
+
+        // Sync chip overlays the top of the screen. Hidden on the Lock and Onboarding
+        // routes (showBottomNav is the proxy for "vault is unlocked and on a main
+        // surface"). The chip itself is also Idle-aware - it occupies zero height
+        // when the engine reports SyncState.Idle, so layout never jumps.
+        if (showBottomNav) {
+            SyncChip(
+                state = syncChipState,
+                onDismiss = { appViewModel.dismissSyncChip() },
+                onFailureTap = { navController.navigate(Screen.SettingsSync.route) },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
     }
 }
 

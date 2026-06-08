@@ -15,6 +15,7 @@ import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.BiometricUnlockGate
+import com.onekey.core.domain.repository.SyncGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,6 +48,10 @@ private val KEY_RESTORE_LAST_SCREEN_ON_UNLOCK = booleanPreferencesKey("restore_l
 private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
 private val KEY_AUTOFILL_ENABLED = booleanPreferencesKey("autofill_enabled")
 private val KEY_AUTOFILL_CATEGORY_FILTER = booleanPreferencesKey("autofill_category_filter")
+private val KEY_SYNC_ENABLED = booleanPreferencesKey("sync_enabled")
+private val KEY_SYNC_LOCATION_URI = stringPreferencesKey("sync_location_uri")
+private val KEY_SYNC_COMPLETION_NOTIFICATION_ENABLED = booleanPreferencesKey("sync_completion_notification_enabled")
+private val KEY_SYNC_LAST_SUCCESS_AT = longPreferencesKey("sync_last_success_at")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -236,4 +241,47 @@ class AppPreferencesRepositoryImpl @Inject constructor(
                 lockReasonSet = p[KEY_LOCK_REASON_CONTEXT] != null,
             )
         }.distinctUntilChanged()
+
+    // ── Sync on Master Password Unlock ────────────────────────────────────────
+
+    override fun isSyncEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_SYNC_ENABLED] ?: false }.distinctUntilChanged()
+
+    override suspend fun setSyncEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_SYNC_ENABLED] = enabled }
+    }
+
+    override fun getSyncLocationUri(): Flow<String?> =
+        prefs.map { it[KEY_SYNC_LOCATION_URI] }.distinctUntilChanged()
+
+    override suspend fun setSyncLocationUri(uri: String?) {
+        dataStore.edit { p ->
+            if (uri == null) p.remove(KEY_SYNC_LOCATION_URI) else p[KEY_SYNC_LOCATION_URI] = uri
+        }
+    }
+
+    override fun isSyncCompletionNotificationEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_SYNC_COMPLETION_NOTIFICATION_ENABLED] ?: false }.distinctUntilChanged()
+
+    override suspend fun setSyncCompletionNotificationEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_SYNC_COMPLETION_NOTIFICATION_ENABLED] = enabled }
+    }
+
+    override fun getSyncLastSuccessAt(): Flow<Long> =
+        prefs.map { it[KEY_SYNC_LAST_SUCCESS_AT] ?: 0L }.distinctUntilChanged()
+
+    override suspend fun setSyncLastSuccessAt(timestamp: Long) {
+        dataStore.edit { it[KEY_SYNC_LAST_SUCCESS_AT] = timestamp }
+    }
+
+    override suspend fun getSyncGateDirect(): SyncGate {
+        // Race-free read direct from DataStore so the unlock-fork sees writes from a
+        // just-completed setSyncEnabled / setSyncLocationUri commit without waiting for
+        // the cached prefs StateFlow to propagate. Same rationale as getLockReasonContextDirect.
+        val snapshot = dataStore.data.first()
+        return SyncGate(
+            enabled = snapshot[KEY_SYNC_ENABLED] ?: false,
+            locationUri = snapshot[KEY_SYNC_LOCATION_URI],
+        )
+    }
 }

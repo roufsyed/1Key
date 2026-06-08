@@ -5,6 +5,12 @@
     <!-- For Biometric authentication -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
+    <!-- For the optional Sync-completion notification (API 33+). The notification
+         itself is gated by the user's "Completion notification" preference; we
+         request the runtime permission only when they toggle it ON. If denied,
+         sync still runs silently. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- For QR Scanning in TOTP -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />

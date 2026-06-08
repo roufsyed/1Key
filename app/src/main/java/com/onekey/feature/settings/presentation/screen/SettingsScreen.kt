@@ -53,6 +53,7 @@ fun SettingsScreen(
     onSecurity: () -> Unit,
     onAutofill: () -> Unit,
     onBackup: () -> Unit,
+    onSync: () -> Unit,
     onPrivacyPolicy: () -> Unit,
     onFaq: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
@@ -136,6 +137,7 @@ fun SettingsScreen(
                 SettingsDestination.SetupPin -> onSetupPin()
                 SettingsDestination.ChangePassword -> onChangePassword()
                 SettingsDestination.Autofill -> onAutofill()
+                SettingsDestination.Sync -> onSync()
             }
             is SettingsAction.OpenDialogOn -> when (action.dialogId) {
                 SettingsDialogId.DeleteVault -> showDeleteVaultDialog = true
@@ -223,6 +225,13 @@ fun SettingsScreen(
                         title = "Backup & Import",
                         subtitle = "Export your vault or import from another app",
                         onClick = onBackup,
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsMenuRow(
+                        icon = Icons.Default.Sync,
+                        title = "Sync",
+                        subtitle = "Backs up your vault each time you unlock with your master password",
+                        onClick = onSync,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(

@@ -43,6 +43,10 @@ private const val ARGON2_M_COST = 65_536  // 64 MB
 private const val ARGON2_PARALLELISM = 1
 private const val ARGON2_HASH_LENGTH = 32  // 256-bit AES key
 
+// Salt length for the Sync backup-key derivation. Matches BackupEncryption's SALT_LEN
+// so the bytes round-trip through the V4 envelope header without truncation.
+private const val SALT_LEN_BACKUP = 32
+
 data class EncryptedData(val ciphertext: ByteArray, val iv: ByteArray) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -201,6 +205,49 @@ class CryptoManager @Inject constructor() {
     fun decryptString(data: EncryptedData, key: SecretKey): String =
         decrypt(data, key).toString(Charsets.UTF_8)
 
+    // ── One-shot backup-key derivation (Sync feature) ────────────────────────
+    //
+    // The Sync-on-Master-Password-Unlock feature needs a backup encryption key
+    // derived from the master password, but it must not let the password material
+    // cross the auth-layer boundary into the sync coroutine. The contract:
+    //
+    //  - Caller (AuthRepositoryImpl) passes a freshly-copied CharArray.
+    //  - `deriveBackupKey` runs Argon2id on a per-call random salt, returns the
+    //    raw 32-byte key + the salt.
+    //  - The caller's CharArray is zeroed in place before this function returns.
+    //  - The returned `key` is caller-owned: the SyncEngine MUST `.fill(0)` it
+    //    after the backup write completes (success OR failure).
+    //  - `BackupEncryption.encryptWithKey(... key, salt ...)` is then called by
+    //    the sync coroutine with the same `salt` so the V4 envelope header records
+    //    the value that would re-derive the same key from the master password on
+    //    restore. The restore path is unchanged - it still does Argon2id over the
+    //    salt-from-file + user-typed password.
+    //
+    // Compared to passing the password to `BackupEncryption.encrypt`, this
+    // refactor keeps the master password material in exactly one layer
+    // (AuthRepositoryImpl.unlockWithPassword) and crosses no boundaries. See
+    // memory note `project_auto_backup.md` (2026-06-09 reopening) for rationale.
+
+    fun deriveBackupKey(password: CharArray): BackupKeyMaterial {
+        val salt = generateSalt(SALT_LEN_BACKUP)
+        val passwordBytes = password.toUtf8ByteArray()
+        return try {
+            val rawKey = Argon2Kt().hash(
+                mode = Argon2Mode.ARGON2_ID,
+                password = passwordBytes,
+                salt = salt,
+                tCostInIterations = ARGON2_T_COST,
+                mCostInKibibyte = ARGON2_M_COST,
+                parallelism = ARGON2_PARALLELISM,
+                hashLengthInBytes = ARGON2_HASH_LENGTH,
+            ).rawHashAsByteArray()
+            BackupKeyMaterial(salt = salt, key = rawKey)
+        } finally {
+            passwordBytes.fill(0)
+            password.fill(' ')
+        }
+    }
+
     // ── HKDF-SHA256 subkey derivation ────────────────────────────────────────
     //
     // Domain-separated subkeys derived from the vault master key. Using one
@@ -230,3 +277,19 @@ class CryptoManager @Inject constructor() {
 // when the encryption scheme changes so old and new subkeys don't collide.
 internal const val HKDF_FIELD_KEY_INFO = "1key-field-enc-v1"
 internal const val HKDF_TITLE_KEY_INFO = "1key-title-enc-v1"
+
+/**
+ * Output of [CryptoManager.deriveBackupKey]. The [key] is raw 32-byte AES key material;
+ * caller MUST `key.fill(0)` after use (typically in a `finally` block of the sync
+ * coroutine). The [salt] is the per-derivation random salt the V4 envelope must record
+ * so the master-password-from-the-user path on restore re-derives the same key. The
+ * salt is not secret on its own; we still zero it on dispose as a defensive habit.
+ */
+data class BackupKeyMaterial(val salt: ByteArray, val key: ByteArray) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is BackupKeyMaterial) return false
+        return salt.contentEquals(other.salt) && key.contentEquals(other.key)
+    }
+    override fun hashCode(): Int = 31 * salt.contentHashCode() + key.contentHashCode()
+}

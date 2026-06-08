@@ -585,5 +585,15 @@ class TaggedCredentialListViewModelTest {
         override suspend fun getLockReasonContextDirect(): String? = error("unused")
         override suspend fun setLockReasonContext(context: String?) = error("unused")
         override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> = error("unused")
+        override fun isSyncEnabled(): Flow<Boolean> = flowOf(false)
+        override suspend fun setSyncEnabled(enabled: Boolean) = Unit
+        override fun getSyncLocationUri(): Flow<String?> = flowOf(null)
+        override suspend fun setSyncLocationUri(uri: String?) = Unit
+        override fun isSyncCompletionNotificationEnabled(): Flow<Boolean> = flowOf(false)
+        override suspend fun setSyncCompletionNotificationEnabled(enabled: Boolean) = Unit
+        override fun getSyncLastSuccessAt(): Flow<Long> = flowOf(0L)
+        override suspend fun setSyncLastSuccessAt(timestamp: Long) = Unit
+        override suspend fun getSyncGateDirect(): com.onekey.core.domain.repository.SyncGate =
+            com.onekey.core.domain.repository.SyncGate(enabled = false, locationUri = null)
     }
 }

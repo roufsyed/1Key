@@ -52,6 +52,7 @@
       <li><a href="#biometric">Biometric &amp; re-auth</a></li>
       <li><a href="#bin">Recycle bin &amp; deletion</a></li>
       <li><a href="#backup">Backup &amp; migration</a></li>
+      <li><a href="#sync">Sync</a></li>
       <li><a href="#clipboard">Clipboard</a></li>
     </ol>
   </aside>
@@ -199,12 +200,10 @@
     <h2 id="backup"><span class="num">07</span>Backup &amp; migration</h2>
 
     <details class="qa">
-      <summary>Why doesn't 1Key support automatic backups, and will it ever?</summary>
+      <summary>Does 1Key support automatic backups?</summary>
       <div class="qa-body">
-        <p>No, and we don't plan to. Here's why.</p>
-        <p>Backup files are encrypted with your master password. For a backup to run automatically - especially on the unlock methods most people use day to day, biometric and PIN - 1Key would need to keep your master password on the device in some retrievable form, even if hardware-protected.</p>
-        <p>That conflicts with our core promise: <b>your master password lives only in your head, never on this device.</b> It's the one secret we keep out of storage entirely, and we're not breaking that for any feature, no matter how convenient it would be.</p>
-        <p>What we offer instead: one-tap manual backup from Settings. You save the encrypted file wherever suits you - a local folder, a USB drive, or a cloud-synced folder you control. We recommend backing up after big changes (new accounts, password updates, before app updates). The whole flow takes about ten seconds.</p>
+        <p>Yes, with a clear constraint. Turn on <b>Sync</b> in Settings - it writes an encrypted backup of your vault every time you unlock by <em>typing your master password</em>. Biometric and PIN unlocks do NOT trigger a backup, by design: those unlock methods do not hand the app your password, and we will not invent a workaround that stores a copy. See the <a href="#sync">Sync section</a> below for the full picture.</p>
+        <p>If you'd rather back up explicitly, the manual <b>Export now</b> button in Settings does the same thing on demand. Either path requires your master password.</p>
       </div>
     </details>
 
@@ -223,7 +222,86 @@
       </div>
     </details>
 
-    <h2 id="clipboard"><span class="num">08</span>Clipboard</h2>
+    <h2 id="sync"><span class="num">08</span>Sync</h2>
+
+    <details class="qa">
+      <summary>What does Sync actually do?</summary>
+      <div class="qa-body">
+        <p>It writes an encrypted backup of your vault to a folder you pick, each time you unlock the app by typing your master password. You see a small "Syncing..." bar at the top, then "Synced" with a tick, then it disappears. That is the whole feature.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Why does Sync only run on master-password unlock?</summary>
+      <div class="qa-body">
+        <p>Backups have to be encrypted with your master password. When you unlock with biometric or PIN, the app does not have your master password - by design, we never store it. So there is nothing to encrypt a backup with on those unlocks, and we will not invent a workaround that stores a copy. Type your master password to trigger a sync, or use <b>Export now</b> from Settings if you need an on-demand backup.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Does enabling Sync change anything about how my master password is stored?</summary>
+      <div class="qa-body">
+        <p>No. The app uses your master password only in the brief moment between you typing it to unlock the vault and the backup file being written. As soon as the encryption finishes, the memory holding the password is zeroed - the same way the existing manual export works today. Nothing about Sync requires us to keep your password anywhere on the device.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Where does the backup go?</summary>
+      <div class="qa-body">
+        <p>A folder you pick when you turn the feature on. It can be local storage, a USB drive, or a folder synced by another app (Google Drive, Dropbox, Nextcloud, OneDrive, etc.). The file is encrypted with your master password before it leaves the app, so the cloud provider sees only random bytes. The filename is fixed: <code>vault-backup.1key</code>.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>If I put backups in a cloud folder, can the cloud provider read my passwords?</summary>
+      <div class="qa-body">
+        <p>No. The file is AES-256-GCM ciphertext under an Argon2id-derived key from your master password. Without the password, the file is indistinguishable from random bytes. What the cloud provider can see is metadata: the file's name, its size, and the time you uploaded it. If those signals matter to you (for example, the upload cadence reveals when you typically use the app), keep backups on local storage or a USB drive instead.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Why does each sync overwrite the previous file? Can I keep a history?</summary>
+      <div class="qa-body">
+        <p>Sync is meant as a continuously fresh copy, not a version log. Each sync replaces the previous <code>vault-backup.1key</code> safely - we write to a temp file first and only swap it in once the full file is on disk. If you need a history (e.g. before a big change or before changing your master password), do an <b>Export now</b> to a different filename. Most cloud providers (Google Drive, Dropbox) also keep file version history on their side for at least 30 days, which gives you a rollback if you need one.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Does Sync slow down unlock?</summary>
+      <div class="qa-body">
+        <p>No. The vault unlocks and the UI is responsive immediately. Sync runs in the background; only the small bar at the top shows it is happening. A typical sync takes one to three seconds depending on your vault size and storage speed.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>What if a sync fails?</summary>
+      <div class="qa-body">
+        <p>You'll see an amber "Backup didn't save" bar that auto-dismisses after a few seconds. Tap the bar to see the exact reason in Settings - common causes are the chosen folder being unreachable (cloud app uninstalled, USB drive removed) or the device being out of free space. Your existing <code>vault-backup.1key</code> from the previous sync stays intact - a failed sync never corrupts the previous good one because we write to a temp file first.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Does Sync use the internet from 1Key?</summary>
+      <div class="qa-body">
+        <p>No. 1Key still has no <code>INTERNET</code> permission - that has not changed. We write the encrypted file to a folder on your device. If that folder happens to be one another app synchronises to the cloud, the upload is done by that other app, not us. We never see the network.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Can I restore from a Sync backup on a different device?</summary>
+      <div class="qa-body">
+        <p>Yes. The Sync file is the same format as the manual encrypted backup. Install 1Key on the new device, choose <b>Restore from backup</b> during setup, point at the file, and type your master password. Done.</p>
+      </div>
+    </details>
+
+    <details class="qa">
+      <summary>Can I turn Sync off later?</summary>
+      <div class="qa-body">
+        <p>Yes, any time. Turning it off stops new backups and releases the folder permission. The existing <code>vault-backup.1key</code> file is left where it is - we do not delete your file. You can keep it, move it, or delete it yourself.</p>
+      </div>
+    </details>
+
+    <h2 id="clipboard"><span class="num">09</span>Clipboard</h2>
 
     <details class="qa">
       <summary>What happens when I copy a password to my clipboard?</summary>

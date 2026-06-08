@@ -12,6 +12,10 @@ import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.wordlist.WordlistProvider
+import com.onekey.feature.sync.data.AndroidSyncCompletionNotifier
+import com.onekey.feature.sync.data.SyncEngineImpl
+import com.onekey.feature.sync.domain.SyncCompletionNotifier
+import com.onekey.feature.sync.domain.SyncEngine
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -45,4 +49,20 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindWordlistProvider(impl: AssetWordlistProvider): WordlistProvider
+
+    // ── Sync feature ─────────────────────────────────────────────────────────
+    //
+    // SyncEngine wraps the master-password-unlock-triggered backup write. Bound
+    // as a singleton so the in-flight job + mutex + state are shared across all
+    // unlock paths (main app + autofill). The NoOpSyncCompletionNotifier is
+    // replaced by the real Android-NotificationManager-backed binding in the
+    // notification module (L10).
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncEngine(impl: SyncEngineImpl): SyncEngine
+
+    @Binds
+    @Singleton
+    abstract fun bindSyncCompletionNotifier(impl: AndroidSyncCompletionNotifier): SyncCompletionNotifier
 }
