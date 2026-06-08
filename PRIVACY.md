@@ -111,6 +111,34 @@ Combined, these mean even with the device in hand, a full 6-digit PIN search wou
 
 ---
 
+## Threat model - what 1Key defends against, and what it doesn't
+
+A password manager is only as useful as the threats it is honest about. The sections above describe the defences 1Key actually has. This section is the other side: things 1Key cannot stop, that you should know before trusting the app with sensitive credentials.
+
+### What 1Key defends against
+
+- **Offline attacks on a stolen or imaged device.** The vault key never lives on disk in unwrapped form. The master-password verifier sits in EncryptedSharedPreferences and is unreadable without live Keystore access. Even a complete disk image, without the live Keystore, cannot be brute-forced offline.
+- **Brute-force password guessing.** Argon2id (m=64 MiB, t=3, p=1) on every password attempt, tiered cooldowns (30 s / 5 min / 1 h) that persist across process kills, and PIN escalation to master password after three wrong PINs.
+- **Database tampering.** Per-field AES-256-GCM with row + column AAD detects any attempt to swap encrypted blobs between accounts.
+- **Backup-file tampering.** The `.1key` envelope binds the export timestamp and vault-version counter into the GCM authentication tag - swapping bodies, replaying older backups, or modifying headers all fail authentication.
+- **Network exfiltration.** No INTERNET permission in the manifest. The OS enforces this; the app literally cannot make a network request.
+- **Casual shoulder-surfing of usage patterns.** Screenshots, screen recordings, and the Recent Apps preview are blocked by default via FLAG_SECURE. Clipboard copies of secrets auto-clear after 30 seconds.
+
+### What 1Key does NOT defend against
+
+These are not bugs - they are limits we want you to know about up front.
+
+- **A fully compromised device.** If the OS itself is owned (root malware, a privilege-escalation exploit running with the same uid as 1Key, a debugger attached at the right moment), nothing in user-space can protect the in-memory vault key while the vault is unlocked. The app's sandbox is a guarantee from Android, not from us.
+- **Loss of your master password.** There is no reset, no recovery code, no support email. If you forget it, the vault is gone - and so are your encrypted backups, because they are encrypted with the same password. This is intentional: the only path to recovery would be us holding a copy of your password (which we refuse to do), or a multi-secret escrow system (which would need a server we have nowhere to run). Pick a password you can remember and store it somewhere physical if you need to.
+- **Theft of an already-unlocked device.** If someone grabs your phone while the vault is unlocked, before auto-lock fires, the unlocked vault is readable. There is no remote wipe, no kill switch we can fire from elsewhere - we have nowhere to fire it from. Lower the inactivity-lock timeout if this matters to you.
+- **Biometric spoofing on an unlocked device.** Android's class-2 biometric sensors (older fingerprint readers, weaker face unlock) can be fooled by good-quality fakes. If your device's biometric is class-2 and an attacker has high-resolution prints or a 3D model, they may bypass biometric unlock on an unlocked device. The mitigation is to use a strong master password and treat biometric as convenience, not as a second factor.
+- **Keystore compromise on pre-Android 9 devices.** On API < 28, the legacy Keystore key wrapping the vault key does not require the device to be unlocked at use time. If someone images the device storage and can later interact with the Keystore (rooted device, certain TEE exploits), the vault key can be unwrapped. On API >= 28 this is mitigated by `setUnlockedDeviceRequired(true)`.
+- **A malicious user who knows your master password.** Once the password is in the wrong hands, the vault is open. We cannot tell who is typing.
+
+If any of these matter for your specific threat model, a local-only password manager is not your best fit. Use a hardened OS build (GrapheneOS), pair it with a hardware token (YubiKey for the things that support it), and accept that some convenience trade-offs are required.
+
+---
+
 ## Exports and backups
 
 When you export your vault, you are moving your data from the app to a file. That file goes wherever you choose to put it - your Downloads folder, a USB drive, cloud storage you control, etc.

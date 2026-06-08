@@ -50,6 +50,7 @@
       <li><a href="#permissions">Permissions we use</a></li>
       <li><a href="#no-permissions">Permissions we don't</a></li>
       <li><a href="#bruteforce">Brute-force protection</a></li>
+      <li><a href="#threat-model">Threat model</a></li>
       <li><a href="#clipboard">Clipboard &amp; screen capture</a></li>
       <li><a href="#backups">Backups &amp; recycle bin</a></li>
       <li><a href="#deletion">Data deletion</a></li>
@@ -111,7 +112,32 @@
     </table>
     <p>After 3 wrong PINs, the easier PIN unlock is disabled until you successfully enter the master password.</p>
 
-    <h2 id="clipboard"><span class="num">06</span>Clipboard &amp; screen capture</h2>
+    <h2 id="threat-model"><span class="num">06</span>Threat model - what 1Key defends against, and what it doesn't</h2>
+    <p>A password manager is only as useful as the threats it is honest about. The sections above describe the defences 1Key actually has. This section is the other side: things 1Key cannot stop, that you should know before trusting the app with sensitive credentials.</p>
+
+    <h3>What 1Key defends against</h3>
+    <ul>
+      <li><b>Offline attacks on a stolen or imaged device.</b> The vault key never lives on disk in unwrapped form. The master-password verifier sits in EncryptedSharedPreferences and is unreadable without live Keystore access. Even a complete disk image, without the live Keystore, cannot be brute-forced offline.</li>
+      <li><b>Brute-force password guessing.</b> Argon2id (m=64 MiB, t=3, p=1) on every password attempt, tiered cooldowns (30 s / 5 min / 1 h) that persist across process kills, and PIN escalation to master password after three wrong PINs.</li>
+      <li><b>Database tampering.</b> Per-field AES-256-GCM with row + column AAD detects any attempt to swap encrypted blobs between accounts.</li>
+      <li><b>Backup-file tampering.</b> The <code>.1key</code> envelope binds the export timestamp and vault-version counter into the GCM authentication tag - swapping bodies, replaying older backups, or modifying headers all fail authentication.</li>
+      <li><b>Network exfiltration.</b> No INTERNET permission in the manifest. The OS enforces this; the app literally cannot make a network request.</li>
+      <li><b>Casual shoulder-surfing of usage patterns.</b> Screenshots, screen recordings, and the Recent Apps preview are blocked by default via FLAG_SECURE. Clipboard copies of secrets auto-clear after 30 seconds.</li>
+    </ul>
+
+    <h3>What 1Key does NOT defend against</h3>
+    <p>These are not bugs - they are limits we want you to know about up front.</p>
+    <ul>
+      <li><b>A fully compromised device.</b> If the OS itself is owned (root malware, a privilege-escalation exploit running with the same uid as 1Key, a debugger attached at the right moment), nothing in user-space can protect the in-memory vault key while the vault is unlocked. The app's sandbox is a guarantee from Android, not from us.</li>
+      <li><b>Loss of your master password.</b> There is no reset, no recovery code, no support email. If you forget it, the vault is gone - and so are your encrypted backups, because they are encrypted with the same password. This is intentional: the only path to recovery would be us holding a copy of your password (which we refuse to do), or a multi-secret escrow system (which would need a server we have nowhere to run). Pick a password you can remember and store it somewhere physical if you need to.</li>
+      <li><b>Theft of an already-unlocked device.</b> If someone grabs your phone while the vault is unlocked, before auto-lock fires, the unlocked vault is readable. There is no remote wipe, no kill switch we can fire from elsewhere - we have nowhere to fire it from. Lower the inactivity-lock timeout if this matters to you.</li>
+      <li><b>Biometric spoofing on an unlocked device.</b> Android's class-2 biometric sensors (older fingerprint readers, weaker face unlock) can be fooled by good-quality fakes. If your device's biometric is class-2 and an attacker has high-resolution prints or a 3D model, they may bypass biometric unlock. The mitigation is to use a strong master password and treat biometric as convenience, not as a second factor.</li>
+      <li><b>Keystore compromise on pre-Android 9 devices.</b> On API &lt; 28, the legacy Keystore key wrapping the vault key does not require the device to be unlocked at use time. If someone images the device storage and can later interact with the Keystore (rooted device, certain TEE exploits), the vault key can be unwrapped. On API &gt;= 28 this is mitigated by <code>setUnlockedDeviceRequired(true)</code>.</li>
+      <li><b>A malicious user who knows your master password.</b> Once the password is in the wrong hands, the vault is open. We cannot tell who is typing.</li>
+    </ul>
+    <p>If any of these matter for your specific threat model, a local-only password manager is not your best fit. Use a hardened OS build (GrapheneOS), pair it with a hardware token (YubiKey for the things that support it), and accept that some convenience trade-offs are required.</p>
+
+    <h2 id="clipboard"><span class="num">07</span>Clipboard &amp; screen capture</h2>
     <ul>
       <li>Sensitive copies (passwords, 2FA codes) are automatically cleared from the clipboard after 30 seconds.</li>
       <li>On Android 13 and above, those copies are marked sensitive so the system's paste-preview toast doesn't reveal the value.</li>
@@ -119,23 +145,23 @@
       <li>Revealed passwords cannot be selected from the on-screen text via the long-press menu, so they can only leave the app via the in-app copy button (which routes through the auto-clear path).</li>
     </ul>
 
-    <h2 id="backups"><span class="num">07</span>Backups &amp; recycle bin</h2>
+    <h2 id="backups"><span class="num">08</span>Backups &amp; recycle bin</h2>
     <ul>
       <li>Encrypted <code>.1key</code> backups are protected by your master password using Argon2id. The export timestamp and vault-version counter are also authenticated, so a backup file can't be tampered with or replayed across vaults without detection.</li>
       <li>Plain JSON or CSV exports are unencrypted text. Treat those files as sensitive: anyone who finds one can read every password inside. 1Key warns clearly and requires master-password confirmation before producing one.</li>
       <li>Items in the recycle bin remain encrypted with the same protections as active items. They're auto-purged after 30 days by default; you can change the retention (1 week, 30 days, 6 months, 1 year, or never) or disable auto-purge entirely in Settings.</li>
     </ul>
 
-    <h2 id="deletion"><span class="num">08</span>Data deletion</h2>
+    <h2 id="deletion"><span class="num">09</span>Data deletion</h2>
     <ul>
       <li>Uninstalling the app removes all of your data. Android wipes the app's private storage, including your encrypted vault. There is no remote copy of anything.</li>
       <li>Use <b>"Delete Vault"</b> in Settings to wipe all credentials while keeping the app installed. This requires your master password to confirm.</li>
     </ul>
 
-    <h2 id="background"><span class="num">09</span>Background activity</h2>
+    <h2 id="background"><span class="num">10</span>Background activity</h2>
     <p>The app does not run when you are not using it. There are no background services, scheduled jobs, or wake-ups. When you close or background the app, the auto-lock timer fires (immediately by default) and the encryption key is dropped from memory.</p>
 
-    <h2 id="regulatory"><span class="num">10</span>Regulatory</h2>
+    <h2 id="regulatory"><span class="num">11</span>Regulatory</h2>
     <div class="callout">
       <p>GDPR, CCPA, and COPPA do not apply to this app because <b>no personal data is collected, processed, or transmitted</b> at any point.</p>
     </div>

@@ -75,6 +75,26 @@ fun SettingsPrivacyPolicyScreen(
                 PrivacyLine("Each guess pays the full Argon2id memory cost regardless of cooldown, so brute-forcing remains intractable even between wait periods.")
             }
 
+            PolicySection("Threat model - what 1Key defends against") {
+                PrivacyLine("Offline attacks on a stolen or imaged device. The vault key never lives on disk in unwrapped form. The master-password verifier sits in EncryptedSharedPreferences and is unreadable without live Keystore access. A disk image alone cannot be brute-forced offline.")
+                PrivacyLine("Brute-force password guessing. Argon2id (m=64 MiB, t=3, p=1) on every attempt, tiered cooldowns that persist across process kills, and PIN escalation to master password after three wrong PINs.")
+                PrivacyLine("Database tampering. Per-field AES-256-GCM with row + column AAD detects any attempt to swap encrypted blobs between accounts.")
+                PrivacyLine("Backup-file tampering. The .1key envelope binds the export timestamp and vault-version counter into the GCM authentication tag - swapping bodies, replaying older backups, or modifying headers all fail authentication.")
+                PrivacyLine("Network exfiltration. No INTERNET permission in the manifest. The OS enforces this; the app literally cannot make a network request.")
+                PrivacyLine("Casual shoulder-surfing of usage patterns. Screenshots, screen recordings, and the Recent Apps preview are blocked by default via FLAG_SECURE. Clipboard copies of secrets auto-clear after 30 seconds.")
+            }
+
+            PolicySection("Threat model - what 1Key does NOT defend against") {
+                PrivacyLine("These are not bugs. They are limits we want you to know about up front.")
+                PrivacyLine("A fully compromised device. If the OS itself is owned (root malware, a privilege-escalation exploit running as the same uid as 1Key, a debugger attached at the right moment), nothing in user-space can protect the in-memory vault key while the vault is unlocked. The app's sandbox is a guarantee from Android, not from us.")
+                PrivacyLine("Loss of your master password. There is no reset, no recovery code, no support email. If you forget it, the vault is gone - and so are your encrypted backups, because they are encrypted with the same password. This is intentional: the only path to recovery would be us holding a copy of your password (which we refuse to do), or a multi-secret escrow system (which would need a server we have nowhere to run). Pick a password you can remember and store it somewhere physical if you need to.")
+                PrivacyLine("Theft of an already-unlocked device. If someone grabs your phone while the vault is unlocked, before auto-lock fires, the unlocked vault is readable. There is no remote wipe, no kill switch we can fire from elsewhere - we have nowhere to fire it from. Lower the inactivity-lock timeout if this matters to you.")
+                PrivacyLine("Biometric spoofing on an unlocked device. Android's class-2 biometric sensors (older fingerprint readers, weaker face unlock) can be fooled by good-quality fakes. The mitigation is to use a strong master password and treat biometric as convenience, not as a second factor.")
+                PrivacyLine("Keystore compromise on pre-Android 9 devices. On API < 28, the legacy Keystore key wrapping the vault key does not require the device to be unlocked at use time. If someone images the device storage and can later interact with the Keystore (rooted device, certain TEE exploits), the vault key can be unwrapped. On API >= 28 this is mitigated by setUnlockedDeviceRequired(true).")
+                PrivacyLine("A malicious user who knows your master password. Once the password is in the wrong hands, the vault is open. We cannot tell who is typing.")
+                PrivacyLine("If any of these matter for your specific threat model, a local-only password manager is not your best fit. Use a hardened OS build (GrapheneOS), pair it with a hardware token, and accept that some convenience trade-offs are required.")
+            }
+
             PolicySection("Clipboard & screen capture") {
                 PrivacyLine("Sensitive copies (passwords, 2FA codes) are automatically cleared from the clipboard after 30 seconds.")
                 PrivacyLine("On Android 13 and above, those copies are marked sensitive so the system's paste-preview toast doesn't reveal the value.")
