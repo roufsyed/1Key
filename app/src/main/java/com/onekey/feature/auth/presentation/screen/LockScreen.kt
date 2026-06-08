@@ -1,6 +1,7 @@
 package com.onekey.feature.auth.presentation.screen
 
 import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.view.ViewTreeObserver
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.animateColorAsState
@@ -202,6 +203,21 @@ fun LockScreen(
     // listener so the initial state catches up if focus was lost between
     // the `remember` snapshot and the attach.
     val view = LocalView.current
+
+    // Pin the host Activity to portrait while the lock screen is mounted -
+    // matches 1Password and avoids the unlock surface ever rendering in
+    // landscape. Restore the prior orientation on dispose so post-unlock
+    // screens remain free to rotate per the device setting.
+    DisposableEffect(view) {
+        val activity = view.context as? Activity
+        val previousOrientation =
+            activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        onDispose {
+            activity?.requestedOrientation = previousOrientation
+        }
+    }
+
     var hasWindowFocus by remember { mutableStateOf(view.hasWindowFocus()) }
     DisposableEffect(view) {
         val listener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
