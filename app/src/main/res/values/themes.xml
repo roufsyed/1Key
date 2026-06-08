@@ -10,5 +10,32 @@
             makes the gap match the Compose Surface that lands on top.
         -->
         <item name="android:windowBackground">@color/window_background</item>
+
+        <!--
+            Splash + task-snapshot placeholder background. On API 31+ this
+            controls (a) the system splash screen background, and (b) the
+            placeholder Android paints when restoring a FLAG_SECURE task
+            from Recents (because the suppressed snapshot has to be
+            replaced with something solid). Without this attribute, the
+            system falls back to `?attr/colorBackground` which on the
+            Theme.Material.Light parent resolves to a near-white system
+            default - producing a white flash on warm-restart even when
+            windowBackground is dark. Pointing at the same colour resource
+            unifies all three paths (live window, rotation gap, warm
+            restart) under one themed value.
+
+            Attribute is ignored on API < 31. compileSdk=36 lets AAPT2
+            compile it cleanly.
+        -->
+        <item name="android:windowSplashScreenBackground">@color/window_background</item>
+
+        <!--
+            Theme-level colorBackground. Some system code paths (older API
+            levels, certain OEM skins) read `?attr/colorBackground` instead
+            of `?attr/windowBackground` when picking the Recents placeholder
+            or the cross-fade colour. Setting this to the same resource
+            removes that fork.
+        -->
+        <item name="android:colorBackground">@color/window_background</item>
     </style>
 </resources>

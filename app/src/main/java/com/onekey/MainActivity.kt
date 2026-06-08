@@ -1,8 +1,10 @@
 package com.onekey
 
+import android.app.ActivityManager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -45,6 +47,20 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
 
         enableEdgeToEdge()
+
+        // Task background colour used by the system when our window is being
+        // composed in / out (Recents thumbnail placeholder for FLAG_SECURE
+        // tasks, launcher -> app expand animation, and similar). The
+        // attribute hierarchy in themes.xml already wires this for static
+        // paths; setting it programmatically here makes it explicit for the
+        // animation paths where the system reads it from the Activity's
+        // TaskDescription. Matches @color/window_background so the placeholder
+        // is invisible against the Compose surface that lands on top.
+        setTaskDescription(
+            ActivityManager.TaskDescription.Builder()
+                .setBackgroundColor(ContextCompat.getColor(this, R.color.window_background))
+                .build()
+        )
 
         val rootCheck = rootDetector.check()
 
