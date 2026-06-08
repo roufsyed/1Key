@@ -1,6 +1,5 @@
 package com.onekey.core.domain.usecase
 
-import androidx.paging.PagingData
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialHistoryEntry
@@ -157,7 +156,6 @@ class ResetVaultUseCaseTest {
             return deleteAllResult
         }
 
-        override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> = error("unused")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")
         override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = error("unused")
         override suspend fun getCredential(id: String): AppResult<Credential> = error("unused")

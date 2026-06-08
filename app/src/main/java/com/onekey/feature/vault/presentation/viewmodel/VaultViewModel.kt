@@ -32,8 +32,7 @@ import javax.inject.Inject
  * decrypt pass (which produced the user-visible "search returns empty until
  * All Items is visited once" symptom).
  *
- * Filtering is a case-insensitive `title.contains` match (matching the legacy
- * slow path in `CredentialRepositoryImpl.getPagedCredentials`) sorted newest-first
+ * Filtering is a case-insensitive `title.contains` match sorted newest-first
  * by `createdAt`. Tag filtering and alternate sort orders are out of scope for
  * the top-bar search; the tag-specific surface lives in
  * `TaggedCredentialListViewModel`.

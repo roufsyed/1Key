@@ -1,7 +1,6 @@
 package com.onekey.feature.autofill.domain
 
 import android.app.Application
-import androidx.paging.PagingData
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialSortOrder
@@ -127,7 +126,6 @@ class PackageMatcherTest {
     private class StubRepo(private val rows: List<Credential>) : CredentialRepository {
         override suspend fun getAllCredentials(): AppResult<List<Credential>> = AppResult.Success(rows)
 
-        override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> = error("unused")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")
         override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = error("unused")
         override suspend fun getCredential(id: String): AppResult<Credential> = error("unused")

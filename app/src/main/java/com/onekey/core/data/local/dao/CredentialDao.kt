@@ -1,6 +1,5 @@
 package com.onekey.core.data.local.dao
 
-import androidx.paging.PagingSource
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteQuery
 import com.onekey.core.data.local.entity.CredentialEntity
@@ -90,9 +89,6 @@ interface CredentialDao {
     @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY updated_at DESC")
     fun observeFavorites(): Flow<List<CredentialEntity>>
 
-    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1 ORDER BY updated_at DESC")
-    fun favoritesPagingSource(): PagingSource<Int, CredentialEntity>
-
     /**
      * Time-based OTP entries (TOTP, Steam Guard) - anything that rotates on a clock.
      * Drives the per-second recompute loop in TwoFaListViewModel. Excluding HOTP
@@ -172,26 +168,5 @@ interface CredentialDao {
     suspend fun touchAccessedAt(id: String, now: Long)
 
     @RawQuery(observedEntities = [CredentialEntity::class])
-    fun pagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity>
-
-    @RawQuery(observedEntities = [CredentialEntity::class])
-    fun favoritesPagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity>
-
-    @RawQuery(observedEntities = [CredentialEntity::class])
     fun observeListRaw(query: SupportSQLiteQuery): Flow<List<CredentialEntity>>
-
-    // Full-row variants of the title observers. The plaintext-title SQL projection
-    // they replaced stopped working when DB v13 encrypted titles for v2+ rows;
-    // CredentialRepositoryImpl decrypts and sorts in memory. We observe full rows
-    // (rather than just title columns) because Room invalidation needs the
-    // entity-tracking signal that an `entity SELECT *` carries.
-    @Query("""
-        SELECT * FROM credentials
-        WHERE deleted_at IS NULL
-        AND (:tag = '' OR tags LIKE '%"' || :tag || '"%')
-    """)
-    fun observeAllForAlphabet(tag: String): Flow<List<CredentialEntity>>
-
-    @Query("SELECT * FROM credentials WHERE deleted_at IS NULL AND is_favorite = 1")
-    fun observeFavoritesForAlphabet(): Flow<List<CredentialEntity>>
 }

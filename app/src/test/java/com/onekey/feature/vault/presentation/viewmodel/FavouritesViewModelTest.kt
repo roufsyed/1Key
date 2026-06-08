@@ -432,7 +432,6 @@ class FavouritesViewModelTest {
         }
 
         // Everything else is unused by FavouritesViewModel post-PR4.
-        override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder) = error("unused")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")
         override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = error("unused")
         override suspend fun getCredential(id: String): AppResult<Credential> = error("unused")

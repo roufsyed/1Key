@@ -1,6 +1,5 @@
 package com.onekey.core.data.snapshot
 
-import androidx.paging.PagingSource
 import androidx.sqlite.db.SupportSQLiteQuery
 import com.onekey.core.data.local.dao.CredentialDao
 import com.onekey.core.data.local.entity.CredentialEntity
@@ -358,16 +357,11 @@ class VaultSnapshotStoreTest {
         override suspend fun upsertAll(entities: List<CredentialEntity>) = error("unused")
         override suspend fun deleteAll() = error("unused")
         override fun observeFavorites(): Flow<List<CredentialEntity>> = error("unused")
-        override fun favoritesPagingSource(): PagingSource<Int, CredentialEntity> = error("unused")
-        override fun observeFavoritesForAlphabet(): Flow<List<CredentialEntity>> = error("unused")
-        override fun observeAllForAlphabet(tag: String): Flow<List<CredentialEntity>> = error("unused")
         override fun observeRotatingOtp(): Flow<List<CredentialEntity>> = error("unused")
         override fun observeHotpEntries(): Flow<List<CredentialEntity>> = error("unused")
         override suspend fun getHotpCounter(id: String): Long? = error("unused")
         override suspend fun setHotpCounter(id: String, counter: Long, now: Long) = error("unused")
         override suspend fun setFavorite(id: String, isFavorite: Boolean) = error("unused")
         override suspend fun touchAccessedAt(id: String, now: Long) = error("unused")
-        override fun pagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity> = error("unused")
-        override fun favoritesPagingSourceRaw(query: SupportSQLiteQuery): PagingSource<Int, CredentialEntity> = error("unused")
     }
 }

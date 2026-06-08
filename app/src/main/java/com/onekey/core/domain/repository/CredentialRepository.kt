@@ -1,17 +1,11 @@
 package com.onekey.core.domain.repository
 
-import androidx.paging.PagingData
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialSortOrder
 import kotlinx.coroutines.flow.Flow
 
 interface CredentialRepository {
-    fun getPagedCredentials(
-        query: String,
-        tag: String,
-        sortOrder: CredentialSortOrder = CredentialSortOrder.NEWEST_FIRST,
-    ): Flow<PagingData<Credential>>
     fun observeCredential(id: String): Flow<Credential?>
     /** Emits regardless of soft-delete state - the detail screen needs to render bin items too. */
     fun observeCredentialIncludingDeleted(id: String): Flow<Credential?>

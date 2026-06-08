@@ -1,7 +1,6 @@
 package com.onekey.feature.vault.presentation.viewmodel
 
 import android.app.Application
-import androidx.paging.PagingData
 import com.onekey.core.data.snapshot.SnapshotCredential
 import com.onekey.core.data.snapshot.SnapshotState
 import com.onekey.core.domain.model.AppResult
@@ -325,11 +324,6 @@ class VaultViewModelTest {
         override fun observeRecycleBinCount(): Flow<Int> = flowOf(0)
         override fun observeCountForTag(tag: String): Flow<Int> = flowOf(0)
 
-        override fun getPagedCredentials(
-            query: String,
-            tag: String,
-            sortOrder: CredentialSortOrder,
-        ): Flow<PagingData<Credential>> = error("unused - VaultViewModel uses snapshot path")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")
         override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = error("unused")
         override suspend fun getCredential(id: String): AppResult<Credential> = error("unused")

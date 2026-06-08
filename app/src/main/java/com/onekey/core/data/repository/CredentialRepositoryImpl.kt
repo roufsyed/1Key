@@ -1,6 +1,5 @@
 package com.onekey.core.data.repository
 
-import androidx.paging.*
 import com.onekey.core.data.local.dao.CredentialDao
 import com.onekey.core.data.local.entity.CredentialEntity
 import com.onekey.core.data.local.entity.CustomFieldEntity
@@ -24,8 +23,6 @@ import kotlinx.coroutines.flow.*
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
-
-private const val PAGE_SIZE = 30
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
@@ -59,40 +56,6 @@ class CredentialRepositoryImpl @Inject constructor(
     // the DAO subscription is cancelled (so requireKey() can't fire on a locked
     // vault); the consumer's last-known state survives the lock; on unlock the
     // real credential re-emits and the consumer continues normally.
-
-    override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> =
-        keyHolder.isUnlocked.flatMapLatest { unlocked ->
-            if (!unlocked) flowOf(PagingData.empty())
-            else if (query.isEmpty() && sortOrder != CredentialSortOrder.ALPHABETICAL) {
-                // Fast path - SQL filter + date-only ordering, real paging.
-                // Title is never read in SQL, so encrypted v2+ titles don't matter here.
-                // tags column is a JSON array; matching on the quoted token (`"foo"`)
-                // avoids tag "foo" spuriously matching credentials tagged "foobar".
-                val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR tags LIKE '%\"' || ? || '\"%') ORDER BY ${sortOrder.dateOrderBy()}",
-                    arrayOf(tag, tag),
-                )
-                Pager(
-                    config = PagingConfig(pageSize = PAGE_SIZE, enablePlaceholders = false, prefetchDistance = 10),
-                    pagingSourceFactory = { dao.pagingSourceRaw(sql) },
-                ).flow.map { pagingData -> pagingData.toDomainPaging() }
-            } else {
-                // Slow path - title is involved. SQL filters by tag + deleted_at only;
-                // we decrypt, filter by title query, and sort in memory. PagingData.from
-                // wraps the materialised list so the public Flow<PagingData<Credential>>
-                // contract stays intact.
-                val sql = SimpleSQLiteQuery(
-                    "SELECT * FROM credentials WHERE deleted_at IS NULL AND (? = '' OR tags LIKE '%\"' || ? || '\"%')",
-                    arrayOf(tag, tag),
-                )
-                dao.observeListRaw(sql).map { entities ->
-                    val list = entities.toDomainListSafe()
-                        .let { if (query.isEmpty()) it else it.filter { c -> c.title.contains(query, ignoreCase = true) } }
-                        .sortedWith(sortOrder.comparator())
-                    PagingData.from(list)
-                }
-            }
-        }.flowOn(Dispatchers.Default)
 
     override fun observeCredential(id: String): Flow<Credential?> =
         keyHolder.isUnlocked.flatMapLatest { unlocked ->
@@ -265,50 +228,21 @@ class CredentialRepositoryImpl @Inject constructor(
 
     // ── Mapping ──────────────────────────────────────────────────────────────
     //
-    // Decryption is delegated to [CredentialDecryptor]. The list/paging
-    // helpers below keep their "per-row failure stays local" semantics:
+    // Decryption is delegated to [CredentialDecryptor]. The list helper
+    // below keeps its "per-row failure stays local" semantics:
     //
     //   toDomainListSafe - drops corrupt rows via decryptor.decryptOrNull,
     //   so the upstream Flow stays alive when one row's GCM tag verification
     //   fails. Used by long-lived observers.
-    //
-    //   toDomainPaging - PagingData<T> requires T : Any, so we can't filter
-    //   out per-row failures. An unrecoverable decrypt error yields a
-    //   placeholder credential, keeping the Flow alive and visible.
 
     private fun List<CredentialEntity>.toDomainListSafe(): List<Credential> =
         mapNotNull { decryptor.decryptOrNull(it) }
 
-    private fun PagingData<CredentialEntity>.toDomainPaging(): PagingData<Credential> =
-        map { entity ->
-            runCatching { decryptor.decrypt(entity) }.getOrElse { placeholderCredential(entity) }
-        }
-
-    private fun placeholderCredential(entity: CredentialEntity): Credential = Credential(
-        id = entity.id,
-        // For v2+ rows, the plaintext column is empty; we can't decrypt the title without the key.
-        // Show a neutral marker so the row is visible in the list rather than mysteriously blank.
-        title = entity.title.ifEmpty { "(locked)" },
-        username = "",
-        password = "",
-        url = "",
-        notes = "",
-        otpParams = null,
-        tags = entity.tags,
-        customFields = emptyList(),
-        isFavorite = entity.isFavorite,
-        createdAt = entity.createdAt,
-        updatedAt = entity.updatedAt,
-        type = CredentialType.fromNameOrDefault(entity.type),
-        deletedAt = entity.deletedAt,
-        accessedAt = entity.accessedAt,
-    )
-
     // The per-row decrypt body that used to live here as `CredentialEntity.toDomain()`
     // now lives in [CredentialDecryptor] (`core/data/snapshot/CredentialDecryptor.kt`).
     // It is the single source of truth for read-path decryption - used here for
-    // single-row paths (getCredential, observeCredential, toDomainPaging fallback)
-    // AND by [com.onekey.core.data.snapshot.VaultSnapshotStore] for the bulk lean
+    // single-row paths (getCredential, observeCredential) AND by
+    // [com.onekey.core.data.snapshot.VaultSnapshotStore] for the bulk lean
     // path. Keeping one decryptor avoids drift between AAD shapes and OTP-defaults
     // fallback rules.
 

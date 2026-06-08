@@ -3,7 +3,6 @@ package com.onekey.feature.autofill.presentation
 import android.app.Application
 import android.os.Bundle
 import androidx.lifecycle.SavedStateHandle
-import androidx.paging.PagingData
 import com.onekey.core.data.snapshot.SnapshotCredential
 import com.onekey.core.data.snapshot.SnapshotState
 import com.onekey.core.domain.model.AppResult
@@ -644,7 +643,6 @@ class AutofillUnlockViewModelTest {
         override suspend fun getAllCredentials(): AppResult<List<Credential>> =
             AppResult.Success(allCredentials)
 
-        override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> = error("unused")
         override fun observeCredential(id: String): Flow<Credential?> = error("unused")
         override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = error("unused")
         override suspend fun getCredential(id: String): AppResult<Credential> = error("unused")

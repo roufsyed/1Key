@@ -104,16 +104,12 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
-    implementation(libs.room.paging)
 
     // DataStore
     implementation(libs.datastore.preferences)
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
-
-    // Paging
-    implementation(libs.paging.compose)
 
     // Biometric
     implementation(libs.biometric)

@@ -1,6 +1,5 @@
 package com.onekey.core.domain.usecase
 
-import androidx.paging.PagingData
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialSortOrder
@@ -143,7 +142,6 @@ private class NoopFakeCreds : CredentialRepository {
         AppResult.Success(credentials.size)
 
     // ── unused ──
-    override fun getPagedCredentials(query: String, tag: String, sortOrder: CredentialSortOrder): Flow<PagingData<Credential>> = flowOf(PagingData.empty())
     override fun observeCredential(id: String): Flow<Credential?> = flowOf(null)
     override fun observeCredentialIncludingDeleted(id: String): Flow<Credential?> = flowOf(null)
     override suspend fun getCredential(id: String): AppResult<Credential> = unused()
