@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -166,6 +167,7 @@ fun SetupPinScreen(
         topBar = {
             TopAppBar(
                 expandedHeight = 56.dp,
+                colors = oneKeyTopBarColors(),
                 title = { Text(screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = {

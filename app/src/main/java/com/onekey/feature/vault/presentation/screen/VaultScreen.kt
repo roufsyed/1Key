@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -105,6 +106,7 @@ fun VaultScreen(
             if (isSearchActive) {
                 TopAppBar(
                     expandedHeight = 56.dp,
+                    colors = oneKeyTopBarColors(),
                     navigationIcon = {
                         IconButton(onClick = {
                             isSearchActive = false
@@ -148,6 +150,7 @@ fun VaultScreen(
             } else {
                 TopAppBar(
                     expandedHeight = 56.dp,
+                    colors = oneKeyTopBarColors(),
                     title = { Text("1Key") },
                     actions = {
                         IconButton(onClick = { isSearchActive = true }) {

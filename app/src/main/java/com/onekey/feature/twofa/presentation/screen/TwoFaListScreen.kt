@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -84,6 +85,7 @@ fun TwoFaListScreen(
         topBar = {
             TopAppBar(
                 expandedHeight = 56.dp,
+                colors = oneKeyTopBarColors(),
                 title = { Text("2FA Codes") },
                 navigationIcon = {
                     if (showBack) {

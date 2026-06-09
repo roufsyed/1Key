@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.StickyNote2
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
@@ -202,6 +203,7 @@ fun BackupScreen(
         topBar = {
             TopAppBar(
                 expandedHeight = 56.dp,
+                colors = oneKeyTopBarColors(),
                 title = { Text("Backup & Import") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -56,6 +57,7 @@ fun SettingsAutofillScreen(
         topBar = {
             TopAppBar(
                 expandedHeight = 56.dp,
+                colors = oneKeyTopBarColors(),
                 title = { Text("Autofill") },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }

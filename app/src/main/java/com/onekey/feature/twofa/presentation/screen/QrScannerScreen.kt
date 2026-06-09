@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -103,6 +104,7 @@ fun QrScannerScreen(
         topBar = {
             TopAppBar(
                 expandedHeight = 56.dp,
+                colors = oneKeyTopBarColors(),
                 title = {
                     Column {
                         Text("Scan QR Code")

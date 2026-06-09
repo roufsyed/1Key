@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Card
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -76,6 +77,7 @@ fun SettingsSyncScreen(
         topBar = {
             TopAppBar(
                 expandedHeight = 56.dp,
+                colors = oneKeyTopBarColors(),
                 title = { Text("Sync") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

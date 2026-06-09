@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -160,6 +161,7 @@ fun TaggedCredentialListScreen(
                 isSelectionMode -> {
                     TopAppBar(
                         expandedHeight = 56.dp,
+                        colors = oneKeyTopBarColors(),
                         title = { Text("${selectedIds.size} selected") },
                         navigationIcon = {
                             IconButton(onClick = { viewModel.clearSelection() }) {
@@ -201,6 +203,7 @@ fun TaggedCredentialListScreen(
                     // - clear-X action only when there's text to clear
                     TopAppBar(
                         expandedHeight = 56.dp,
+                        colors = oneKeyTopBarColors(),
                         navigationIcon = {
                             IconButton(onClick = {
                                 isSearchActive = false
@@ -249,6 +252,7 @@ fun TaggedCredentialListScreen(
                 else -> {
                     TopAppBar(
                         expandedHeight = 56.dp,
+                        colors = oneKeyTopBarColors(),
                         title = { Text(viewModel.displayName) },
                         navigationIcon = {
                             IconButton(onClick = onBack) {

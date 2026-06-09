@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
@@ -119,6 +120,7 @@ fun FavouritesScreen(
             if (isSelectionMode) {
                 TopAppBar(
                     expandedHeight = 56.dp,
+                    colors = oneKeyTopBarColors(),
                     title = { Text("${selectedIds.size} selected") },
                     navigationIcon = {
                         IconButton(onClick = { viewModel.clearSelection() }) {
@@ -154,6 +156,7 @@ fun FavouritesScreen(
             } else {
                 TopAppBar(
                     expandedHeight = 56.dp,
+                    colors = oneKeyTopBarColors(),
                     title = { Text("Favourites") },
                     actions = {
                         Box {
