@@ -35,12 +35,22 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     applicationVariants.all {
         val variant = this
         outputs.all {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
             output.outputFileName =
-                "1Key_${variant.versionCode}_${variant.versionName}_${variant.buildType.name}.apk"
+                "1Key_${variant.versionName}_${variant.versionCode}_${abi}_${variant.buildType.name}.apk"
         }
     }
 
