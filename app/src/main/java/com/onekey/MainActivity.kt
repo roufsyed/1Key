@@ -26,9 +26,11 @@ import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.RootDetector
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -70,8 +72,6 @@ class MainActivity : FragmentActivity() {
             )
         }
 
-        val rootCheck = rootDetector.check()
-
         // Default to FLAG_SECURE until the screenshots preference hydrates from DataStore.
         // Erring on "blocked" during the brief startup window is safer for a password
         // manager - the observer below clears the flag if the user has enabled screenshots.
@@ -110,6 +110,17 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(Unit) {
                 initialSetupComplete = authRepository.isSetupComplete().first()
             }
+
+            // Root detection runs off the main thread so cold-start composition isn't
+            // blocked by file-existence stats, PackageManager lookups, and the two
+            // `getprop` subprocesses inside RootDetector.check() (combined ~150-500ms
+            // on a real device). The vault is gated behind the unlock screen anyway,
+            // so the brief placeholder shown while the check runs exposes nothing
+            // sensitive. The check happens at most once per Activity composition.
+            var rootCheck by remember { mutableStateOf<RootDetector.RootCheckResult?>(null) }
+            LaunchedEffect(Unit) {
+                rootCheck = withContext(Dispatchers.IO) { rootDetector.check() }
+            }
             val isDarkTheme by appPrefs.isDarkTheme()
                 .collectAsStateWithLifecycle(initialValue = initialDarkTheme)
 
@@ -128,11 +139,12 @@ class MainActivity : FragmentActivity() {
                     { autoLockManager.onUserActivity() }
                 }
                 CompositionLocalProvider(LocalUserActivityPing provides userActivityPing) {
+                    val resolvedRootCheck = rootCheck
                     when {
-                        rootCheck.isRooted -> RootWarningScreen(
-                            reason = rootCheck.reason ?: "Device appears to be rooted"
+                        resolvedRootCheck?.isRooted == true -> RootWarningScreen(
+                            reason = resolvedRootCheck.reason ?: "Device appears to be rooted"
                         )
-                        initialSetupComplete == null -> Box(
+                        resolvedRootCheck == null || initialSetupComplete == null -> Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.background),
