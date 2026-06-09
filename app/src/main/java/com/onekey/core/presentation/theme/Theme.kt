@@ -25,6 +25,15 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = Color(0xFFEEF2FF),
     onSurfaceVariant = Color(0xFF44464F),
     outline = Color(0xFF74777F),
+    // surfaceContainer* drives NavigationBar, ModalBottomSheet, Menu, etc.
+    // Without these overrides M3 falls back to its baseline (purple-derived)
+    // tokens, which read as a faint pinkish tint against the cool-neutral body.
+    // Pinned to a cool-grey ladder so chrome reads as elevation, not a hue shift.
+    surfaceContainerLowest = Color(0xFFF8FAFF),
+    surfaceContainerLow = Color(0xFFF8F9FB),
+    surfaceContainer = Color(0xFFF2F4F7),
+    surfaceContainerHigh = Color(0xFFE5E7EB),
+    surfaceContainerHighest = Color(0xFFE5E7EB),
 )
 
 private val DarkColorScheme = darkColorScheme(
