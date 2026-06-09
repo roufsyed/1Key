@@ -5,7 +5,6 @@ import com.onekey.core.data.snapshot.VaultSnapshotStore
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
-import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.security.CredentialCipherMigrator
 import com.onekey.core.security.ScreenOffLockReceiver
 import dagger.hilt.android.HiltAndroidApp
@@ -13,9 +12,39 @@ import javax.inject.Inject
 
 @HiltAndroidApp
 class OneKeyApp : Application() {
-    // Forces singleton creation at app startup so hot StateFlows begin
-    // collecting before the user reaches the vault or settings screen.
-    @Inject lateinit var tagRepository: TagRepository
+    /**
+     * Eagerly injected because each of these singletons hosts a load-bearing
+     * side effect on the cold-start critical path:
+     *
+     *  - `AppPreferencesRepositoryImpl` exposes a `prefs: StateFlow<Preferences>`
+     *    started with `SharingStarted.Eagerly`. `MainActivity.onCreate` calls
+     *    `runBlocking { appPrefs.isDarkTheme().first() }` before `setContent`,
+     *    expecting that hot StateFlow to have hydrated from DataStore in the
+     *    background. Deferring would either block the main thread on DataStore
+     *    I/O during the runBlocking, or flash the light theme for one frame on
+     *    dark-mode users.
+     *
+     *  - `AuthRepositoryImpl.init` launches the one-shot DataStore to
+     *    EncryptedSharedPreferences migration on appScope(IO) and arms the
+     *    `migrationComplete` barrier that every downstream auth read awaits.
+     *    `ScreenOffLockReceiver` (registered below) and `OneKeyAutofillService`
+     *    can both call into `authRepository` before any Activity is alive, so
+     *    construction must happen here rather than on lazy first-touch.
+     *
+     *  - `CredentialRepository` exposes `countFlow` and `favoriteCountFlow` as
+     *    `Eagerly` stateIn flows. The eager startup subscription is a
+     *    defensive invariant documented to keep credential counts warm before
+     *    any early-render surface (Lock screen, Onboarding, future
+     *    count-badge UIs) reads them; without it, an early render would see a
+     *    stale/zero count until VaultViewModel is created on user navigation.
+     *    No current call-site relies on this, but the contract is deliberate.
+     *
+     * `TagRepository` previously lived here under the same comment. It was
+     * removed because nothing on the startup path touches it and the only
+     * StateFlow consumers (VaultViewModel et al.) construct lazily on user
+     * navigation. The brief empty tag-count window on first VaultScreen
+     * render is acceptable; the StateFlow has an `emptyList()` initial value.
+     */
     @Inject lateinit var appPreferences: AppPreferencesRepository
     @Inject lateinit var authRepository: AuthRepository
     @Inject lateinit var credentialRepository: CredentialRepository
