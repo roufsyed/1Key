@@ -5,11 +5,17 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.model.ThemeMode
 import kotlinx.coroutines.flow.Flow
 
 interface AppPreferencesRepository {
-    fun isDarkTheme(): Flow<Boolean>
-    suspend fun setDarkTheme(dark: Boolean)
+    /**
+     * Persisted theme preference. `SYSTEM` is the default for anyone who has
+     * not explicitly picked a theme yet; the app then follows the device-wide
+     * dark/light setting. `LIGHT` / `DARK` force a specific mode.
+     */
+    fun getThemeMode(): Flow<ThemeMode>
+    suspend fun setThemeMode(mode: ThemeMode)
     fun isBiometricEnabled(): Flow<Boolean>
     suspend fun setBiometricEnabled(enabled: Boolean)
     fun isScreenshotsEnabled(): Flow<Boolean>

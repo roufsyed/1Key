@@ -13,6 +13,7 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.BiometricUnlockGate
 import com.onekey.core.domain.repository.SyncGate
@@ -28,7 +29,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 private val KEY_CREDENTIAL_SORT_ORDER = stringPreferencesKey("credential_sort_order")
-private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
 private val KEY_SHOW_FAVOURITES = booleanPreferencesKey("show_favourites")
 private val KEY_BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
 private val KEY_SCREENSHOTS_ENABLED = booleanPreferencesKey("screenshots_enabled")
@@ -65,11 +66,14 @@ class AppPreferencesRepositoryImpl @Inject constructor(
     private val prefs: StateFlow<Preferences> = dataStore.data
         .stateIn(appScope, SharingStarted.Eagerly, emptyPreferences())
 
-    override fun isDarkTheme(): Flow<Boolean> =
-        prefs.map { it[KEY_DARK_THEME] ?: false }.distinctUntilChanged()
+    override fun getThemeMode(): Flow<ThemeMode> =
+        prefs.map { p ->
+            val stored = p[KEY_THEME_MODE]
+            ThemeMode.entries.find { it.name == stored } ?: ThemeMode.SYSTEM
+        }.distinctUntilChanged()
 
-    override suspend fun setDarkTheme(dark: Boolean) {
-        dataStore.edit { it[KEY_DARK_THEME] = dark }
+    override suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.edit { p -> p[KEY_THEME_MODE] = mode.name }
     }
 
     override fun isBiometricEnabled(): Flow<Boolean> =

@@ -38,6 +38,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.domain.model.ThemeMode
+import com.onekey.core.domain.model.isDark
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.presentation.lockaware.LocalUserActivityPing
 import com.onekey.core.presentation.lockaware.LockAwareTextField
@@ -144,7 +146,9 @@ class AutofillSaveActivity : FragmentActivity() {
         viewModel.hydrate(token)
 
         setContent {
-            val isDark by appPrefs.isDarkTheme().collectAsStateWithLifecycle(initialValue = false)
+            val themeMode by appPrefs.getThemeMode()
+                .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+            val isDark = themeMode.isDark()
             OneKeyTheme(darkTheme = isDark) {
                 val userActivityPing = remember(autoLockManager) {
                     { autoLockManager.onUserActivity() }

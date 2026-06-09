@@ -8,6 +8,7 @@ import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
 import com.onekey.core.domain.model.Tag
+import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.TagRepository
@@ -61,8 +62,8 @@ class SettingsViewModel @Inject constructor(
     val tags: StateFlow<List<Tag>> = tagRepository.observeTags()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    val isDarkTheme: StateFlow<Boolean> = appPrefs.isDarkTheme()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val themeMode: StateFlow<ThemeMode> = appPrefs.getThemeMode()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
 
     val isBiometricEnabled: StateFlow<Boolean> = appPrefs.isBiometricEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -104,8 +105,9 @@ class SettingsViewModel @Inject constructor(
     val isRestoreLastScreenOnUnlock: StateFlow<Boolean> = appPrefs.isRestoreLastScreenOnUnlock()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    fun toggleTheme() {
-        viewModelScope.launch { appPrefs.setDarkTheme(!isDarkTheme.value) }
+    fun setThemeMode(mode: ThemeMode) {
+        if (mode == themeMode.value) return
+        viewModelScope.launch { appPrefs.setThemeMode(mode) }
     }
 
     fun setBiometricEnabled(enabled: Boolean) {

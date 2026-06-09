@@ -13,6 +13,7 @@ import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.BiometricUnlockGate
 import com.onekey.core.domain.repository.CredentialHistoryRepository
@@ -484,8 +485,8 @@ class FavouritesViewModelTest {
         override suspend fun setHideTopBarOnScroll(enabled: Boolean) = error("unused")
         override fun isVaultFooterVisible(): Flow<Boolean> = flowOf(true)
         override suspend fun setVaultFooterVisible(visible: Boolean) = error("unused")
-        override fun isDarkTheme(): Flow<Boolean> = flowOf(false)
-        override suspend fun setDarkTheme(dark: Boolean) = error("unused")
+        override fun getThemeMode(): Flow<ThemeMode> = flowOf(ThemeMode.LIGHT)
+        override suspend fun setThemeMode(mode: ThemeMode) = error("unused")
         override fun isBiometricEnabled(): Flow<Boolean> = error("unused")
         override suspend fun setBiometricEnabled(enabled: Boolean) = error("unused")
         override fun isScreenshotsEnabled(): Flow<Boolean> = error("unused")

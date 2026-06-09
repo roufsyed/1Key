@@ -1,5 +1,6 @@
 package com.onekey.feature.settings.presentation.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightKeys
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
@@ -28,13 +30,14 @@ fun SettingsGeneralScreen(
     onManageCategories: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
-    val isDarkTheme by settingsVm.isDarkTheme.collectAsStateWithLifecycle()
+    val themeMode by settingsVm.themeMode.collectAsStateWithLifecycle()
     val isShowFavourites by settingsVm.isShowFavourites.collectAsStateWithLifecycle()
     val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
     val isVaultFooterVisible by settingsVm.isVaultFooterVisible.collectAsStateWithLifecycle()
     val recycleBinRetention by settingsVm.recycleBinRetention.collectAsStateWithLifecycle()
     val isRecycleBinEnabled by settingsVm.isRecycleBinEnabled.collectAsStateWithLifecycle()
     val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
+    var showThemePicker by rememberSaveable { mutableStateOf(false) }
     var showRetentionPicker by rememberSaveable { mutableStateOf(false) }
     var showDisableBinDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -69,22 +72,54 @@ fun SettingsGeneralScreen(
                         isHighlighted = highlightKey == SettingsHighlightKeys.DARK_THEME,
                         onHighlightConsumed = settingsVm::clearHighlight,
                     ) {
-                        ListItem(
-                            headlineContent = { Text("Dark theme") },
-                            supportingContent = { Text(if (isDarkTheme) "On" else "Off") },
-                            leadingContent = {
-                                Icon(
-                                    if (isDarkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
-                                    contentDescription = null,
+                        // Custom Row instead of M3 ListItem: ListItem flips to a
+                        // 3-line layout when the supporting text wraps, and in
+                        // that layout the trailing content is top-aligned by
+                        // spec (not configurable). A Row with CenterVertically
+                        // keeps the trailing value visually centred regardless
+                        // of how many lines the supporting text takes. Spacing
+                        // and typography are picked to match the neighbouring
+                        // M3 ListItems so the row reads as part of the group.
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // Match M3 ListItem's default container so this
+                                // row reads as part of the same list as the
+                                // ListItems below it (M3 1.3.2 ListItem reads
+                                // `surface` from ListTokens.ListItemContainerColor).
+                                .background(MaterialTheme.colorScheme.surface)
+                                .clickable { showThemePicker = true }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = when (themeMode) {
+                                    ThemeMode.DARK -> Icons.Default.DarkMode
+                                    ThemeMode.LIGHT -> Icons.Default.LightMode
+                                    ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                                },
+                                contentDescription = null,
+                            )
+                            Spacer(Modifier.width(16.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Theme", style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    when (themeMode) {
+                                        ThemeMode.SYSTEM -> "Matches the device theme"
+                                        ThemeMode.LIGHT -> "Always light"
+                                        ThemeMode.DARK -> "Always dark"
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                            },
-                            trailingContent = {
-                                Switch(
-                                    checked = isDarkTheme,
-                                    onCheckedChange = { settingsVm.toggleTheme() },
-                                )
-                            },
-                        )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                themeMode.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     HighlightableRow(
@@ -278,6 +313,63 @@ fun SettingsGeneralScreen(
                 TextButton(onClick = { showDisableBinDialog = false }) {
                     Text("Keep it on")
                 }
+            },
+        )
+    }
+
+    if (showThemePicker) {
+        LockAwareDialog(
+            onDismissRequest = { showThemePicker = false },
+            icon = {
+                Icon(
+                    when (themeMode) {
+                        ThemeMode.DARK -> Icons.Default.DarkMode
+                        ThemeMode.LIGHT -> Icons.Default.LightMode
+                        ThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
+                    },
+                    contentDescription = null,
+                )
+            },
+            title = { Text("Theme") },
+            text = {
+                Column {
+                    ThemeMode.entries.forEach { option ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    settingsVm.setThemeMode(option)
+                                    showThemePicker = false
+                                }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            RadioButton(
+                                selected = themeMode == option,
+                                onClick = {
+                                    settingsVm.setThemeMode(option)
+                                    showThemePicker = false
+                                },
+                            )
+                            Column {
+                                Text(option.label, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    when (option) {
+                                        ThemeMode.SYSTEM -> "Match the device theme"
+                                        ThemeMode.LIGHT -> "Always light"
+                                        ThemeMode.DARK -> "Always dark"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemePicker = false }) { Text("Done") }
             },
         )
     }

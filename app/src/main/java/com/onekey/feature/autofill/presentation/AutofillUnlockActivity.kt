@@ -44,6 +44,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.data.snapshot.SnapshotCredential
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.ThemeMode
+import com.onekey.core.domain.model.isDark
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
@@ -187,7 +189,9 @@ class AutofillUnlockActivity : FragmentActivity() {
         }
 
         setContent {
-            val isDark by appPrefs.isDarkTheme().collectAsStateWithLifecycle(initialValue = false)
+            val themeMode by appPrefs.getThemeMode()
+                .collectAsStateWithLifecycle(initialValue = ThemeMode.SYSTEM)
+            val isDark = themeMode.isDark()
             OneKeyTheme(darkTheme = isDark) {
                 val userActivityPing = remember(autoLockManager) {
                     { autoLockManager.onUserActivity() }

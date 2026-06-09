@@ -13,6 +13,7 @@ import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.InactivityLockTimeout
 import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.domain.model.RecycleBinRetention
+import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.model.TagWithCount
 import com.onekey.core.domain.repository.AppPreferencesRepository
@@ -575,8 +576,8 @@ class AutofillUnlockViewModelTest {
             categoryFilterEnabled.value = enabled
         }
 
-        override fun isDarkTheme(): Flow<Boolean> = error("unused")
-        override suspend fun setDarkTheme(dark: Boolean) = error("unused")
+        override fun getThemeMode(): Flow<ThemeMode> = error("unused")
+        override suspend fun setThemeMode(mode: ThemeMode) = error("unused")
         override fun isBiometricEnabled(): Flow<Boolean> = error("unused")
         override suspend fun setBiometricEnabled(enabled: Boolean) = error("unused")
         override fun isScreenshotsEnabled(): Flow<Boolean> = error("unused")

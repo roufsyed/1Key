@@ -16,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.core.domain.model.isDark
+import com.onekey.core.domain.model.isDarkFromConfig
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.presentation.lockaware.LocalUserActivityPing
@@ -84,18 +86,23 @@ class MainActivity : FragmentActivity() {
             }
         }
 
-        // Read the user's dark-theme preference synchronously before the first
+        // Read the user's theme preference synchronously before the first
         // composition. Without this, `collectAsStateWithLifecycle` would render
-        // one frame with `initialValue = false` (light) before the real value
-        // arrives - producing a white flash on every rotation when the user
-        // actually has dark mode enabled. The `prefs` StateFlow in
-        // AppPreferencesRepositoryImpl is Eagerly started at app construction
-        // (Hilt @Singleton via OneKeyApp field injection), so the cached value
-        // is already in memory by the time MainActivity.onCreate runs - this
-        // first() returns in microseconds on rotation. On the very first app
-        // launch it may briefly block while DataStore loads its file, which is
-        // acceptable for that one-time cold-start path.
-        val initialDarkTheme = runBlocking { appPrefs.isDarkTheme().first() }
+        // one frame with `initialValue = SYSTEM` (resolved against current
+        // system theme) before the real value arrives - producing a flash on
+        // every rotation when the user has overridden to LIGHT/DARK. The
+        // `prefs` StateFlow in AppPreferencesRepositoryImpl is Eagerly started
+        // at app construction (Hilt @Singleton via OneKeyApp field injection),
+        // so the cached value is in memory by the time MainActivity.onCreate
+        // runs - this first() returns in microseconds on rotation. On the very
+        // first app launch it may briefly block while DataStore loads its file,
+        // which is acceptable for that one-time cold-start path.
+        //
+        // The mode is resolved to a Boolean via the current Configuration so
+        // SYSTEM-mode users get the right initial value too; the Compose
+        // resolver below takes over for reactive system-theme changes.
+        val initialThemeMode = runBlocking { appPrefs.getThemeMode().first() }
+        val initialDarkTheme = initialThemeMode.isDarkFromConfig(resources.configuration)
 
         setContent {
             // Read isSetupComplete ONCE for the lifetime of this Activity composition.
@@ -121,8 +128,11 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(Unit) {
                 rootCheck = withContext(Dispatchers.IO) { rootDetector.check() }
             }
-            val isDarkTheme by appPrefs.isDarkTheme()
-                .collectAsStateWithLifecycle(initialValue = initialDarkTheme)
+            val themeMode by appPrefs.getThemeMode()
+                .collectAsStateWithLifecycle(initialValue = initialThemeMode)
+            // Compose-side resolver recomposes when the OS flips dark/light so
+            // SYSTEM-mode users see the change immediately without restart.
+            val isDarkTheme = themeMode.isDark()
 
             OneKeyTheme(darkTheme = isDarkTheme) {
                 // Provide the user-activity ping at the composition root so every

@@ -18,7 +18,7 @@ class OneKeyApp : Application() {
      *
      *  - `AppPreferencesRepositoryImpl` exposes a `prefs: StateFlow<Preferences>`
      *    started with `SharingStarted.Eagerly`. `MainActivity.onCreate` calls
-     *    `runBlocking { appPrefs.isDarkTheme().first() }` before `setContent`,
+     *    `runBlocking { appPrefs.getThemeMode().first() }` before `setContent`,
      *    expecting that hot StateFlow to have hydrated from DataStore in the
      *    background. Deferring would either block the main thread on DataStore
      *    I/O during the runBlocking, or flash the light theme for one frame on
