@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -136,7 +137,8 @@ fun TwoFaListScreen(
                 modifier = Modifier
                     .padding(padding)
                     .preferredFrameRate(FrameRateCategory.High),
-                contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(entriesList, key = { it.credential.id }) { entry ->
                     val onCopy: (String) -> Unit = { code ->
@@ -229,41 +231,47 @@ private fun RotatingOtpRow(
     onLongClick: () -> Unit,
     onCopyCode: (String) -> Unit,
 ) {
-    // Flat clickable row to match the home / all-items list language. The OTP code stays
-    // the visual hero - same monospace + countdown ring, just without card chrome.
-    // Steam entries (5 alphanumerics) render as a single block via formatOtpCode,
-    // while 6/7/8-digit codes get the standard chunking.
+    // Card-style row to match the recycle-bin list. The OTP code stays the visual
+    // hero - same monospace + countdown ring - now sitting on the `surface` tier
+    // with a 1 dp tonal lift above the screen body. Steam entries (5 alphanumerics)
+    // render as a single block via formatOtpCode; 6/7/8-digit codes get chunked.
     val params = entry.credential.otpParams
     val displayCode = if (params != null) formatOtpCode(params, entry.code) else entry.code
-    Column(
+    val shape = MaterialTheme.shapes.medium
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .clip(shape)
+            .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick),
     ) {
-        EntryHeader(entry)
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = displayCode,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 32.sp,
-                    letterSpacing = 4.sp,
-                ),
-                color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f),
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator(
-                    progress = { entry.progress },
-                    modifier = Modifier.size(36.dp),
-                    strokeWidth = 3.dp,
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            EntryHeader(entry)
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = displayCode,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 32.sp,
+                        letterSpacing = 4.sp,
+                    ),
                     color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.primary,
+                            else MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
                 )
-                Text("${entry.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(
+                        progress = { entry.progress },
+                        modifier = Modifier.size(36.dp),
+                        strokeWidth = 3.dp,
+                        color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.primary,
+                    )
+                    Text("${entry.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
@@ -291,9 +299,14 @@ private fun HotpRow(
     val displayCode = entry.code?.let { code ->
         if (params != null) formatOtpCode(params, code) else code
     } ?: "- - -"
-    Column(
+    val shape = MaterialTheme.shapes.medium
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .combinedClickable(
                 // Row-tap copies the last generated code; if no code exists yet we
                 // bounce the tap to the generate flow so the row isn't dead.
@@ -302,39 +315,40 @@ private fun HotpRow(
                     if (code != null) onCopyCode(code) else onGenerate()
                 },
                 onLongClick = onLongClick,
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            ),
     ) {
-        EntryHeader(entry)
-        Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = displayCode,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 32.sp,
-                    letterSpacing = 4.sp,
-                ),
-                color = if (entry.code != null) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
-            )
-            FilledIconButton(
-                onClick = onGenerate,
-                enabled = !entry.generating,
-                modifier = Modifier.size(44.dp),
-            ) {
-                if (entry.generating) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                } else {
-                    Icon(
-                        Icons.Default.Refresh,
-                        contentDescription = "Generate next code",
-                    )
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            EntryHeader(entry)
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = displayCode,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 32.sp,
+                        letterSpacing = 4.sp,
+                    ),
+                    color = if (entry.code != null) MaterialTheme.colorScheme.onSurface
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                FilledIconButton(
+                    onClick = onGenerate,
+                    enabled = !entry.generating,
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    if (entry.generating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = "Generate next code",
+                        )
+                    }
                 }
             }
         }
