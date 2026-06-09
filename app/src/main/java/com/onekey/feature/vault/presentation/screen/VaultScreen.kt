@@ -17,6 +17,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -28,7 +29,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
-import com.onekey.core.presentation.util.flatTopAppBarColors
 import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
 import kotlinx.coroutines.delay
@@ -63,7 +63,19 @@ fun VaultScreen(
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
 
-    val topAppBarState = rememberTopAppBarState()
+    // Pre-seed and clamp the scroll state to the smaller (56 dp) bar height.
+    // M3 1.3.2 sets heightOffsetLimit via a SideEffect inside TopAppBar that
+    // fires after the first measure - a saved heightOffset from a previous
+    // session (default limit -Float.MAX_VALUE) could otherwise drive the
+    // bar's layout height negative on the first frame and crash layout(...).
+    val barHeightLimitPx = with(LocalDensity.current) { -56.dp.toPx() }
+    val topAppBarState = rememberTopAppBarState(initialHeightOffsetLimit = barHeightLimitPx)
+    if (topAppBarState.heightOffsetLimit != barHeightLimitPx) {
+        topAppBarState.heightOffsetLimit = barHeightLimitPx
+    }
+    if (topAppBarState.heightOffset < barHeightLimitPx) {
+        topAppBarState.heightOffset = barHeightLimitPx
+    }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         state = topAppBarState,
         canScroll = { hideTopBarOnScroll },
@@ -92,6 +104,7 @@ fun VaultScreen(
         topBar = {
             if (isSearchActive) {
                 TopAppBar(
+                    expandedHeight = 56.dp,
                     navigationIcon = {
                         IconButton(onClick = {
                             isSearchActive = false
@@ -131,10 +144,10 @@ fun VaultScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
-                    colors = flatTopAppBarColors(),
                 )
             } else {
                 TopAppBar(
+                    expandedHeight = 56.dp,
                     title = { Text("1Key") },
                     actions = {
                         IconButton(onClick = { isSearchActive = true }) {
@@ -142,7 +155,6 @@ fun VaultScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
-                    colors = flatTopAppBarColors(),
                 )
             }
         },
@@ -181,7 +193,6 @@ fun VaultScreen(
                         count = totalCount,
                         onClick = { onTagClick(TAG_ALL) },
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
 
                 // ── Favorites ─────────────────────────────────────────────────────
@@ -192,7 +203,6 @@ fun VaultScreen(
                         count = favoriteCount,
                         onClick = { onTagClick(TAG_FAVORITES) },
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
 
                 // ── Section label ─────────────────────────────────────────────────
@@ -213,7 +223,6 @@ fun VaultScreen(
                         count = tagWithCount.count,
                         onClick = { onTagClick(tagWithCount.tag.name) },
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
 
                 // ── Recycle bin ───────────────────────────────────────────────────
@@ -229,7 +238,6 @@ fun VaultScreen(
                             count = recycleBinCount,
                             onClick = onRecycleBinClick,
                         )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }
                 }
 
@@ -397,7 +405,6 @@ private fun SearchResultsContent(
                             credential = credential,
                             onClick = { onCredentialClick(credential.id) },
                         )
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }
                 }
             }

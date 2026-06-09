@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.input.KeyboardType
@@ -113,7 +114,19 @@ fun SettingsScreen(
         }
     }
 
-    val topAppBarState = rememberTopAppBarState()
+    // Pre-seed and clamp the scroll state to the smaller (56 dp) bar height.
+    // M3 1.3.2 sets heightOffsetLimit via a SideEffect inside TopAppBar that
+    // fires after the first measure - a saved heightOffset from a previous
+    // session (default limit -Float.MAX_VALUE) could otherwise drive the
+    // bar's layout height negative on the first frame and crash layout(...).
+    val barHeightLimitPx = with(LocalDensity.current) { -56.dp.toPx() }
+    val topAppBarState = rememberTopAppBarState(initialHeightOffsetLimit = barHeightLimitPx)
+    if (topAppBarState.heightOffsetLimit != barHeightLimitPx) {
+        topAppBarState.heightOffsetLimit = barHeightLimitPx
+    }
+    if (topAppBarState.heightOffset < barHeightLimitPx) {
+        topAppBarState.heightOffset = barHeightLimitPx
+    }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         state = topAppBarState,
         canScroll = { isHideTopBarOnScroll },
@@ -163,6 +176,7 @@ fun SettingsScreen(
                 )
             } else {
                 TopAppBar(
+                    expandedHeight = 56.dp,
                     title = { Text("Settings") },
                     navigationIcon = {
                         if (showBack) {
@@ -466,7 +480,7 @@ private fun SettingsSearchBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .height(64.dp),
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onClose) {

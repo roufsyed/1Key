@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
@@ -33,7 +34,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
-import com.onekey.core.presentation.util.flatTopAppBarColors
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.onekey.feature.vault.presentation.viewmodel.FavouritesViewModel
@@ -64,7 +64,19 @@ fun FavouritesScreen(
 
     // Top bar collapses on scroll except during selection mode, where action buttons
     // need to stay visible. Snap back to fully expanded the moment selection starts.
-    val topAppBarState = rememberTopAppBarState()
+    // Pre-seed and clamp the scroll state to the smaller (56 dp) bar height.
+    // M3 1.3.2 sets heightOffsetLimit via a SideEffect inside TopAppBar that
+    // fires after the first measure - a saved heightOffset from a previous
+    // session (default limit -Float.MAX_VALUE) could otherwise drive the
+    // bar's layout height negative on the first frame and crash layout(...).
+    val barHeightLimitPx = with(LocalDensity.current) { -56.dp.toPx() }
+    val topAppBarState = rememberTopAppBarState(initialHeightOffsetLimit = barHeightLimitPx)
+    if (topAppBarState.heightOffsetLimit != barHeightLimitPx) {
+        topAppBarState.heightOffsetLimit = barHeightLimitPx
+    }
+    if (topAppBarState.heightOffset < barHeightLimitPx) {
+        topAppBarState.heightOffset = barHeightLimitPx
+    }
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior(
         state = topAppBarState,
         canScroll = { hideTopBarOnScroll && !isSelectionMode },
@@ -106,6 +118,7 @@ fun FavouritesScreen(
         topBar = {
             if (isSelectionMode) {
                 TopAppBar(
+                    expandedHeight = 56.dp,
                     title = { Text("${selectedIds.size} selected") },
                     navigationIcon = {
                         IconButton(onClick = { viewModel.clearSelection() }) {
@@ -137,10 +150,10 @@ fun FavouritesScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
-                    colors = flatTopAppBarColors(),
                 )
             } else {
                 TopAppBar(
+                    expandedHeight = 56.dp,
                     title = { Text("Favourites") },
                     actions = {
                         Box {
@@ -167,7 +180,6 @@ fun FavouritesScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
-                    colors = flatTopAppBarColors(),
                 )
             }
         },
@@ -230,7 +242,6 @@ fun FavouritesScreen(
                                     },
                                     onLongClick = { viewModel.toggleSelection(credential.id) },
                                 )
-                                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                             }
                         }
 

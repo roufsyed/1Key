@@ -235,6 +235,7 @@ private fun CredentialViewContent(
     Scaffold(
         topBar = {
             TopAppBar(
+                expandedHeight = 56.dp,
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -709,6 +710,7 @@ private fun CredentialEditContent(
     Scaffold(
         topBar = {
             TopAppBar(
+                expandedHeight = 56.dp,
                 title = { Text(if (credential.id.isEmpty()) "New Credential" else "Edit Credential") },
                 navigationIcon = {
                     IconButton(onClick = { if (hasUnsavedChanges) showDiscardDialog = true else onBack() }) {

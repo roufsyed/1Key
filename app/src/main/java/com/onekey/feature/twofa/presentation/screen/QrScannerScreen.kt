@@ -102,6 +102,7 @@ fun QrScannerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                expandedHeight = 56.dp,
                 title = {
                     Column {
                         Text("Scan QR Code")

@@ -75,6 +75,7 @@ fun SettingsSyncScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                expandedHeight = 56.dp,
                 title = { Text("Sync") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

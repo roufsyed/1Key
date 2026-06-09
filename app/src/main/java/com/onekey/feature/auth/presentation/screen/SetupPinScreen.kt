@@ -165,6 +165,7 @@ fun SetupPinScreen(
     Scaffold(
         topBar = {
             TopAppBar(
+                expandedHeight = 56.dp,
                 title = { Text(screenTitle) },
                 navigationIcon = {
                     IconButton(onClick = {
