@@ -26,6 +26,9 @@ import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -40,6 +43,7 @@ import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.onekey.feature.vault.presentation.viewmodel.TaggedCredentialListViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -112,87 +116,169 @@ fun TaggedCredentialListScreen(
         snapshotFlow { sortOrder }.drop(1).collect { lazyListState.scrollToItem(0) }
     }
 
+    // Search lives in the TopAppBar (matches VaultScreen). rememberSaveable so a
+    // rotation mid-search doesn't collapse it back into the list - the searchQuery
+    // itself lives in the VM and survives independently.
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+
     BackHandler(enabled = isSelectionMode) {
         viewModel.clearSelection()
+    }
+
+    // Search-mode back only fires when selection isn't active - selection's
+    // BackHandler above takes priority by virtue of mutually-exclusive `enabled`.
+    BackHandler(enabled = isSearchActive && !isSelectionMode) {
+        isSearchActive = false
+        viewModel.setSearchQuery("")
+    }
+
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) {
+            delay(50) // allow the TextField to enter composition before requesting focus
+            searchFocusRequester.requestFocus()
+        }
     }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            if (isSelectionMode) {
-                TopAppBar(
-                    title = { Text("${selectedIds.size} selected") },
-                    navigationIcon = {
-                        IconButton(onClick = { viewModel.clearSelection() }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear selection")
-                        }
-                    },
-                    actions = {
-                        IconButton(
-                            onClick = { viewModel.setFavouriteOnSelected(!selectedAreAllFavourite) },
-                        ) {
-                            Icon(
-                                imageVector = if (selectedAreAllFavourite)
-                                    Icons.Default.Favorite
-                                else
-                                    Icons.Default.FavoriteBorder,
-                                contentDescription = if (selectedAreAllFavourite)
-                                    "Remove from favourites"
-                                else
-                                    "Mark as favourite",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Delete selected",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
-            } else {
-                TopAppBar(
-                    title = { Text(viewModel.displayName) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                        }
-                    },
-                    actions = {
-                        Box {
-                            IconButton(onClick = { showSortMenu = true }) {
-                                Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+            when {
+                isSelectionMode -> {
+                    TopAppBar(
+                        title = { Text("${selectedIds.size} selected") },
+                        navigationIcon = {
+                            IconButton(onClick = { viewModel.clearSelection() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear selection")
                             }
-                            LockAwareDropdownMenu(
-                                expanded = showSortMenu,
-                                onDismissRequest = { showSortMenu = false },
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { viewModel.setFavouriteOnSelected(!selectedAreAllFavourite) },
                             ) {
-                                CredentialSortOrder.entries.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label) },
-                                        onClick = {
-                                            viewModel.setSortOrder(option)
-                                            showSortMenu = false
-                                        },
-                                        leadingIcon = if (sortOrder == option) {
-                                            { Icon(Icons.Default.Check, contentDescription = null) }
-                                        } else null,
+                                Icon(
+                                    imageVector = if (selectedAreAllFavourite)
+                                        Icons.Default.Favorite
+                                    else
+                                        Icons.Default.FavoriteBorder,
+                                    contentDescription = if (selectedAreAllFavourite)
+                                        "Remove from favourites"
+                                    else
+                                        "Mark as favourite",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            IconButton(onClick = { showDeleteDialog = true }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete selected",
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        },
+                        scrollBehavior = scrollBehavior,
+                    )
+                }
+                isSearchActive -> {
+                    // Search-mode TopAppBar (matches VaultScreen):
+                    // - back arrow closes search and clears the query
+                    // - LockAwareTextField as the title slot, transparent so it
+                    //   reads as a search bar rather than a boxed input
+                    // - clear-X action only when there's text to clear
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(onClick = {
+                                isSearchActive = false
+                                viewModel.setSearchQuery("")
+                            }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = "Close search",
+                                )
+                            }
+                        },
+                        title = {
+                            LockAwareTextField(
+                                value = searchQuery,
+                                onValueChange = { viewModel.setSearchQuery(it) },
+                                placeholder = {
+                                    Text(
+                                        "Search in ${viewModel.displayName}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
+                                },
+                                singleLine = true,
+                                enabled = !isBypassed,
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    disabledIndicatorColor = Color.Transparent,
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(searchFocusRequester),
+                            )
+                        },
+                        actions = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { viewModel.setSearchQuery("") }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear search")
                                 }
                             }
-                        }
-                    },
-                    scrollBehavior = scrollBehavior,
-                )
+                        },
+                        scrollBehavior = scrollBehavior,
+                    )
+                }
+                else -> {
+                    TopAppBar(
+                        title = { Text(viewModel.displayName) },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                            }
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { isSearchActive = true },
+                                enabled = !isBypassed,
+                            ) {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            }
+                            Box {
+                                IconButton(onClick = { showSortMenu = true }) {
+                                    Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
+                                }
+                                LockAwareDropdownMenu(
+                                    expanded = showSortMenu,
+                                    onDismissRequest = { showSortMenu = false },
+                                ) {
+                                    CredentialSortOrder.entries.forEach { option ->
+                                        DropdownMenuItem(
+                                            text = { Text(option.label) },
+                                            onClick = {
+                                                viewModel.setSortOrder(option)
+                                                showSortMenu = false
+                                            },
+                                            leadingIcon = if (sortOrder == option) {
+                                                { Icon(Icons.Default.Check, contentDescription = null) }
+                                            } else null,
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        scrollBehavior = scrollBehavior,
+                    )
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            // Hidden during selection mode so the FAB doesn't sit over the action bar.
-            if (!isSelectionMode) {
+            // Hidden during selection mode (FAB would sit over the action bar) and
+            // during search (matches VaultScreen - keeps the search surface uncluttered).
+            if (!isSelectionMode && !isSearchActive) {
                 FloatingActionButton(
                     onClick = {
                         when (val raw = viewModel.rawTag) {
@@ -221,30 +307,9 @@ fun TaggedCredentialListScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // Search bar lives above the result surface so it stays visible
-            // across the Locked / Loading / Loaded / Bypassed transitions.
-            // Hidden during selection mode (action bar takes precedence) and
-            // disabled in Bypassed (snapshot filtering is off in that branch).
-            if (!isSelectionMode) {
-                LockAwareTextField(
-                    value = searchQuery,
-                    onValueChange = viewModel::setSearchQuery,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    singleLine = true,
-                    enabled = !isBypassed,
-                    placeholder = { Text("Search in ${viewModel.displayName}") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = if (searchQuery.isNotEmpty() && !isBypassed) {
-                        {
-                            IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                                Icon(Icons.Default.Close, contentDescription = "Clear search")
-                            }
-                        }
-                    } else null,
-                )
-            }
+            // Search input now lives in the TopAppBar (see the topBar block above).
+            // The result content below is filtered by viewModel.searchQuery and
+            // already handles the "no matches" / "empty tag" branches correctly.
             when (val s = listState) {
                 CredentialListState.Locked,
                 CredentialListState.Loading -> {
