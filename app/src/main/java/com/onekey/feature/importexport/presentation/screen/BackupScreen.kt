@@ -33,7 +33,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -625,9 +627,12 @@ fun BackupScreen(
             onDismissRequest = { showSkippedDialog = false },
             icon = { Icon(Icons.Default.Info, null) },
             title = { Text("Skipped (${skipped.size})") },
+            textBodyScrollable = false,
             text = {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .preferredFrameRate(FrameRateCategory.High),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(skipped) { item ->
@@ -667,9 +672,12 @@ fun BackupScreen(
             onDismissRequest = { showFailedDialog = false },
             icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Failed entries (${failed.size})") },
+            textBodyScrollable = false,
             text = {
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 320.dp),
+                    modifier = Modifier
+                        .heightIn(max = 320.dp)
+                        .preferredFrameRate(FrameRateCategory.High),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     items(failed) { entry ->

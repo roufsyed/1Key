@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.OneKey" parent="android:Theme.Material.Light.NoActionBar">
         <!--
             Activity window background. Without this, rotation (which recreates
@@ -27,7 +27,7 @@
             Attribute is ignored on API < 31. compileSdk=36 lets AAPT2
             compile it cleanly.
         -->
-        <item name="android:windowSplashScreenBackground">@color/window_background</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/window_background</item>
 
         <!--
             Theme-level colorBackground. Some system code paths (older API

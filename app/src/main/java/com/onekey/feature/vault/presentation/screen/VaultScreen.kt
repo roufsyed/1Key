@@ -15,7 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -164,7 +166,8 @@ fun VaultScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
+                    .padding(padding)
+                    .preferredFrameRate(FrameRateCategory.High),
                 contentPadding = PaddingValues(bottom = 88.dp), // clear FAB
             ) {
                 // ── All items ──────────────────────────────────────────────────────
@@ -381,14 +384,15 @@ private fun SearchResultsContent(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.padding(padding),
+                    modifier = Modifier
+                        .padding(padding)
+                        .preferredFrameRate(FrameRateCategory.High),
                     contentPadding = PaddingValues(vertical = 8.dp),
                 ) {
                     items(items = state.credentials, key = { it.id }) { credential ->
                         CredentialCard(
                             credential = credential,
                             onClick = { onCredentialClick(credential.id) },
-                            onTagClick = {},
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }

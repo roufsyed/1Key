@@ -1,6 +1,7 @@
 package com.onekey
 
 import android.app.ActivityManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -56,11 +57,18 @@ class MainActivity : FragmentActivity() {
         // animation paths where the system reads it from the Activity's
         // TaskDescription. Matches @color/window_background so the placeholder
         // is invisible against the Compose surface that lands on top.
-        setTaskDescription(
-            ActivityManager.TaskDescription.Builder()
-                .setBackgroundColor(ContextCompat.getColor(this, R.color.window_background))
-                .build()
-        )
+        // TaskDescription.Builder is API 33+; below that we accept the OS default
+        // placeholder colour. The earlier theme + windowSplashScreenBackground
+        // changes already cover the rotation gap and most warm-restart paths even
+        // on older API levels - this Builder path is the belt-and-braces hint
+        // specifically for the Recents thumbnail on modern Android.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setTaskDescription(
+                ActivityManager.TaskDescription.Builder()
+                    .setBackgroundColor(ContextCompat.getColor(this, R.color.window_background))
+                    .build()
+            )
+        }
 
         val rootCheck = rootDetector.check()
 

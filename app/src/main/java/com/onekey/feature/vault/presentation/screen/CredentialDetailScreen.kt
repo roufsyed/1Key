@@ -1299,6 +1299,7 @@ private fun TagPickerDialog(
     LockAwareDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Category") },
+        textBodyScrollable = false,
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),

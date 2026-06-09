@@ -15,7 +15,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -115,7 +117,9 @@ fun TwoFaListScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.padding(padding),
+                modifier = Modifier
+                    .padding(padding)
+                    .preferredFrameRate(FrameRateCategory.High),
                 contentPadding = PaddingValues(top = 8.dp, bottom = 88.dp),
             ) {
                 items(entriesList, key = { it.credential.id }) { entry ->

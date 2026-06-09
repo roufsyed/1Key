@@ -71,6 +71,16 @@ fun LockAwareDialog(
     textContentColor: Color = AlertDialogDefaults.textContentColor,
     tonalElevation: Dp = AlertDialogDefaults.TonalElevation,
     properties: DialogProperties = DialogProperties(),
+    /**
+     * When `true` (default), the text-body Box is wrapped with
+     * `verticalScroll(rememberScrollState())` so long copy is scrollable above
+     * the keyboard. Callers that pass a self-scrollable composable (e.g. a
+     * `LazyColumn`) into [text] MUST set this `false` - Compose 1.9 strictly
+     * forbids a vertically-scrollable child inside a vertically-scrolling
+     * parent (infinite-height constraint) and will throw
+     * `IllegalStateException` at measure time otherwise.
+     */
+    textBodyScrollable: Boolean = true,
 ) {
     Dialog(
         onDismissRequest = onDismissRequest,
@@ -130,7 +140,13 @@ fun LockAwareDialog(
                                 Box(
                                     modifier = Modifier
                                         .weight(weight = 1f, fill = false)
-                                        .verticalScroll(rememberScrollState())
+                                        .then(
+                                            if (textBodyScrollable) {
+                                                Modifier.verticalScroll(rememberScrollState())
+                                            } else {
+                                                Modifier
+                                            }
+                                        )
                                         .padding(bottom = 24.dp)
                                         .align(Alignment.Start),
                                 ) { text() }

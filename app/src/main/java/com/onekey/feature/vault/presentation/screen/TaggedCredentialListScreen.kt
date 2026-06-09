@@ -20,7 +20,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -292,7 +294,8 @@ fun TaggedCredentialListScreen(
                                 state = lazyListState,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier),
+                                    .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier)
+                                    .preferredFrameRate(FrameRateCategory.High),
                                 contentPadding = PaddingValues(vertical = 8.dp),
                             ) {
                                 items(
@@ -307,7 +310,6 @@ fun TaggedCredentialListScreen(
                                             else onCredentialClick(credential.id)
                                         },
                                         onLongClick = { viewModel.toggleSelection(credential.id) },
-                                        onTagClick = {},
                                     )
                                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                                 }
