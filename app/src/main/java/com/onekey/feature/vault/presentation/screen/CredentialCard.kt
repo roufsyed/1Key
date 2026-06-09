@@ -1,17 +1,23 @@
 package com.onekey.feature.vault.presentation.screen
 
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.onekey.core.data.snapshot.SnapshotCredential
 import com.onekey.core.domain.model.Credential
 
@@ -35,6 +41,7 @@ internal fun CredentialCard(
     username = credential.username,
     url = credential.url,
     tags = credential.tags,
+    isFavorite = credential.isFavorite,
     onClick = onClick,
     isSelected = isSelected,
     onLongClick = onLongClick,
@@ -57,6 +64,7 @@ internal fun CredentialCard(
     username = credential.username,
     url = credential.url,
     tags = credential.tags,
+    isFavorite = credential.isFavorite,
     onClick = onClick,
     isSelected = isSelected,
     onLongClick = onLongClick,
@@ -68,6 +76,7 @@ private fun CredentialCardImpl(
     username: String,
     url: String,
     tags: List<String>,
+    isFavorite: Boolean,
     onClick: () -> Unit,
     isSelected: Boolean,
     onLongClick: () -> Unit,
@@ -97,12 +106,29 @@ private fun CredentialCardImpl(
             // home-screen language so list views read as one family. Pre-Phase-1
             // credentials carry type = LOGIN so a type-based icon would render
             // every row as a lock; tag-derived is correct.
-            Icon(
-                imageVector = if (isSelected) Icons.Default.CheckCircle
-                else tagIcon(tags.firstOrNull() ?: ""),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            //
+            // When the credential is favourited, a small tertiary-tinted heart
+            // sits at the bottom-right of the icon as an "is favourited" badge.
+            // Suppressed in selection mode so the CheckCircle reads cleanly.
+            Box {
+                Icon(
+                    imageVector = if (isSelected) Icons.Default.CheckCircle
+                    else tagIcon(tags.firstOrNull() ?: ""),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                if (isFavorite && !isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = "Favorited",
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier
+                            .size(16.dp)
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 4.dp, y = 4.dp),
+                    )
+                }
+            }
         },
         headlineContent = {
             Text(
