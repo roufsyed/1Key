@@ -91,13 +91,17 @@ private fun CredentialCardImpl(
         else -> null
     }
 
-    // primaryContainer when selected (multi-select mode) reuses the same colour
-    // the system applies on hover/focus on ListItem - keeps selection state in
-    // visual family with stock M3 components.
+    // Container colour:
+    //  - Selected (multi-select mode): primaryContainer for clear selection state.
+    //  - Default: transparent so the row picks up the Scaffold's background
+    //    (`colorScheme.background`) instead of the M3 ListItem default of
+    //    `colorScheme.surface`. The two differ by a few % in our palette and
+    //    produce a visible card-on-background banding effect we don't want
+    //    on a flat list.
     val colors = if (isSelected) {
         ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     } else {
-        ListItemDefaults.colors()
+        ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent)
     }
 
     ListItem(

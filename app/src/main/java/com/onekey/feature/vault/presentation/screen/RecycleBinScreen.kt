@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
+import com.onekey.core.presentation.util.flatTopAppBarColors
 import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -71,6 +72,7 @@ fun RecycleBinScreen(
                         }
                     }
                 },
+                colors = flatTopAppBarColors(),
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },

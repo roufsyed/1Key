@@ -28,6 +28,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
+import com.onekey.core.presentation.util.flatTopAppBarColors
 import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.feature.vault.presentation.viewmodel.VaultViewModel
 import kotlinx.coroutines.delay
@@ -130,6 +131,7 @@ fun VaultScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
+                    colors = flatTopAppBarColors(),
                 )
             } else {
                 TopAppBar(
@@ -140,6 +142,7 @@ fun VaultScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
+                    colors = flatTopAppBarColors(),
                 )
             }
         },
@@ -465,6 +468,10 @@ internal fun TagRow(
                 )
             }
         },
+        // Transparent so the row picks up the Scaffold's background instead of
+        // the M3 ListItem default of `surface` (which differs from `background`
+        // in our palette by a few % and produces visible card-on-bg banding).
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         modifier = Modifier.clickable(onClick = onClick),
     )
 }

@@ -33,6 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
+import com.onekey.core.presentation.util.flatTopAppBarColors
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.onekey.feature.vault.presentation.viewmodel.FavouritesViewModel
@@ -136,6 +137,7 @@ fun FavouritesScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
+                    colors = flatTopAppBarColors(),
                 )
             } else {
                 TopAppBar(
@@ -165,6 +167,7 @@ fun FavouritesScreen(
                         }
                     },
                     scrollBehavior = scrollBehavior,
+                    colors = flatTopAppBarColors(),
                 )
             }
         },

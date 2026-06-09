@@ -40,6 +40,7 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
 import com.onekey.core.presentation.lockaware.LockAwareTextField
+import com.onekey.core.presentation.util.flatTopAppBarColors
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.onekey.feature.vault.presentation.viewmodel.TaggedCredentialListViewModel
@@ -177,6 +178,7 @@ fun TaggedCredentialListScreen(
                             }
                         },
                         scrollBehavior = scrollBehavior,
+                        colors = flatTopAppBarColors(),
                     )
                 }
                 isSearchActive -> {
@@ -229,6 +231,7 @@ fun TaggedCredentialListScreen(
                             }
                         },
                         scrollBehavior = scrollBehavior,
+                        colors = flatTopAppBarColors(),
                     )
                 }
                 else -> {
@@ -270,6 +273,7 @@ fun TaggedCredentialListScreen(
                             }
                         },
                         scrollBehavior = scrollBehavior,
+                        colors = flatTopAppBarColors(),
                     )
                 }
             }
@@ -361,7 +365,9 @@ fun TaggedCredentialListScreen(
                                     .fillMaxSize()
                                     .then(if (showIndexer) Modifier.padding(end = 28.dp) else Modifier)
                                     .preferredFrameRate(FrameRateCategory.High),
-                                contentPadding = PaddingValues(vertical = 8.dp),
+                                // First item should sit flush under the TopAppBar - matches
+                                // VaultScreen. Bottom padding clears the FAB.
+                                contentPadding = PaddingValues(bottom = 88.dp),
                             ) {
                                 items(
                                     items = s.credentials,
