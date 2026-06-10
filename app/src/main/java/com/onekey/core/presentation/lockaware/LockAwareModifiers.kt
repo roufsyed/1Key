@@ -56,7 +56,7 @@ fun Modifier.lockAware(): Modifier = composed {
         }
         .onPreviewKeyEvent {
             pingState.value()
-            // false → event continues to descendants; we're observing, not intercepting.
+            // false -> event continues to descendants; we're observing, not intercepting.
             false
         }
 }

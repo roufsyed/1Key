@@ -25,9 +25,9 @@ private val KEY_LAST_PIN_FAILURE_MS = longPreferencesKey("pin_last_failure_ms")
  * the app starts cold with the prior failure state intact.
  *
  * Tier shape (matches password):
- *   3-4   failures →  30 seconds
- *   5-9   failures →   5 minutes
- *   10+   failures →   1 hour
+ *   3-4   failures ->  30 seconds
+ *   5-9   failures ->   5 minutes
+ *   10+   failures ->   1 hour
  *
  * Counter is reset on a successful PIN unlock OR a successful master-password
  * unlock - both are valid "user has proved identity" signals. It intentionally

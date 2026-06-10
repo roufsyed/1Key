@@ -47,7 +47,7 @@ class ImportVaultUseCase @Inject constructor(
         val bin = (binResult as AppResult.Success).data
         val activeIds = active.mapTo(HashSet()) { it.id }
 
-        // (title.trim() to username.trim()) → matched existing credential. Active beats bin
+        // (title.trim() to username.trim()) -> matched existing credential. Active beats bin
         // when both contain the same key (active is the source of truth); a bin-only match
         // gets restored on apply.
         val byKey = HashMap<Pair<String, String>, MatchedExisting>()
@@ -99,7 +99,7 @@ class ImportVaultUseCase @Inject constructor(
 
     /**
      * Executes a previously-built [ImportPlan] using [conflictResolution] for any conflicts.
-     * Auto-merges always run silently (no conflicts → no user decision needed). Items that
+     * Auto-merges always run silently (no conflicts -> no user decision needed). Items that
      * matched a recycle-bin entry are restored as part of the merge.
      */
     suspend fun applyPlan(

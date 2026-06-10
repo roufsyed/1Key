@@ -1940,7 +1940,7 @@ private fun AnimatedRow(visible: Boolean, content: @Composable () -> Unit) {
     }
 }
 
-// Local copy of the type→icon mapping used by CredentialDetailScreen. Kept private here
+// Local copy of the type->icon mapping used by CredentialDetailScreen. Kept private here
 // so this screen has no cross-feature dependency; if a third caller appears, lift to a util.
 private fun previewTypeIcon(type: CredentialType) = when (type) {
     CredentialType.LOGIN -> Icons.Default.Lock

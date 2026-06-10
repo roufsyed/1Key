@@ -42,6 +42,7 @@ private val KEY_MP_RECHECK_ENABLED = booleanPreferencesKey("mp_recheck_enabled")
 private val KEY_MP_RECHECK_INTERVAL = stringPreferencesKey("mp_recheck_interval")
 private val KEY_LAST_MP_TIMESTAMP = longPreferencesKey("last_mp_timestamp")
 private val KEY_HIDE_TOP_BAR_ON_SCROLL = booleanPreferencesKey("hide_top_bar_on_scroll")
+private val KEY_NOTES_RENDER_MARKDOWN_ENABLED = booleanPreferencesKey("notes_render_markdown_enabled")
 private val KEY_RECYCLE_BIN_RETENTION = stringPreferencesKey("recycle_bin_retention")
 private val KEY_RECYCLE_BIN_ENABLED = booleanPreferencesKey("recycle_bin_enabled")
 private val KEY_LOCK_REASON_CONTEXT = stringPreferencesKey("lock_reason_context")
@@ -179,6 +180,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setHideTopBarOnScroll(enabled: Boolean) {
         dataStore.edit { it[KEY_HIDE_TOP_BAR_ON_SCROLL] = enabled }
+    }
+
+    override fun isNotesRenderMarkdownEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_NOTES_RENDER_MARKDOWN_ENABLED] ?: true }.distinctUntilChanged()
+
+    override suspend fun setNotesRenderMarkdownEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_NOTES_RENDER_MARKDOWN_ENABLED] = enabled }
     }
 
     override fun getRecycleBinRetention(): Flow<RecycleBinRetention> =

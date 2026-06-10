@@ -354,9 +354,11 @@ class VaultViewModelTest {
         override fun isHideTopBarOnScroll(): Flow<Boolean> = flowOf(true)
         override fun isVaultFooterVisible(): Flow<Boolean> = flowOf(true)
         override fun isRecycleBinEnabled(): Flow<Boolean> = flowOf(true)
+        override fun isNotesRenderMarkdownEnabled(): Flow<Boolean> = flowOf(true)
         override suspend fun setHideTopBarOnScroll(enabled: Boolean) = error("unused")
         override suspend fun setVaultFooterVisible(visible: Boolean) = error("unused")
         override suspend fun setRecycleBinEnabled(enabled: Boolean) = error("unused")
+        override suspend fun setNotesRenderMarkdownEnabled(enabled: Boolean) = error("unused")
 
         override fun getThemeMode(): Flow<ThemeMode> = error("unused")
         override suspend fun setThemeMode(mode: ThemeMode) = error("unused")

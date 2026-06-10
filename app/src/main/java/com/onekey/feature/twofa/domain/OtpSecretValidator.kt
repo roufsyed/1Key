@@ -36,7 +36,7 @@ object OtpSecretValidator {
 
             /**
              * Cleaned input is shorter than [MIN_BASE32_CHARS] (= 80 bits, the RFC
-             * 6238 minimum). Most issuers ship 16–32 base32 characters; anything
+             * 6238 minimum). Most issuers ship 16-32 base32 characters; anything
              * shorter is almost certainly a typo.
              */
             data object TooShort : Invalid()

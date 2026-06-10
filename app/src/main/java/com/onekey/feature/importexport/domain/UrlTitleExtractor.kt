@@ -14,7 +14,7 @@ package com.onekey.feature.importexport.domain
  *   4. If the host has no dot (e.g. `localhost`), return host:port verbatim.
  *   5. Otherwise: drop the port, strip a leading `www.` (case-insensitive),
  *      then drop the last label (TLD). Subdomains are preserved
- *      (`mail.google.com` → `mail.google`, `screener.com` → `screener`).
+ *      (`mail.google.com` -> `mail.google`, `screener.com` -> `screener`).
  *   6. Capitalise the first character (digits and uppercase pass through).
  *
  * Multi-label TLDs (`.co.uk`, `.com.au`) get a bit ugly under this rule -

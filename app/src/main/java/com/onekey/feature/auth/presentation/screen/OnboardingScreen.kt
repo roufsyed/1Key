@@ -59,7 +59,7 @@ fun OnboardingScreen(
     // Hoisted to survive AnimatedContent transitions (which destroy child composables).
     // SecurePasswordFieldState uses `remember` (not `rememberSaveable`) intentionally:
     // master passwords must not persist to InstanceState / SavedStateHandle bundles.
-    // Back→Continue navigation within a session preserves these; process death clears them.
+    // Back->Continue navigation within a session preserves these; process death clears them.
     val passwordState = rememberSecurePasswordFieldState()
     val confirmPasswordState = rememberSecurePasswordFieldState()
     var privacyAccepted by rememberSaveable { mutableStateOf(false) }

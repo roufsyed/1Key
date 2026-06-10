@@ -36,6 +36,15 @@ interface AppPreferencesRepository {
     suspend fun setCredentialSortOrder(order: CredentialSortOrder)
     fun isHideTopBarOnScroll(): Flow<Boolean>
     suspend fun setHideTopBarOnScroll(enabled: Boolean)
+    /**
+     * Whether the notes field renders inline as formatted markdown when viewing a
+     * credential. Default `true` because markdown is the intended reading mode for
+     * the notes field; users who prefer the raw, plain-text view (or who use the
+     * notes field purely for ad-hoc text and find markdown rendering distracting)
+     * can opt out from Settings without losing any stored content.
+     */
+    fun isNotesRenderMarkdownEnabled(): Flow<Boolean>
+    suspend fun setNotesRenderMarkdownEnabled(enabled: Boolean)
     fun isVaultFooterVisible(): Flow<Boolean>
     suspend fun setVaultFooterVisible(visible: Boolean)
     fun getRecycleBinRetention(): Flow<RecycleBinRetention>

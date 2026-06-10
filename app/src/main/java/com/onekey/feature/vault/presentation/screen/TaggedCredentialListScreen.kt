@@ -305,8 +305,8 @@ fun TaggedCredentialListScreen(
                             TAG_ALL, TAG_FAVORITES -> showAddSheet = true
                             else -> {
                                 // Default tag whose name matches a CredentialType displayName
-                                // (Login / Bank Account / …) → use that type. Custom tag with
-                                // no matching display name → fall back to LOGIN. Either way,
+                                // (Login / Bank Account / ...) -> use that type. Custom tag with
+                                // no matching display name -> fall back to LOGIN. Either way,
                                 // pre-fill the new credential's tag with the current rawTag.
                                 val type = CredentialType.entries.find { it.displayName == raw }
                                     ?: CredentialType.LOGIN

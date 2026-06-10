@@ -7,6 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Subject
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.onekey.core.presentation.util.oneKeyTopBarColors
@@ -34,6 +35,7 @@ fun SettingsGeneralScreen(
     val isShowFavourites by settingsVm.isShowFavourites.collectAsStateWithLifecycle()
     val isHideTopBarOnScroll by settingsVm.isHideTopBarOnScroll.collectAsStateWithLifecycle()
     val isVaultFooterVisible by settingsVm.isVaultFooterVisible.collectAsStateWithLifecycle()
+    val isNotesRenderMarkdownEnabled by settingsVm.isNotesRenderMarkdownEnabled.collectAsStateWithLifecycle()
     val recycleBinRetention by settingsVm.recycleBinRetention.collectAsStateWithLifecycle()
     val isRecycleBinEnabled by settingsVm.isRecycleBinEnabled.collectAsStateWithLifecycle()
     val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
@@ -189,6 +191,27 @@ fun SettingsGeneralScreen(
                                 Switch(
                                     checked = isVaultFooterVisible,
                                     onCheckedChange = { settingsVm.setVaultFooterVisible(it) },
+                                )
+                            },
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    HighlightableRow(
+                        isHighlighted = highlightKey == SettingsHighlightKeys.NOTES_RENDER_MARKDOWN,
+                        onHighlightConsumed = settingsVm::clearHighlight,
+                    ) {
+                        ListItem(
+                            headlineContent = { Text("Render markdown in notes") },
+                            supportingContent = {
+                                Text("Format headings, lists, links, and code in your notes.")
+                            },
+                            leadingContent = {
+                                Icon(Icons.AutoMirrored.Filled.Subject, contentDescription = null)
+                            },
+                            trailingContent = {
+                                Switch(
+                                    checked = isNotesRenderMarkdownEnabled,
+                                    onCheckedChange = { settingsVm.setNotesRenderMarkdownEnabled(it) },
                                 )
                             },
                         )

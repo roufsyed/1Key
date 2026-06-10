@@ -7,11 +7,11 @@ package com.onekey.feature.importexport.domain
  * the user types by hand into the editor).
  *
  * Handled shapes:
- *  - snake_case             →  "Snake Case"
- *  - kebab-case             →  "Kebab Case"
- *  - camelCase / PascalCase →  "Camel Case" / "Pascal Case"
- *  - already spaced         →  preserved (idempotent)
- *  - acronym + word         →  "HTTPRealm" → "HTTP Realm"
+ *  - snake_case             ->  "Snake Case"
+ *  - kebab-case             ->  "Kebab Case"
+ *  - camelCase / PascalCase ->  "Camel Case" / "Pascal Case"
+ *  - already spaced         ->  preserved (idempotent)
+ *  - acronym + word         ->  "HTTPRealm" -> "HTTP Realm"
  *
  * A small list of acronyms is preserved in uppercase rather than title-cased
  * (so `id` becomes `ID`, not `Id`). Words outside the list keep whatever
@@ -39,8 +39,8 @@ object CustomFieldKeyFormatter {
 
         val withSpaces = trimmed
             .replace(LOWER_THEN_UPPER, "$1 $2")          // camelCase boundary
-            .replace(ACRONYM_THEN_TITLECASE, "$1 $2")    // HTTPRealm → HTTP Realm
-            .replace(SEPARATORS, " ")                    // snake/kebab → space
+            .replace(ACRONYM_THEN_TITLECASE, "$1 $2")    // HTTPRealm -> HTTP Realm
+            .replace(SEPARATORS, " ")                    // snake/kebab -> space
 
         val words = withSpaces.split(WHITESPACE).filter { it.isNotBlank() }
         if (words.isEmpty()) return ""

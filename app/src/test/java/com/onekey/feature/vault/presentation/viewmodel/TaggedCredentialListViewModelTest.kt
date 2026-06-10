@@ -554,6 +554,8 @@ class TaggedCredentialListViewModelTest {
 
         override suspend fun setRecycleBinEnabled(enabled: Boolean) = error("unused")
         override suspend fun setHideTopBarOnScroll(enabled: Boolean) = error("unused")
+        override fun isNotesRenderMarkdownEnabled(): Flow<Boolean> = flowOf(true)
+        override suspend fun setNotesRenderMarkdownEnabled(enabled: Boolean) = error("unused")
         override fun isVaultFooterVisible(): Flow<Boolean> = flowOf(true)
         override suspend fun setVaultFooterVisible(visible: Boolean) = error("unused")
         override fun getThemeMode(): Flow<ThemeMode> = flowOf(ThemeMode.LIGHT)

@@ -207,7 +207,7 @@ class CredentialDecryptorTest {
 
         decryptor.decryptAllLeanWithLockCheck(listOf(entity))
 
-        // Same vaultKey → cache hit → same SecretKey instances retained.
+        // Same vaultKey -> cache hit -> same SecretKey instances retained.
         assertSame(
             "Subkey cache hits on second call with same vaultKey identity",
             firstFieldKey,
@@ -234,7 +234,7 @@ class CredentialDecryptorTest {
 
         val secondFieldKey = readPrivate(decryptor, "memoFieldKey")
         val secondTitleKey = readPrivate(decryptor, "memoTitleKey")
-        // New SecretKey instance → different memoised subkey references.
+        // New SecretKey instance -> different memoised subkey references.
         assertFalse("New vaultKey identity must invalidate the subkey cache",
             firstFieldKey === secondFieldKey)
         assertFalse(firstTitleKey === secondTitleKey)

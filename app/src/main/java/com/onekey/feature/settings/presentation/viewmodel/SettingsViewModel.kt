@@ -93,6 +93,9 @@ class SettingsViewModel @Inject constructor(
     val isHideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
+    val isNotesRenderMarkdownEnabled: StateFlow<Boolean> = appPrefs.isNotesRenderMarkdownEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
     val recycleBinRetention: StateFlow<RecycleBinRetention> = appPrefs.getRecycleBinRetention()
         .stateIn(viewModelScope, SharingStarted.Eagerly, RecycleBinRetention.DAYS_30)
 
@@ -173,6 +176,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setHideTopBarOnScroll(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setHideTopBarOnScroll(enabled) }
+    }
+
+    fun setNotesRenderMarkdownEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setNotesRenderMarkdownEnabled(enabled) }
     }
 
     fun setRecycleBinRetention(retention: RecycleBinRetention) {

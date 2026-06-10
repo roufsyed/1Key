@@ -9,20 +9,20 @@ package com.onekey.core.data.snapshot
  *
  * Transition table:
  *
- *   [Locked]   → vault is locked OR has just been locked (the
+ *   [Locked]   -> vault is locked OR has just been locked (the
  *                synchronous [VaultLockHook] flipped state on the lock()
  *                caller's thread before key zero - see
  *                [VaultSnapshotStore.lock-clear semantics]).
  *
- *   [Loading]  → first-decrypt in flight, OR [CredentialCipherMigrator] is
+ *   [Loading]  -> first-decrypt in flight, OR [CredentialCipherMigrator] is
  *                rewriting legacy rows, OR coordinator settling. Consumers
  *                show a spinner; never the "no results" empty state.
  *
- *   [Loaded]   → hot, decrypted active credentials (`deleted_at IS NULL`).
+ *   [Loaded]   -> hot, decrypted active credentials (`deleted_at IS NULL`).
  *                Lean projection - no password, no notes, no OTP secret,
  *                no custom fields. See [SnapshotCredential].
  *
- *   [Bypassed] → vault exceeds [VaultSnapshotStore.SNAPSHOT_CAP] - fall back
+ *   [Bypassed] -> vault exceeds [VaultSnapshotStore.SNAPSHOT_CAP] - fall back
  *                to SQL-streamed observers (existing repo methods). Plaintext
  *                residency is the existing per-screen footprint, not the
  *                shared snapshot's footprint.

@@ -32,7 +32,23 @@ data class Credential(
      * created in 1Key before this column existed. Not auto-updated on view.
      */
     val accessedAt: Long? = null,
-)
+    /**
+     * Epoch-ms timestamp marking when this credential arrived via a foreign import
+     * (`VaultImporterImpl` - JSON / CSV / encrypted backup). Null for credentials
+     * created manually in-app, and for rows that pre-date DB v15. Purely an
+     * audit-trail field: read paths surface it; in-app save paths leave it null.
+     */
+    val importedAt: Long? = null,
+) {
+    companion object {
+        /**
+         * Hard ceiling on the size of [notes], measured in UTF-8 bytes. Enforced before
+         * encryption and persistence; the markdown renderer assumes input within this
+         * bound so its parser cost is bounded.
+         */
+        const val NOTES_MAX_BYTES = 65_536
+    }
+}
 
 @Immutable
 data class CustomField(

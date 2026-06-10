@@ -129,7 +129,7 @@ interface CredentialDao {
      *
      * Why pre-increment-and-return: the persisted counter convention here is "value
      * to use for the next generation" - matching what `otpauth://hotp/?counter=0`
-     * URIs encode (counter=0 → first code uses 0, then the entry advances to 1).
+     * URIs encode (counter=0 -> first code uses 0, then the entry advances to 1).
      *
      * Atomicity matters because two concurrent taps must produce two distinct codes,
      * not the same code twice. The `@Transaction` wrapping the read+update keeps it

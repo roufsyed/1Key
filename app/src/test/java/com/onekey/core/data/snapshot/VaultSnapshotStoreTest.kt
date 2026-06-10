@@ -102,7 +102,7 @@ class VaultSnapshotStoreTest {
         // Sanity precondition.
         assertTrue(store.state.value is SnapshotState.Loaded)
 
-        // The contract: lock() on the test thread → state.value MUST be
+        // The contract: lock() on the test thread -> state.value MUST be
         // Locked on the very next line, WITHOUT advanceUntilIdle.
         keyHolder.lock()
 
@@ -214,7 +214,7 @@ class VaultSnapshotStoreTest {
         assertEquals(SnapshotState.Locked, store.state.value)
         // Drain the false-emission so the coordinator's combine actually
         // observes the transition. Without this, StateFlow conflation can
-        // skip the false value (lock() → setKey() on the same test thread)
+        // skip the false value (lock() -> setKey() on the same test thread)
         // and the coordinator stays in its prior branch. In production
         // there's always a UI-driven gap between lock and re-unlock; here
         // we advance virtual time once to mirror that gap.

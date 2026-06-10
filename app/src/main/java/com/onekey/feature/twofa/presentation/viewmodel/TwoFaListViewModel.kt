@@ -26,7 +26,7 @@ import javax.inject.Inject
 /**
  * Marker for any 2FA list row, regardless of OTP type. The screen renders
  * [Rotating] entries with a countdown ring and [Hotp] entries with a
- * "Generate next code" button (added in C5). Both share the long-press →
+ * "Generate next code" button (added in C5). Both share the long-press ->
  * delete affordance.
  */
 sealed class TwoFaListEntry {

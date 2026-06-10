@@ -34,9 +34,9 @@ class PasswordAttemptTracker @Inject constructor(
          * Returns the lockout duration in milliseconds for a given failure count,
          * or null if no lockout applies yet.
          *
-         *   3–4  failures →  30 seconds
-         *   5–9  failures →   5 minutes
-         *   10+  failures →   1 hour
+         *   3-4  failures ->  30 seconds
+         *   5-9  failures ->   5 minutes
+         *   10+  failures ->   1 hour
          */
         fun lockoutDurationMs(attempts: Int): Long? = when {
             attempts >= 10 -> 3_600_000L

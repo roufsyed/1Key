@@ -54,10 +54,10 @@ internal object BackupPasswordValidator {
      * Estimates password entropy as length × log2(pool size).
      *
      * Pool size is determined by which character classes are present:
-     *   lowercase letters  → +26
-     *   uppercase letters  → +26
-     *   decimal digits     → +10
-     *   other (symbols)    → +32  (conservative - printable ASCII non-alphanum is ~32)
+     *   lowercase letters  -> +26
+     *   uppercase letters  -> +26
+     *   decimal digits     -> +10
+     *   other (symbols)    -> +32  (conservative - printable ASCII non-alphanum is ~32)
      *
      * This deliberately avoids building a Set<Char> (which requires boxing) or converting
      * to String. The estimate is a lower bound: a password using only 'a' and 'b' gets

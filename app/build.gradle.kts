@@ -17,6 +17,10 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "1.1.0"
+        // Required for Room MigrationTestHelper / AndroidX ext-junit in
+        // src/androidTest. The runner picks up @RunWith(AndroidJUnit4::class)
+        // tests and drives them through an actual Android instrumentation harness.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -76,6 +80,15 @@ android {
 
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
+    }
+
+    // Room MigrationTestHelper reads exported schema JSONs (under app/schemas/...)
+    // at instrumentation time to create the start-version fixture DB and to assert
+    // post-migration shape. Adding `schemas/` as an assets source root for the
+    // androidTest variant copies the files into the test APK; MigrationTestHelper
+    // looks them up via the asset path "...OneKeyDatabase/{version}.json".
+    sourceSets {
+        getByName("androidTest").assets.srcDirs("$projectDir/schemas")
     }
 
     packaging {
@@ -156,6 +169,12 @@ dependencies {
     // EncryptedSharedPreferences - Keystore-backed encryption for auth data at rest.
     implementation(libs.security.crypto)
 
+    // JetBrains Markdown - pure-Kotlin CommonMark + GFM parser. Used as the AST
+    // source behind a custom Compose renderer for note bodies. Single transitive
+    // dep is kotlin-stdlib (already on the classpath); KMP umbrella coordinate
+    // resolves to the markdown-jvm artifact for Android. Apache-2.0.
+    implementation(libs.jetbrains.markdown)
+
     // Testing - JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).
@@ -182,6 +201,26 @@ dependencies {
     // `lintPublish` bundles them for library consumers, which doesn't apply to
     // an app module.
     lintChecks(project(":lint-rules"))
+
+    // Instrumented tests - Room MigrationTestHelper + the AndroidX test runner.
+    // room-testing supplies MigrationTestHelper itself; ext-junit registers
+    // @RunWith(AndroidJUnit4::class) under JUnit 4; test-runner is the
+    // AndroidJUnitRunner referenced by `defaultConfig.testInstrumentationRunner`.
+    androidTestImplementation(libs.room.testing)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.junit)
+
+    // Compose UI testing - createComposeRule() / setContent {} / onNodeWithText
+    // assertions for instrumented Compose tests. The BOM is added to the
+    // androidTest classpath so the test artefacts inherit the same Compose
+    // version as the app. The manifest fragment is debugImplementation rather
+    // than androidTestImplementation per the AndroidX docs: it ships an
+    // empty Activity into the debug APK that the test rule mounts content
+    // into, so it must be merged into the app's manifest, not the test APK's.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.ui.test.junit4)
+    debugImplementation(libs.androidx.ui.test.manifest)
 }
 
 // Robolectric needs Android resources on the unit-test classpath so it can

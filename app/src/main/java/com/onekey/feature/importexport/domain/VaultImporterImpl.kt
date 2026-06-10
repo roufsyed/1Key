@@ -9,6 +9,7 @@ import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.runCatchingResult
+import com.onekey.core.domain.notes.notesNormalize
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.security.CryptoManager
 import com.onekey.feature.twofa.domain.OtpAuthUriParser
@@ -110,6 +111,16 @@ class VaultImporterImpl @Inject constructor(
 
                 val allCustomFields = (knownCustomFields + unknownCustomFields).take(CustomField.MAX_FIELDS)
 
+                // Notes is the only field that can legitimately carry multi-line
+                // markdown, foreign line endings (CRLF / CR), and zero-width
+                // characters from cross-platform exports. Run it through
+                // notesNormalize at the importer ingress so the per-row
+                // runCatching surfaces a clean "Notes contained null bytes"
+                // FailedEntry in the import-results screen rather than failing
+                // the whole transaction later inside the repo write. The repo
+                // still runs notesNormalize defensively at toEntity() - both
+                // layers are idempotent, so double-normalisation is a no-op.
+                val rawNotes = normalized["notes"] as? String ?: ""
                 credentials.add(
                     Credential(
                         id = (normalized["id"] as? String) ?: UUID.randomUUID().toString(),
@@ -117,7 +128,7 @@ class VaultImporterImpl @Inject constructor(
                         username = normalized["username"] as? String ?: "",
                         password = normalized["password"] as? String ?: "",
                         url = normalized["url"] as? String ?: "",
-                        notes = normalized["notes"] as? String ?: "",
+                        notes = notesNormalize(rawNotes),
                         otpParams = parseImportedOtp(normalized["totp_secret"] as? String),
                         tags = (normalized["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
                         isFavorite = (normalized["is_favorite"] as? Boolean)
@@ -125,18 +136,25 @@ class VaultImporterImpl @Inject constructor(
                         customFields = allCustomFields,
                         // Foreign exports may encode timestamps as ISO strings, RFC dates,
                         // or epoch sec/μs/ns rather than the ms Long we write - TimestampParser
-                        // normalises every shape. Unrecognised input → fall through to `now`.
+                        // normalises every shape. Unrecognised input -> fall through to `now`.
                         createdAt = TimestampParser.parseToEpochMillis(normalized["created_at"]) ?: now,
                         updatedAt = TimestampParser.parseToEpochMillis(normalized["updated_at"]) ?: now,
                         // Forward-compat: missing `type` (older exports, third-party files)
                         // becomes LOGIN, matching the migration default for legacy rows.
                         type = CredentialType.fromNameOrDefault(normalized["type"] as? String),
-                        // Round-trip the recycle-bin marker so a backup→restore preserves
+                        // Round-trip the recycle-bin marker so a backup->restore preserves
                         // bin state. Older exports without the field stay active (null).
                         deletedAt = TimestampParser.parseToEpochMillis(normalized["deleted_at"]),
                         // Optional - null when the source export didn't carry a
                         // last-used timestamp (e.g. our own pre-DB-v10 backups).
                         accessedAt = TimestampParser.parseToEpochMillis(normalized["accessed_at"]),
+                        // Audit-trail stamp for every imported credential. `now` is the
+                        // single import-batch timestamp computed above, so every row
+                        // produced by one parse() call shares the same `imported_at`
+                        // value - matching the semantics "all of these arrived in one
+                        // batch at this instant". In-app SaveCredentialUseCase paths
+                        // do NOT set this field; they leave it null.
+                        importedAt = now,
                     )
                 )
             }.onFailure { e ->
@@ -188,7 +206,18 @@ class VaultImporterImpl @Inject constructor(
                     val col = mutableMapOf<String, String>()
                     row.forEachIndexed { colIdx, cell ->
                         val field = headerMapping.getOrNull(colIdx) ?: return@forEachIndexed
-                        col[field] = cell.trim()
+                        // Column-aware normalisation. Tokens (title / username /
+                        // url / password / tags / totp_secret / timestamps) are
+                        // single-line values where leading and trailing
+                        // whitespace is always noise - trim is correct. Notes
+                        // is the only legitimately multi-line field; trimming
+                        // it would silently delete trailing newlines that
+                        // matter to the markdown renderer (and would still let
+                        // CRLF / NUL through). Route the notes column through
+                        // notesNormalize - NUL bytes throw IllegalArgumentException
+                        // which the outer runCatching folds into a per-row
+                        // FailedEntry with the thrown message as the reason.
+                        col[field] = if (field == "notes") notesNormalize(cell) else cell.trim()
                     }
 
                     val customFields = customFieldCols
@@ -218,6 +247,10 @@ class VaultImporterImpl @Inject constructor(
                             createdAt = TimestampParser.parseToEpochMillis(col["created_at"]) ?: now,
                             updatedAt = TimestampParser.parseToEpochMillis(col["updated_at"]) ?: now,
                             accessedAt = TimestampParser.parseToEpochMillis(col["accessed_at"]),
+                            // Same single-batch stamp as the JSON path: every row
+                            // produced by this CSV parse shares one `imported_at`,
+                            // marking "arrived via a foreign import at this instant".
+                            importedAt = now,
                         )
                     )
                 }.onFailure { e ->

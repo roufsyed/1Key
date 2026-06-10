@@ -12,6 +12,7 @@ import com.onekey.core.domain.model.Tag
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.domain.repository.NotesDisplayPrefsRepository
 import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.GetCredentialUseCase
@@ -22,16 +23,34 @@ import com.onekey.core.security.AutoLockManager
 import com.onekey.core.security.SecureClipboardManager
 import com.onekey.core.security.VaultLockedException
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.util.UUID
 import javax.inject.Inject
+
+/**
+ * Discriminator for the post-delete snackbar. SOFT is a recycle-bin move (recoverable),
+ * HARD is the row vanishing for good. The NavGraph picks the wording from this.
+ */
+enum class DeleteKind { SOFT, HARD }
 
 @Immutable
 sealed class CredentialDetailUiState {
     data object Loading : CredentialDetailUiState()
     data class Success(val credential: Credential, val isEditing: Boolean = false) : CredentialDetailUiState()
-    data object Saved : CredentialDetailUiState()
-    data object Deleted : CredentialDetailUiState()
+    // Only emitted for brand-new credentials. The screen reads [newCredentialId]
+    // and navigates to credential/{newCredentialId}, replacing the "new" entry on
+    // the back stack so system-back goes to the list. Existing-credential edits
+    // skip this state entirely - the view-model flips Success.isEditing back to
+    // false in place, keeping the user on the same screen / same nav entry.
+    data class Saved(val newCredentialId: String) : CredentialDetailUiState()
+    /**
+     * Carries the [credentialId] so the host can offer an Undo action on
+     * SOFT deletes. The id is also set for HARD deletes for symmetry; the
+     * host ignores it because there is nothing to restore.
+     */
+    data class Deleted(val kind: DeleteKind, val credentialId: String) : CredentialDetailUiState()
     data class Error(val message: String) : CredentialDetailUiState()
 }
 
@@ -48,7 +67,8 @@ class CredentialDetailViewModel @Inject constructor(
     private val tagRepository: TagRepository,
     private val secureClipboard: SecureClipboardManager,
     private val autoLockManager: AutoLockManager,
-    appPrefs: AppPreferencesRepository,
+    private val appPrefs: AppPreferencesRepository,
+    private val notesDisplayPrefs: NotesDisplayPrefsRepository,
 ) : ViewModel() {
 
     /**
@@ -66,6 +86,50 @@ class CredentialDetailViewModel @Inject constructor(
 
     val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /**
+     * Global master switch from Settings. When `false`, every credential's
+     * notes field renders as plain text regardless of per-credential overrides.
+     * Default `true` mirrors [AppPreferencesRepository.isNotesRenderMarkdownEnabled]
+     * so the first frame of a freshly-opened credential does not flash
+     * plain-text before the disk value arrives.
+     */
+    val isNotesMarkdownEnabled: StateFlow<Boolean> = appPrefs.isNotesRenderMarkdownEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /**
+     * Credential IDs the user has explicitly toggled to plain-source mode via
+     * the overflow menu. Eagerly so a credential whose toggle is already on disk
+     * never reads as `false` on the first composition. Empty-set initial value
+     * is correct because absence-from-set is the "not in plain-source mode"
+     * encoding and the disk emission overwrites it as soon as the DataStore
+     * read completes.
+     */
+    val plainSourceCredentialIds: StateFlow<Set<String>> =
+        notesDisplayPrefs.observeIdsInPlainSourceMode()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * Credential IDs already auto-flipped to plain-source on first view post-import.
+     * Membership is sticky across process restarts so [maybeAutoFlip] is a no-op
+     * after the first call per credential.
+     */
+    val autoFlippedCredentialIds: StateFlow<Set<String>> =
+        notesDisplayPrefs.observeAutoFlippedIds()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    /**
+     * One-shot transient events for the notes-display surface (Snackbar copy,
+     * size-cap banner signal, blocked-link toasts). `extraBufferCapacity = 1`
+     * with `DROP_OLDEST` so an emit racing the screen-level collector still
+     * delivers the most recent message rather than blocking
+     * [viewModelScope.launch] callers like [maybeAutoFlip].
+     */
+    private val _notesEvent = MutableSharedFlow<String>(
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    val notesEvent: SharedFlow<String> = _notesEvent.asSharedFlow()
 
     val clipboardCountdown: StateFlow<Int?> = secureClipboard.countdown
 
@@ -145,12 +209,20 @@ class CredentialDetailViewModel @Inject constructor(
                         }
                         _uiState.update { state ->
                             when {
+                                // Preserve terminal states - DB updates must not override
+                                // Saved/Deleted. Critical for hard-delete: deleteNow() sets
+                                // Deleted, the row vanishes, and this flow emits a final
+                                // credential=null. Without this ordering, the null branch
+                                // would flip Deleted to Error("Credential not found") before
+                                // the screen's LaunchedEffect dispatches onDeleted(),
+                                // producing a "credential not found" flash mid-navigation.
+                                state is CredentialDetailUiState.Deleted -> state
+                                state is CredentialDetailUiState.Saved -> state
                                 credential == null -> CredentialDetailUiState.Error("Credential not found")
                                 state is CredentialDetailUiState.Loading ->
                                     CredentialDetailUiState.Success(credential)
                                 state is CredentialDetailUiState.Success ->
                                     state.copy(credential = credential)
-                                // Preserve terminal states - DB updates must not override Saved/Deleted.
                                 else -> state
                             }
                         }
@@ -169,8 +241,34 @@ class CredentialDetailViewModel @Inject constructor(
             if (existing != null && existing.id.isNotBlank()) {
                 historyRepository.snapshotCredential(existing)
             }
-            when (val result = saveCredential(credential)) {
-                is AppResult.Success -> _uiState.value = CredentialDetailUiState.Saved
+            // Pre-generate the id for new credentials so we know what to navigate to after save.
+            // CredentialRepositoryImpl.toEntity() also generates if blank, but it doesn't
+            // surface the generated id back to callers - so we generate here, keep it, and
+            // hand the same id to both the repo and the post-save nav callback.
+            val wasNew = credential.id.isBlank()
+            val toSave = if (wasNew) credential.copy(id = UUID.randomUUID().toString()) else credential
+            when (val result = saveCredential(toSave)) {
+                is AppResult.Success -> {
+                    if (wasNew) {
+                        _uiState.value = CredentialDetailUiState.Saved(toSave.id)
+                    } else {
+                        // Flip to view mode in place. The Room observer at init{} will re-emit
+                        // the canonical row immediately and its state.copy(credential = ...)
+                        // branch preserves isEditing = false.
+                        _uiState.update { state ->
+                            when (state) {
+                                is CredentialDetailUiState.Success -> state.copy(
+                                    credential = toSave,
+                                    isEditing = false,
+                                )
+                                else -> CredentialDetailUiState.Success(
+                                    credential = toSave,
+                                    isEditing = false,
+                                )
+                            }
+                        }
+                    }
+                }
                 is AppResult.Error -> {
                     if (result.exception is VaultLockedException) {
                         // Vault auto-locked between editor open and Save tap. Don't surface
@@ -192,7 +290,7 @@ class CredentialDetailViewModel @Inject constructor(
         val id = credentialId ?: return
         viewModelScope.launch {
             when (val result = deleteCredential(id)) {
-                is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted
+                is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted(DeleteKind.SOFT, id)
                 is AppResult.Error -> _uiState.value = CredentialDetailUiState.Error(result.message ?: "Delete failed")
             }
         }
@@ -203,7 +301,7 @@ class CredentialDetailViewModel @Inject constructor(
         val id = credentialId ?: return
         viewModelScope.launch {
             when (val result = hardDeleteCredential(id)) {
-                is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted
+                is AppResult.Success -> _uiState.value = CredentialDetailUiState.Deleted(DeleteKind.HARD, id)
                 is AppResult.Error -> _uiState.value = CredentialDetailUiState.Error(result.message ?: "Delete failed")
             }
         }
@@ -238,8 +336,9 @@ class CredentialDetailViewModel @Inject constructor(
             if (result is AppResult.Error) {
                 _uiState.value = CredentialDetailUiState.Error(result.message ?: "Merge failed")
             } else {
-                // The bin item was permanently removed during merge - pop back to the prior screen.
-                _uiState.value = CredentialDetailUiState.Deleted
+                // The bin item was permanently removed during merge - pop back to the prior
+                // screen. HARD because the row is gone for good after the merge subsumes it.
+                _uiState.value = CredentialDetailUiState.Deleted(DeleteKind.HARD, conflict.binItem.id)
             }
         }
     }
@@ -304,6 +403,51 @@ class CredentialDetailViewModel @Inject constructor(
     fun addTag(name: String) {
         viewModelScope.launch {
             tagRepository.addTag(Tag(name = name, color = 0xFF6200EE.toInt(), icon = ""))
+        }
+    }
+
+    /**
+     * Flip the per-credential notes view between rendered markdown and plain
+     * source. Driven by the overflow-menu item on the detail screen. No-ops
+     * for a blank id (the new-credential flow has no persistent ID to key
+     * against). The read-then-write race is acceptable because this is the
+     * only writer for the user-toggled path; a double tap simply lands on
+     * the second value, which is the user's most recent intent.
+     */
+    fun toggleViewMode(credentialId: String) {
+        if (credentialId.isBlank()) return
+        viewModelScope.launch {
+            val currentlyPlain = credentialId in plainSourceCredentialIds.value
+            notesDisplayPrefs.setPlainSource(credentialId, !currentlyPlain)
+        }
+    }
+
+    /**
+     * First-view-post-import heuristic. Imported credentials whose notes were
+     * created in another app likely use markdown-shaped text that wasn't
+     * meant for inline rendering, so the design defaults them to plain-source
+     * mode on first view. Idempotent after the first call per credential -
+     * the [autoFlippedCredentialIds] sentinel prevents re-flipping if the
+     * user has since manually toggled back to rendered mode.
+     *
+     * Ordering matters: persist the plain-source flag first, then the
+     * auto-flipped sentinel, then emit the Snackbar. This way the UI sees
+     * the plain-source state before the user notices the toast, and a
+     * crash between the two writes leaves the heuristic re-runnable rather
+     * than silently consumed.
+     *
+     * @param importedAt epoch-ms from [Credential.importedAt]; `null` for
+     *   manually-entered credentials, which skip the flip.
+     */
+    fun maybeAutoFlip(credentialId: String, importedAt: Long?) {
+        if (credentialId.isBlank() || importedAt == null) return
+        if (credentialId in autoFlippedCredentialIds.value) return
+        viewModelScope.launch {
+            notesDisplayPrefs.setPlainSource(credentialId, true)
+            notesDisplayPrefs.markAutoFlipped(credentialId)
+            _notesEvent.tryEmit(
+                "Imported notes shown as source. Tap the overflow menu to render as markdown."
+            )
         }
     }
 

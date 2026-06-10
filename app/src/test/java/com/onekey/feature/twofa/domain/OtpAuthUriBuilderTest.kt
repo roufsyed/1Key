@@ -14,7 +14,7 @@ import org.robolectric.annotation.Config
 /**
  * Round-trip tests are the load-bearing guarantee here: anything the builder
  * produces must parse back into the same params via [OtpAuthUriParser]. That's
- * the contract the plaintext exporter relies on for backup → restore safety.
+ * the contract the plaintext exporter relies on for backup -> restore safety.
  *
  * `@Config(sdk = [34])` pins Robolectric to API 34; see [OtpAuthUriParserTest]
  * for rationale. `application = Application::class` bypasses HiltAndroidApp,

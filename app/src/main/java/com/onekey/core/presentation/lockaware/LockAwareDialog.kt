@@ -52,7 +52,7 @@ import androidx.compose.ui.window.DialogProperties
  * buttons remain pinned at the bottom of the surface - always visible above
  * the keyboard.
  *
- * Visual layout mirrors `AlertDialog` (icon → title → text → buttons row,
+ * Visual layout mirrors `AlertDialog` (icon -> title -> text -> buttons row,
  * 24dp padding, M3 spacing constants) so call sites don't change.
  */
 @Composable

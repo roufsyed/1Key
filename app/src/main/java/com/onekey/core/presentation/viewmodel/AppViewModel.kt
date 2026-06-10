@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.usecase.PurgeExpiredRecycleBinUseCase
+import com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.feature.sync.domain.SyncEngine
 import com.onekey.feature.sync.domain.SyncState
@@ -22,6 +23,7 @@ class AppViewModel @Inject constructor(
     authRepository: AuthRepository,
     appPrefs: AppPreferencesRepository,
     private val purgeExpiredRecycleBin: PurgeExpiredRecycleBinUseCase,
+    private val restoreFromRecycleBin: RestoreFromRecycleBinUseCase,
     private val syncEngine: SyncEngine,
 ) : ViewModel() {
 
@@ -83,5 +85,26 @@ class AppViewModel @Inject constructor(
 
     fun resetUnlockMorph() {
         _unlockPhase.value = UnlockTransitionPhase.Idle
+    }
+
+    /**
+     * Restore a soft-deleted credential by id. Wired to the "Undo" action on the
+     * post-delete snackbar in [com.onekey.core.presentation.navigation.OneKeyNavGraph].
+     * Fire-and-forget under [viewModelScope] so the snackbar callback returns
+     * immediately and the restore survives even if the user keeps navigating.
+     *
+     * Errors are intentionally silent: the credential simply stays in the bin if
+     * the restore fails for some reason (vault locked mid-undo, row already purged
+     * by retention, etc.). The user can recover it manually from the recycle-bin
+     * screen if they want, so a follow-up error toast would be more noise than help.
+     *
+     * No conflict-resolution dialog is shown here because the just-deleted item's
+     * (title, username) signature was unique at delete time. The narrow window for
+     * the user to create a colliding active row before tapping Undo is acceptable.
+     */
+    fun undoRecycleBinDelete(credentialId: String) {
+        viewModelScope.launch {
+            restoreFromRecycleBin.restore(credentialId)
+        }
     }
 }

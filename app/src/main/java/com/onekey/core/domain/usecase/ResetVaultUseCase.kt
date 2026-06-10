@@ -27,10 +27,10 @@ class ResetVaultUseCase @Inject constructor(
      * password and a third party (e.g. an autofill request handler) reads
      * the snapshot before the relock fires.
      *
-     * The pre-fix ordering (delete → history.delete → resetVault) is
-     * replaced with (lock → delete → history.delete → resetVault). Lock
+     * The pre-fix ordering (delete -> history.delete -> resetVault) is
+     * replaced with (lock -> delete -> history.delete -> resetVault). Lock
      * failures (`authRepository.lock` returning Error) are surfaced
-     * because callers (Settings → Delete Vault) need to know - in practice
+     * because callers (Settings -> Delete Vault) need to know - in practice
      * `VaultKeyHolder.lock()` does not fail, but the contract type allows
      * it.
      */

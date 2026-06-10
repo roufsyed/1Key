@@ -55,6 +55,8 @@ import com.onekey.feature.vault.presentation.screen.FavouritesScreen
 import com.onekey.feature.vault.presentation.screen.RecycleBinScreen
 import com.onekey.feature.vault.presentation.screen.TaggedCredentialListScreen
 import com.onekey.feature.vault.presentation.screen.VaultScreen
+import com.onekey.feature.vault.presentation.viewmodel.DeleteKind
+import kotlinx.coroutines.launch
 
 sealed class Screen(val route: String) {
     data object Onboarding : Screen("onboarding")
@@ -108,6 +110,13 @@ fun OneKeyNavGraph(
     val showBottomNav = currentRoute in BOTTOM_NAV_ROUTES
     val syncChipState by appViewModel.syncChipState.collectAsStateWithLifecycle()
 
+    // App-root snackbar host for transient post-action toasts that must survive a
+    // back-stack pop (e.g. "Moved to recycle bin" after deleting from the
+    // credential detail screen - the toast outlives the disposing detail composable
+    // and renders on the list the user lands on).
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+
     // Navigate to Lock whenever the vault locks mid-session.
     // Skip if already on Lock or Onboarding to avoid redundant navigation.
     // When "restore last screen" is enabled we just push Lock on top of the existing
@@ -143,7 +152,7 @@ fun OneKeyNavGraph(
     // The outer Box hosts an UnlockOverlay sibling above the Scaffold. Keeping the morph at
     // app root means the bottom-nav appearing and the NavHost cross-fade both happen
     // *under* the curtain, eliminating the layout pop the user would otherwise see when
-    // LockScreen → Vault navigation flips showBottomNav to true.
+    // LockScreen -> Vault navigation flips showBottomNav to true.
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             bottomBar = {
@@ -164,7 +173,8 @@ fun OneKeyNavGraph(
                         onNavigate = { navController.navigateToTab(it) },
                     )
                 }
-            }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
         ) { innerPadding ->
             NavHost(
                 navController = navController,
@@ -253,7 +263,39 @@ fun OneKeyNavGraph(
                 ) {
                     CredentialDetailScreen(
                         onBack = { navController.popBackStack() },
-                        onDeleted = { navController.popBackStack() },
+                        onDeleted = { kind, credentialId ->
+                            // Show the toast on the app-root SnackbarHost so it survives
+                            // the imminent disposal of the detail composable. snackbarScope
+                            // is tied to the NavGraph composable (app shell), not the
+                            // popping screen, so the launched showSnackbar runs to
+                            // completion on the list the user lands on. SOFT deletes get
+                            // an Undo action that restores the credential via AppViewModel
+                            // (which holds the use case across the back-stack pop).
+                            snackbarScope.launch {
+                                val result = snackbarHostState.showSnackbar(
+                                    message = when (kind) {
+                                        DeleteKind.SOFT -> "Moved to recycle bin"
+                                        DeleteKind.HARD -> "Deleted"
+                                    },
+                                    actionLabel = if (kind == DeleteKind.SOFT) "Undo" else null,
+                                    withDismissAction = false,
+                                )
+                                if (result == SnackbarResult.ActionPerformed &&
+                                    kind == DeleteKind.SOFT
+                                ) {
+                                    appViewModel.undoRecycleBinDelete(credentialId)
+                                }
+                            }
+                            navController.popBackStack()
+                        },
+                        onSavedNew = { newId ->
+                            // Replace the "new credential" entry on the back stack with
+                            // the freshly-created detail view so system-back lands on
+                            // the list (where it would have been if the user had
+                            // cancelled), not back inside the editor.
+                            navController.popBackStack()
+                            navController.navigate(Screen.CredentialDetail.createRoute(newId))
+                        },
                     )
                 }
 

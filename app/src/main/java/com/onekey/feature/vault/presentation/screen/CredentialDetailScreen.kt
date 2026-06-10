@@ -33,8 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,14 +58,23 @@ import com.onekey.core.domain.model.OtpParams
 import com.onekey.core.domain.model.OtpType
 import com.onekey.core.domain.model.Tag
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
 import com.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.onekey.core.presentation.markdown.FallbackReason
+import com.onekey.core.presentation.markdown.LinkConfirmDialog
+import com.onekey.core.presentation.markdown.LinkRequest
+import com.onekey.core.presentation.markdown.MarkdownEditorField
+import com.onekey.core.presentation.markdown.MarkdownNotesView
 import com.onekey.core.presentation.util.toFormattedDateTime
 import com.onekey.core.presentation.util.toRelativeTime
 import com.onekey.feature.twofa.domain.OtpAuthUriParser
 import com.onekey.feature.twofa.presentation.screen.TotpWidget
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailUiState
 import com.onekey.feature.vault.presentation.viewmodel.CredentialDetailViewModel
+import com.onekey.feature.vault.presentation.viewmodel.DeleteKind
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -115,6 +127,13 @@ private val NO_AUTH_TYPES = setOf(
     CredentialType.OTHER,
 )
 
+// One-line syntax cheat-sheet shown under the markdown editor's notes field so
+// users discover the supported subset without needing the discarded toolbar.
+// Kept short because supportingText is rendered in labelSmall and wraps on
+// narrow screens otherwise.
+private const val MARKDOWN_SYNTAX_HINT =
+    "Markdown: **bold** _italic_ # heading - list `code` [text](url)"
+
 private fun typeIcon(type: CredentialType) = when (type) {
     CredentialType.LOGIN -> Icons.Default.Lock
     CredentialType.SECURE_NOTE -> Icons.Default.Description
@@ -131,7 +150,8 @@ private fun typeIcon(type: CredentialType) = when (type) {
 @Composable
 fun CredentialDetailScreen(
     onBack: () -> Unit,
-    onDeleted: () -> Unit,
+    onDeleted: (DeleteKind, String) -> Unit,
+    onSavedNew: (String) -> Unit,
     viewModel: CredentialDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -142,9 +162,9 @@ fun CredentialDetailScreen(
     val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState) {
-        when (uiState) {
-            is CredentialDetailUiState.Saved -> onBack()
-            is CredentialDetailUiState.Deleted -> onDeleted()
+        when (val state = uiState) {
+            is CredentialDetailUiState.Saved -> onSavedNew(state.newCredentialId)
+            is CredentialDetailUiState.Deleted -> onDeleted(state.kind, state.credentialId)
             else -> Unit
         }
     }
@@ -154,10 +174,16 @@ fun CredentialDetailScreen(
             CircularProgressIndicator()
         }
         is CredentialDetailUiState.Success -> {
+            // Hoisted above the isEditing branch so the edit content can drive the live-preview
+            // editor swap with the same signals the view content uses for its render-toggle.
+            val isNotesMarkdownEnabled by viewModel.isNotesMarkdownEnabled.collectAsStateWithLifecycle()
+            val plainSourceIds by viewModel.plainSourceCredentialIds.collectAsStateWithLifecycle()
             if (state.isEditing) {
                 CredentialEditContent(
                     credential = state.credential,
                     availableTags = availableTags,
+                    isNotesMarkdownEnabled = isNotesMarkdownEnabled,
+                    plainSourceCredentialIds = plainSourceIds,
                     onSave = viewModel::save,
                     onAddTag = viewModel::addTag,
                     onBeginCameraSession = viewModel::beginCameraSession,
@@ -174,6 +200,11 @@ fun CredentialDetailScreen(
                     binEnabled = binEnabled,
                     isInRecycleBin = state.credential.deletedAt != null,
                     clipboardCountdown = clipboardCountdown,
+                    isNotesMarkdownEnabled = isNotesMarkdownEnabled,
+                    plainSourceCredentialIds = plainSourceIds,
+                    notesEvent = viewModel.notesEvent,
+                    onMaybeAutoFlip = viewModel::maybeAutoFlip,
+                    onToggleViewMode = viewModel::toggleViewMode,
                     onEdit = viewModel::startEditing,
                     onDelete = viewModel::delete,
                     onDeleteNow = viewModel::deleteNow,
@@ -217,6 +248,11 @@ private fun CredentialViewContent(
     binEnabled: Boolean,
     isInRecycleBin: Boolean,
     clipboardCountdown: Int?,
+    isNotesMarkdownEnabled: Boolean,
+    plainSourceCredentialIds: Set<String>,
+    notesEvent: SharedFlow<String>,
+    onMaybeAutoFlip: (String, Long?) -> Unit,
+    onToggleViewMode: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onDeleteNow: () -> Unit,
@@ -232,6 +268,35 @@ private fun CredentialViewContent(
     var showDeleteDialog by rememberSaveable { mutableStateOf(false) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var historyExpanded by rememberSaveable { mutableStateOf(false) }
+    var overflowMenuExpanded by remember { mutableStateOf(false) }
+
+    // Snackbar plumbing for notes-display transient events (auto-flip toast,
+    // blocked-link copy). Lives at the screen level so notes-section and dialog
+    // routing emit through a single channel.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
+    // Pending link confirmation. `LinkRequest` is set when the user taps an
+    // allow-listed scheme inside MarkdownNotesView; the dialog clears it on
+    // confirm or dismiss. Plain `remember` (not Saveable) because LinkRequest
+    // carries an android.net.Uri which is not Parcelable through SavedState.
+    var pendingLink by remember { mutableStateOf<LinkRequest?>(null) }
+
+    // Whether the overflow menu's toggle item should be shown. Hide when the
+    // global flag is off (no toggle has any effect) or when the credential has
+    // no notes content (nothing to render). Recycle-bin gating already lives in
+    // the surrounding `if (!isInRecycleBin)` block.
+    val showViewModeToggle = isNotesMarkdownEnabled && credential.notes.isNotEmpty()
+
+    // Single subscription drains every transient event the VM emits and routes
+    // it to the SnackbarHost. The auto-flip emission lands here on the first
+    // composition of an imported credential's detail screen; blocked-link
+    // taps also funnel through the same flow.
+    LaunchedEffect(notesEvent) {
+        notesEvent.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -263,10 +328,34 @@ private fun CredentialViewContent(
                         }
                         IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "Edit") }
                         IconButton(onClick = { showDeleteDialog = true }) { Icon(Icons.Default.Delete, "Delete") }
+                        if (showViewModeToggle) {
+                            // Overflow opens a single-item dropdown that flips between
+                            // rendered markdown and plain-source for *this* credential.
+                            // LockAwareDropdownMenu (not raw M3 DropdownMenu) because the
+                            // UnsafeUnlockableSurface lint blocks raw surfaces outside the
+                            // lockaware package.
+                            IconButton(onClick = { overflowMenuExpanded = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                            }
+                            LockAwareDropdownMenu(
+                                expanded = overflowMenuExpanded,
+                                onDismissRequest = { overflowMenuExpanded = false },
+                            ) {
+                                val inPlainMode = credential.id in plainSourceCredentialIds
+                                DropdownMenuItem(
+                                    text = { Text(if (inPlainMode) "View rendered" else "View source") },
+                                    onClick = {
+                                        overflowMenuExpanded = false
+                                        onToggleViewMode(credential.id)
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         // Flat divider-separated sections - same visual language as the home and list
         // screens. No card chrome, no per-row gap; dividers carry the structural rhythm.
@@ -307,9 +396,14 @@ private fun CredentialViewContent(
             }
             if (credential.type in NO_AUTH_TYPES) {
                 if (credential.notes.isNotEmpty()) {
-                    DetailField(
+                    NotesSection(
+                        credential = credential,
                         label = if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes",
-                        value = credential.notes,
+                        isNotesMarkdownEnabled = isNotesMarkdownEnabled,
+                        isInPlainSourceMode = credential.id in plainSourceCredentialIds,
+                        snackbarHostState = snackbarHostState,
+                        onMaybeAutoFlip = onMaybeAutoFlip,
+                        onLinkTapped = { pendingLink = it },
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
@@ -349,7 +443,15 @@ private fun CredentialViewContent(
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 if (credential.notes.isNotEmpty()) {
-                    DetailField("Notes", credential.notes)
+                    NotesSection(
+                        credential = credential,
+                        label = "Notes",
+                        isNotesMarkdownEnabled = isNotesMarkdownEnabled,
+                        isInPlainSourceMode = credential.id in plainSourceCredentialIds,
+                        snackbarHostState = snackbarHostState,
+                        onMaybeAutoFlip = onMaybeAutoFlip,
+                        onLinkTapped = { pendingLink = it },
+                    )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
                 // TotpWidget renders rotating codes (TOTP / Steam). HOTP entries take
@@ -400,6 +502,31 @@ private fun CredentialViewContent(
             onMoveToBin = { showDeleteDialog = false; onDelete() },
             onDeleteNow = { showDeleteDialog = false; onDeleteNow() },
             onCancel = { showDeleteDialog = false },
+        )
+    }
+
+    pendingLink?.let { request ->
+        LinkConfirmDialog(
+            request = request,
+            onConfirm = {
+                // FLAG_ACTIVITY_NEW_TASK is required because the screen sits
+                // under MainActivity but the intent dispatches to an external
+                // browser - without the flag some OEM browsers reject the
+                // launch from a non-Activity-typed context.
+                // runCatching swallows ActivityNotFoundException per the
+                // LinkConfirmDialog KDoc contract (no browser installed).
+                runCatching {
+                    val intent = android.content.Intent(
+                        android.content.Intent.ACTION_VIEW,
+                        request.parsedUri,
+                    ).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }
+                pendingLink = null
+            },
+            onDismiss = { pendingLink = null },
         )
     }
 }
@@ -573,6 +700,141 @@ private fun HistoryEntryRow(entry: CredentialHistoryEntry) {
     }
 }
 
+/**
+ * Notes block. Routes a credential's notes content between markdown-rendered
+ * and plain-source rendering, surfaces the 64 KiB over-cap banner, and runs the
+ * one-shot auto-flip side effect for first-view-post-import credentials.
+ *
+ * Visual chrome matches [DetailField] (header in `labelSmall` + primary tint;
+ * body in `bodyMedium`) so the row blends with neighbouring sections.
+ *
+ * Decision tree (see Phase 7 design state_diagram):
+ *   - global flag OFF or per-credential override ON -> SelectionContainer + Text
+ *     (the existing v1.0.0 path, no banner emitted).
+ *   - otherwise -> [MarkdownNotesView] with the fallback callback wired so
+ *     SIZE_CAP_EXCEEDED flips the local banner state and PARSE_FAILED stays
+ *     silent per design.
+ *
+ * Banner state is `rememberSaveable` keyed on credential id + notes content so
+ * a config change does not re-fire the callback (or lose the visible banner),
+ * but navigating to a different credential or editing the notes below the cap
+ * resets to false. Inputs that satisfy the cap on the next emission simply
+ * skip the [LaunchedEffect] branch and the banner stays false.
+ *
+ * @param credential live credential carrying the notes text and importedAt hint.
+ * @param label header copy ("Notes" or "Content" depending on the credential
+ *   type at the call site).
+ * @param isNotesMarkdownEnabled global Settings master switch; `false` collapses
+ *   to plain rendering regardless of per-credential state.
+ * @param isInPlainSourceMode `true` when the user has flipped this credential
+ *   to plain-source mode via the overflow menu.
+ * @param snackbarHostState shared host so blocked-link toasts surface at the
+ *   screen level rather than nested inside this composable.
+ * @param onMaybeAutoFlip first-view-post-import heuristic dispatch; runs once
+ *   per credential.id transition.
+ * @param onLinkTapped routes an allow-listed link tap up to the screen so the
+ *   [LinkConfirmDialog] can mount above the Scaffold.
+ */
+@Composable
+private fun NotesSection(
+    credential: Credential,
+    label: String,
+    isNotesMarkdownEnabled: Boolean,
+    isInPlainSourceMode: Boolean,
+    snackbarHostState: SnackbarHostState,
+    onMaybeAutoFlip: (String, Long?) -> Unit,
+    onLinkTapped: (LinkRequest) -> Unit,
+) {
+    // Run the auto-flip exactly once per credential.id transition. The VM's
+    // own membership-in-autoFlippedCredentialIds gate makes this idempotent
+    // across recompositions too, so the duplicate guard is belt-and-braces.
+    LaunchedEffect(credential.id) {
+        onMaybeAutoFlip(credential.id, credential.importedAt)
+    }
+
+    // Banner state lives here, not on the VM, because the cap classification
+    // is a property of the rendered source. Keyed on credential.id and notes
+    // content so a different credential or an edit that brings notes back
+    // under the cap automatically clears stale banner state on next composition.
+    var sizeCapBannerVisible by rememberSaveable(credential.id, credential.notes) {
+        mutableStateOf(false)
+    }
+
+    val coroutineScope = rememberCoroutineScope()
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+
+        if (sizeCapBannerVisible) {
+            // Visual language identical to RecycleBinBanner so banner shapes
+            // stay consistent across this screen. Non-dismissible - the cap is
+            // a property of the source, not a user choice.
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        "This note exceeded 64 KiB. Showing as plain text.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    )
+                }
+            }
+        }
+
+        if (!isNotesMarkdownEnabled || isInPlainSourceMode) {
+            // Existing v1.0.0 plain-text path. Selection container so the user
+            // can long-press to copy the source verbatim.
+            SelectionContainer {
+                Text(credential.notes, style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            MarkdownNotesView(
+                source = credential.notes,
+                onLinkTapped = onLinkTapped,
+                onBlockedLink = { scheme ->
+                    // Blocked-link copy is a view-local concern - the VM does
+                    // not need to know which schemes the user tapped. Route
+                    // directly through the shared SnackbarHostState via a
+                    // launched coroutine since showSnackbar is suspending.
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Link scheme not allowed: $scheme")
+                    }
+                },
+                onFallback = { reason ->
+                    when (reason) {
+                        FallbackReason.SIZE_CAP_EXCEEDED -> {
+                            sizeCapBannerVisible = true
+                        }
+                        // PARSE_FAILED stays silent per design - the user can
+                        // still read and copy the raw source through the
+                        // verbatim fallback that MarkdownNotesView already
+                        // renders internally.
+                        FallbackReason.PARSE_FAILED -> Unit
+                    }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun DetailField(
     label: String,
@@ -619,6 +881,8 @@ private fun DetailField(
 private fun CredentialEditContent(
     credential: Credential,
     availableTags: List<Tag>,
+    isNotesMarkdownEnabled: Boolean,
+    plainSourceCredentialIds: Set<String>,
     onSave: (Credential) -> Unit,
     onAddTag: (String) -> Unit,
     onBeginCameraSession: () -> Unit,
@@ -637,7 +901,16 @@ private fun CredentialEditContent(
     var username by rememberSaveable(credential.id) { mutableStateOf(credential.username) }
     var password by rememberSaveable(credential.id) { mutableStateOf(credential.password) }
     var url by rememberSaveable(credential.id) { mutableStateOf(credential.url) }
-    var notes by rememberSaveable(credential.id) { mutableStateOf(credential.notes) }
+    // notesField is a TextFieldValue (not a bare String) so the live-preview markdown editor can
+    // preserve cursor position across recompositions. We still pass the underlying text into the
+    // save and diff paths via `notesField.text`; OCR fills overwrite the field by re-wrapping the
+    // assigned string in a fresh TextFieldValue so the cursor parks at end-of-replacement.
+    var notesField by rememberSaveable(credential.id, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(credential.notes))
+    }
+    // Triggers a transient "notes capped" Snackbar each time the live editor rejects an over-cap
+    // value. Incremented by the cap-exceeded callback; the LaunchedEffect below shows the message.
+    var notesCapTrigger by rememberSaveable(credential.id) { mutableStateOf(0) }
     // The editor's secret text-field reads/writes only the secret string. Algorithm /
     // digits / period / type stay at the entry's current values (or default TOTP for
     // new credentials). Power users use the dedicated 2FA list's manual-entry sheet
@@ -685,7 +958,7 @@ private fun CredentialEditContent(
             username.trim() != credential.username ||
             password != credential.password ||
             url.trim() != credential.url ||
-            notes.trim() != credential.notes ||
+            notesField.text.trim() != credential.notes ||
             totpSecret.trim() != (credential.otpParams?.secret ?: "") ||
             selectedTags != credential.tags ||
             customFields != credential.customFields
@@ -709,6 +982,18 @@ private fun CredentialEditContent(
         return credential.otpParams?.copy(secret = trimmed) ?: OtpParams.defaultTotp(trimmed)
     }
 
+    // Snackbar host for transient editor messages (currently only the "notes capped at 64 KiB"
+    // notice from the live-preview markdown editor). Lives at the edit-scaffold level so the
+    // message floats above the IME and the camera/scanner sheets.
+    val editorSnackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(notesCapTrigger) {
+        if (notesCapTrigger > 0) {
+            editorSnackbarHostState.showSnackbar("Notes capped at 64 KiB. Split into multiple entries.")
+        }
+    }
+
+    val showLiveEditor = isNotesMarkdownEnabled && credential.id !in plainSourceCredentialIds
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -728,7 +1013,7 @@ private fun CredentialEditContent(
                                 username = username.trim(),
                                 password = password,
                                 url = url.trim(),
-                                notes = notes.trim(),
+                                notes = notesField.text.trim(),
                                 otpParams = buildOtpParamsForSave(),
                                 tags = selectedTags,
                                 customFields = customFields,
@@ -738,7 +1023,8 @@ private fun CredentialEditContent(
                     ) { Text("Save") }
                 }
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(editorSnackbarHostState) },
     ) { padding ->
         Column(
             modifier = Modifier.padding(padding).imePadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -752,21 +1038,47 @@ private fun CredentialEditContent(
             // fit this app's TOTP shape. Login-shaped types keep the full layout.
             when {
                 credential.type in NO_AUTH_TYPES -> {
-                    LockAwareOutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = {
-                            Text(if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes")
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = if (credential.type == CredentialType.SECURE_NOTE) 12 else 4,
-                        maxLines = 30,
-                        trailingIcon = {
-                            IconButton(onClick = { showOcrScanner = true }) {
-                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                            }
-                        },
-                    )
+                    // Live-preview markdown editor when the global toggle is on and the user
+                    // hasn't opted into plain-source mode for this credential; otherwise the
+                    // existing plain field with monospace styling so raw markers stay legible.
+                    if (showLiveEditor) {
+                        MarkdownEditorField(
+                            value = notesField,
+                            onValueChange = { notesField = it },
+                            label = {
+                                Text(if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes")
+                            },
+                            supportingText = { Text(MARKDOWN_SYNTAX_HINT) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = if (credential.type == CredentialType.SECURE_NOTE) 12 else 4,
+                            maxLines = 30,
+                            trailingIcon = {
+                                IconButton(onClick = { showOcrScanner = true }) {
+                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                                }
+                            },
+                            onSizeCapExceeded = { notesCapTrigger += 1 },
+                        )
+                    } else {
+                        LockAwareOutlinedTextField(
+                            value = notesField,
+                            onValueChange = { notesField = it },
+                            label = {
+                                Text(if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = if (credential.type == CredentialType.SECURE_NOTE) 12 else 4,
+                            maxLines = 30,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                            trailingIcon = {
+                                IconButton(onClick = { showOcrScanner = true }) {
+                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                                }
+                            },
+                        )
+                    }
                 }
                 else -> {
                     LockAwareOutlinedTextField(
@@ -799,18 +1111,38 @@ private fun CredentialEditContent(
                         }
                     )
                     LockAwareOutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
-                    LockAwareOutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("Notes") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        trailingIcon = {
-                            IconButton(onClick = { showOcrScanner = true }) {
-                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                            }
-                        },
-                    )
+                    if (showLiveEditor) {
+                        MarkdownEditorField(
+                            value = notesField,
+                            onValueChange = { notesField = it },
+                            label = { Text("Notes") },
+                            supportingText = { Text(MARKDOWN_SYNTAX_HINT) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            trailingIcon = {
+                                IconButton(onClick = { showOcrScanner = true }) {
+                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                                }
+                            },
+                            onSizeCapExceeded = { notesCapTrigger += 1 },
+                        )
+                    } else {
+                        LockAwareOutlinedTextField(
+                            value = notesField,
+                            onValueChange = { notesField = it },
+                            label = { Text("Notes") },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 3,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                fontFamily = FontFamily.Monospace,
+                            ),
+                            trailingIcon = {
+                                IconButton(onClick = { showOcrScanner = true }) {
+                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                                }
+                            },
+                        )
+                    }
                     if (credential.type != CredentialType.BANK_ACCOUNT) {
                         LockAwareOutlinedTextField(
                             value = totpSecret,
@@ -985,11 +1317,11 @@ private fun CredentialEditContent(
                 assignments.username?.let { username = it }
                 assignments.password?.let { password = it }
                 assignments.url?.let { url = it }
-                assignments.notes?.let { notes = it }
+                assignments.notes?.let { notesField = TextFieldValue(it, selection = TextRange(it.length)) }
                 if (assignments.customFields.isNotEmpty()) {
                     // Upsert: replace existing fields with matching key, append the rest.
-                    // Sensitivity is taken from the OCR target table (e.g. CVV / API Token →
-                    // sensitive; Cardholder / Branch → not), so the user doesn't have to toggle.
+                    // Sensitivity is taken from the OCR target table (e.g. CVV / API Token ->
+                    // sensitive; Cardholder / Branch -> not), so the user doesn't have to toggle.
                     val updatedFields = customFields.toMutableList()
                     val updatedIds = customFieldIds.toMutableList()
                     for (cf in assignments.customFields) {
@@ -1029,7 +1361,7 @@ private fun CredentialEditContent(
                             username = username.trim(),
                             password = password,
                             url = url.trim(),
-                            notes = notes.trim(),
+                            notes = notesField.text.trim(),
                             otpParams = buildOtpParamsForSave(),
                             tags = selectedTags,
                             customFields = customFields,

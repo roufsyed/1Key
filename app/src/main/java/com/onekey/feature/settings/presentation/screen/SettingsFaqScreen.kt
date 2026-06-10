@@ -135,7 +135,7 @@ fun SettingsFaqScreen(
                     question = "Does the app talk to any servers?",
                     answer = "No. The app has no internet permission, no analytics, no crash " +
                         "reporting, no telemetry. You can verify in Android Settings → Apps → " +
-                        "1Key → Mobile data & Wi-Fi: data usage is exactly zero, ever.",
+                        "1Key > Mobile data & Wi-Fi: data usage is exactly zero, ever.",
                 )
                 FaqItem(
                     question = "Can the developer (or anyone else) see my passwords?",

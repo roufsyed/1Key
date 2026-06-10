@@ -1,10 +1,10 @@
 [versions]
-agp = "8.7.2"
+agp = "8.13.2"
 kotlin = "2.0.20"
 coreKtx = "1.13.1"
 lifecycle = "2.8.6"
 activityCompose = "1.9.2"
-composeBom = "2025.08.00"
+composeBom = "2026.05.01"
 hilt = "2.52"
 hiltNav = "1.2.0"
 room = "2.6.1"
@@ -22,10 +22,17 @@ mlkitTextRecognition = "16.0.1"
 junit = "4.13.2"
 robolectric = "4.13"
 turbine = "1.1.0"
-lint = "31.7.2"
+lint = "31.13.2"
 argon2kt = "1.6.0"
 securityCrypto = "1.1.0"
 documentfile = "1.0.1"
+jetbrainsMarkdown = "0.7.3"
+# Android instrumented testing - Room MigrationTestHelper + the AndroidX
+# test orchestrator harness. Versions track the Room artifact (room-testing
+# is part of the Room project) and the latest stable AndroidX test runner /
+# ext-junit, which both ship in lockstep.
+androidxTestRunner = "1.6.2"
+androidxTestExtJunit = "1.2.1"
 
 [libraries]
 # Core
@@ -41,6 +48,11 @@ androidx-ui = { group = "androidx.compose.ui", name = "ui" }
 androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+# Compose UI test - JUnit4 entry point (createComposeRule) + the manifest fragment
+# that injects ComponentActivity into the instrumented test APK so setContent {}
+# has somewhere to mount. Versions resolved via the Compose BOM.
+androidx-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 # Navigation
@@ -85,6 +97,15 @@ lint-tests = { group = "com.android.tools.lint", name = "lint-tests", version.re
 argon2kt = { group = "com.lambdapioneer.argon2kt", name = "argon2kt", version.ref = "argon2kt" }
 # Encrypted SharedPreferences
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+# Markdown parser - JetBrains pure-Kotlin CommonMark + GFM. KMP umbrella coordinate
+# resolves to markdown-jvm-0.7.3 on Android. Apache-2.0.
+jetbrains-markdown = { group = "org.jetbrains", name = "markdown", version.ref = "jetbrainsMarkdown" }
+# Room MigrationTestHelper - opens a fixture DB at any prior schema and replays
+# a real migration against it. Required for the v14->v15 instrumented test.
+room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
+# AndroidX instrumented test harness for the migration test.
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

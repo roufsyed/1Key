@@ -52,12 +52,12 @@ import javax.inject.Singleton
  * Each emission cancels the prior upstream subscription (if any) and routes
  * to one of:
  *
- *   - `!unlocked` → `Locked`. No upstream.
- *   - `migrating` → `Loading`. No upstream (avoids Room invalidation storm
+ *   - `!unlocked` -> `Locked`. No upstream.
+ *   - `migrating` -> `Loading`. No upstream (avoids Room invalidation storm
  *     while [CredentialCipherMigrator] rewrites legacy rows).
- *   - `count > SNAPSHOT_CAP` → `Bypassed`. No upstream - consumers fall
+ *   - `count > SNAPSHOT_CAP` -> `Bypassed`. No upstream - consumers fall
  *     back to SQL observers.
- *   - else → `Loading`, then launch upstream: subscribe to
+ *   - else -> `Loading`, then launch upstream: subscribe to
  *     `dao.observeListRaw(SELECT_ACTIVE)`, conflate bursts, decrypt to the
  *     lean projection, emit `Loaded`.
  *

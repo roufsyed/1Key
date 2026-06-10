@@ -29,9 +29,9 @@ import javax.inject.Singleton
  * legacy rows in small batches and converts them in-place to v2.
  *
  * Migration paths:
- *   v0 → v2: re-encrypt every field with the HKDF field subkey + per-field AAD,
+ *   v0 -> v2: re-encrypt every field with the HKDF field subkey + per-field AAD,
  *            and move the title into title_encrypted.
- *   v1 → v2: keep field ciphertexts as they are (already v1-correct) and add the
+ *   v1 -> v2: keep field ciphertexts as they are (already v1-correct) and add the
  *            title ciphertext.
  *
  * Properties:
@@ -156,7 +156,7 @@ class CredentialCipherMigrator @Inject constructor(
         titleBytes.fill(0)
 
         val migrated: CredentialEntity = if (entity.cipherVersion >= 1) {
-            // v1 → v2: field ciphertexts are already correct, just add the title.
+            // v1 -> v2: field ciphertexts are already correct, just add the title.
             entity.copy(
                 title = "",
                 titleEncrypted = encTitle.ciphertext,
@@ -164,7 +164,7 @@ class CredentialCipherMigrator @Inject constructor(
                 cipherVersion = 2,
             )
         } else {
-            // v0 → v2: re-encrypt every field with the HKDF subkey + AAD, plus title.
+            // v0 -> v2: re-encrypt every field with the HKDF subkey + AAD, plus title.
             val username = crypto.decrypt(EncryptedData(entity.usernameEncrypted, entity.ivUsername), vaultKey)
             val password = crypto.decrypt(EncryptedData(entity.passwordEncrypted, entity.ivPassword), vaultKey)
             val notes    = crypto.decrypt(EncryptedData(entity.notesEncrypted, entity.ivNotes), vaultKey)

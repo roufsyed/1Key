@@ -43,7 +43,7 @@ fun SetupPinScreen(
     val isPinAlreadySetup by viewModel.isPinSetup.collectAsStateWithLifecycle()
 
     // Initial step decided once based on whether a PIN is already set. SetupPinScreen is
-    // entered from Settings → Security where viewModel.isPinSetup has been collected long
+    // entered from Settings -> Security where viewModel.isPinSetup has been collected long
     // enough to be authoritative; rememberSaveable freezes the choice across rotations.
     var step by rememberSaveable {
         mutableStateOf(if (viewModel.isPinSetup.value) STEP_VERIFY_CURRENT else STEP_ENTER_NEW)

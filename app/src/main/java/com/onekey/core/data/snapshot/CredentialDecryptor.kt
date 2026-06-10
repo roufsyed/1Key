@@ -44,7 +44,7 @@ import javax.inject.Singleton
  *
  *  4. [onLock] - invoked synchronously by [VaultSnapshotStore.snapshotHook]
  *     from inside [VaultKeyHolder.lock]. Drops the memoised HKDF subkeys so
- *     cross-vault generations (reset → re-setup with a different password)
+ *     cross-vault generations (reset -> re-setup with a different password)
  *     don't reuse subkeys derived from the prior key.
  *
  * Threading: [decryptAllLeanWithLockCheck] is `suspend` and expected to run
@@ -176,7 +176,7 @@ class CredentialDecryptor @Inject constructor(
      * is derived from the presence of the encrypted-secret column without
      * decrypting it.
      *
-     * `null` on failure → caller drops the row.
+     * `null` on failure -> caller drops the row.
      */
     private fun decryptLeanOrNull(
         entity: CredentialEntity,
@@ -296,6 +296,10 @@ class CredentialDecryptor @Inject constructor(
             // if the migration hasn't completed before a query runs. Fall
             // back to updatedAt - matches the migration's backfill rule.
             accessedAt = entity.accessedAt ?: entity.updatedAt,
+            // Plaintext pass-through: null means "manually created" (or pre-v15);
+            // non-null means "arrived via a foreign import". Never back-filled
+            // for legacy rows - we don't know what was imported.
+            importedAt = entity.importedAt,
         )
     }
 

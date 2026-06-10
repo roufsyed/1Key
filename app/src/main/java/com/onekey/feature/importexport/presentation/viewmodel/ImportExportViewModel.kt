@@ -78,10 +78,10 @@ class ImportExportViewModel @Inject constructor(
     // Held between "file picked" and "password submitted / cancelled".
     private var pendingImportFile: File? = null
 
-    // Held between "parse complete → preview shown" and "user confirms / cancels".
+    // Held between "parse complete -> preview shown" and "user confirms / cancels".
     private var pendingParsedImport: ParsedImport? = null
 
-    // Held between "plan computed with conflicts → review shown" and "user picks resolution".
+    // Held between "plan computed with conflicts -> review shown" and "user picks resolution".
     private var pendingPlan: ImportPlan? = null
 
     // Held between "password dialog confirmed" and "picker callback fires".

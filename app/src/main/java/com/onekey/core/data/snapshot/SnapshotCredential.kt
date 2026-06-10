@@ -22,7 +22,7 @@ import com.onekey.core.domain.model.CredentialType
  *  - `customFields` - values + keys are encrypted at rest; not surfaced here
  *
  * The lean projection drops per-row plaintext residency from ~1.2 KB to
- * ~120 bytes (5000-row vault: ~6 MB → ~600 KB) and removes password/secret
+ * ~120 bytes (5000-row vault: ~6 MB -> ~600 KB) and removes password/secret
  * exposure from the snapshot's GC retention window. See the design's
  * "lean projection" rationale (security skeptic R1 #11).
  *

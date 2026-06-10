@@ -92,7 +92,7 @@ fun UnlockOverlay(appViewModel: AppViewModel) {
         // perceptible rate from the icon outward.
         val radius = maxRadius * rawProgress
         // Origin sits over the LockScreen logo across typical phone sizes (icon center
-        // lands at ~13–15% width / 21–23% height after status-bar + topSpacing).
+        // lands at ~13-15% width / 21-23% height after status-bar + topSpacing).
         val origin = Offset(
             x = size.width * 0.15f,
             y = size.height * 0.22f,

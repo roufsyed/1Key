@@ -36,6 +36,7 @@ object SettingsHighlightKeys {
     const val SHOW_FAVOURITES = "show_favourites"
     const val HIDE_TOP_BAR_ON_SCROLL = "hide_top_bar_on_scroll"
     const val VAULT_FOOTER = "vault_footer"
+    const val NOTES_RENDER_MARKDOWN = "notes_render_markdown"
     const val RECYCLE_BIN = "recycle_bin"
     const val RECYCLE_BIN_RETENTION = "recycle_bin_retention"
     const val MANAGE_CATEGORIES = "manage_categories"
@@ -91,6 +92,14 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         keywords = listOf("footer", "encryption notice", "vault"),
         action = SettingsAction.Navigate(SettingsDestination.General),
         highlightKey = SettingsHighlightKeys.VAULT_FOOTER,
+    ),
+    SettingsEntry(
+        title = "Render markdown in notes",
+        subtitle = "Format headings, lists, links, and code in your notes",
+        sectionLabel = "General",
+        keywords = listOf("markdown", "notes", "formatting", "headings", "lists", "code"),
+        action = SettingsAction.Navigate(SettingsDestination.General),
+        highlightKey = SettingsHighlightKeys.NOTES_RENDER_MARKDOWN,
     ),
     SettingsEntry(
         title = "Recycle bin",

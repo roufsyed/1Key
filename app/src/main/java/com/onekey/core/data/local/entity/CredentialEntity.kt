@@ -40,6 +40,13 @@ data class CredentialEntity(
     // null instead of being misread as "accessed at epoch 0". Not auto-updated
     // when the user views a credential - purely import-driven for now.
     @ColumnInfo(name = "accessed_at") val accessedAt: Long? = null,
+    // Epoch-ms timestamp marking when a row arrived via a foreign import
+    // (JSON / CSV / encrypted backup). Null for in-app creates and for pre-v15
+    // rows. Plaintext audit-trail column - the value is metadata, not a secret.
+    // Written exclusively by `VaultImporterImpl`; never set by save / update
+    // paths so a manual edit of an imported credential keeps the original
+    // import marker. See MIGRATION_14_15.
+    @ColumnInfo(name = "imported_at") val importedAt: Long? = null,
     @ColumnInfo(name = "iv_username") val ivUsername: ByteArray,
     @ColumnInfo(name = "iv_password") val ivPassword: ByteArray,
     @ColumnInfo(name = "iv_notes") val ivNotes: ByteArray,

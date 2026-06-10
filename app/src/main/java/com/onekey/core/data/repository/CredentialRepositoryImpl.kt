@@ -7,6 +7,7 @@ import com.onekey.core.data.snapshot.CredentialDecryptor
 import com.onekey.core.data.snapshot.fieldAad
 import com.onekey.core.data.snapshot.titleAad
 import com.onekey.core.domain.model.*
+import com.onekey.core.domain.notes.notesNormalize
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
@@ -258,7 +259,13 @@ class CredentialRepositoryImpl @Inject constructor(
 
         val encUsername = encryptField(username, "username")
         val encPassword = encryptField(password, "password")
-        val encNotes    = encryptField(notes, "notes")
+        // notesNormalize() is the save-path chokepoint: it canonicalises line endings,
+        // strips a leading BOM, and rejects NUL bytes (throws IllegalArgumentException).
+        // Routing the throw through the surrounding runCatchingResult in saveCredential
+        // and importCredentials folds it into AppResult.Error, so callers - the in-app
+        // editor's SaveCredentialUseCase and VaultImporterImpl's per-row runCatching -
+        // surface a clean error without any extra try/catch at the use-case layer.
+        val encNotes    = encryptField(notesNormalize(notes), "notes")
         val encTotp     = otpParams?.let { encryptField(it.secret, "totp") }
         val encUrl      = encryptField(url, "url")
         val encTitle    = crypto.encrypt(title.toByteArray(Charsets.UTF_8), titleKey, titleAad(resolvedId))
@@ -300,6 +307,10 @@ class CredentialRepositoryImpl @Inject constructor(
             // manual creation goes through with null and gets `now` here.
             // Subsequent saves preserve whatever's already on the row.
             accessedAt = accessedAt ?: now,
+            // Pass-through. VaultImporterImpl stamps a value on every imported
+            // Credential; in-app saves leave it null and we keep it null here.
+            // That's the only signal we have telling "imported" from "manual".
+            importedAt = importedAt,
             type = type.name,
             deletedAt = deletedAt,
             // OTP metadata only carries meaning when a secret is enrolled. When

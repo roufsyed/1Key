@@ -4,12 +4,14 @@ import com.onekey.core.data.repository.AppPreferencesRepositoryImpl
 import com.onekey.core.data.repository.AuthRepositoryImpl
 import com.onekey.core.data.repository.CredentialHistoryRepositoryImpl
 import com.onekey.core.data.repository.CredentialRepositoryImpl
+import com.onekey.core.data.repository.NotesDisplayPrefsRepositoryImpl
 import com.onekey.core.data.repository.TagRepositoryImpl
 import com.onekey.core.data.wordlist.AssetWordlistProvider
 import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialHistoryRepository
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.domain.repository.NotesDisplayPrefsRepository
 import com.onekey.core.domain.repository.TagRepository
 import com.onekey.core.domain.wordlist.WordlistProvider
 import com.onekey.feature.sync.data.AndroidSyncCompletionNotifier
@@ -29,6 +31,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindAppPreferencesRepository(impl: AppPreferencesRepositoryImpl): AppPreferencesRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNotesDisplayPrefsRepository(impl: NotesDisplayPrefsRepositoryImpl): NotesDisplayPrefsRepository
 
     @Binds
     @Singleton

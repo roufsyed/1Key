@@ -71,7 +71,7 @@ class AuthRepositoryImpl @Inject constructor(
 ) : AuthRepository {
 
     /**
-     * Completed once the one-time DataStore→EncryptedSharedPreferences migration has
+     * Completed once the one-time DataStore->EncryptedSharedPreferences migration has
      * run (or was skipped because no legacy data existed). All auth reads await this
      * before accessing [authPrefs] so they never see a partially-migrated state.
      */
@@ -321,7 +321,7 @@ class AuthRepositoryImpl @Inject constructor(
         val pinCopy = pin.copyOf()
         // CRITICAL: must call the THROWING verifyPinInternal here, NOT the public
         // verifyPin which returns AppResult<Unit>. The public overload exists for
-        // the in-vault Settings → Change PIN flow that legitimately consumes the
+        // the in-vault Settings -> Change PIN flow that legitimately consumes the
         // result. Calling it here discards the result, and runCatchingResult only
         // catches exceptions - so any wrong PIN would silently flow through to
         // unwrapStoredKey() and unlock the vault. Regression introduced by M4 (1aeb4cb)

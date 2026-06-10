@@ -16,10 +16,10 @@ import java.time.format.DateTimeFormatter
  * Handled formats:
  *  - Numeric epoch (Number or numeric String). The unit is detected by
  *    magnitude:
- *      - `1e8 ..< 1e11`  → seconds (≈ year 1973–5138)
- *      - `1e11 ..< 1e14` → milliseconds
- *      - `1e14 ..< 1e17` → microseconds
- *      - `1e17 ..< 1e20` → nanoseconds
+ *      - `1e8 ..< 1e11`  -> seconds (~ year 1973-5138)
+ *      - `1e11 ..< 1e14` -> milliseconds
+ *      - `1e14 ..< 1e17` -> microseconds
+ *      - `1e17 ..< 1e20` -> nanoseconds
  *  - ISO 8601 instant (`2025-05-07T18:30:00Z`)
  *  - ISO 8601 with offset (`2025-05-07T18:30:00+05:30`)
  *  - RFC 1123 / HTTP-date (`Wed, 07 May 2025 18:30:00 GMT`)
@@ -86,7 +86,7 @@ object TimestampParser {
             LocalDateTime.parse(s, SQL_DATETIME).toInstant(ZoneOffset.UTC).toEpochMilli()
         }.getOrNull()?.let { return it }
 
-        // Bare date: "2025-05-07" → start of day UTC.
+        // Bare date: "2025-05-07" -> start of day UTC.
         runCatching {
             LocalDate.parse(s).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
         }.getOrNull()?.let { return it }
@@ -98,10 +98,10 @@ object TimestampParser {
         if (!value.isFinite() || value <= 0.0) return null
         return when {
             value < 1e8 -> null               // pre-1973-in-seconds - almost certainly not a timestamp
-            value < 1e11 -> (value * 1000).toLong()       // seconds → ms
+            value < 1e11 -> (value * 1000).toLong()       // seconds -> ms
             value < 1e14 -> value.toLong()                // already ms
-            value < 1e17 -> (value / 1000).toLong()       // μs → ms
-            value < 1e20 -> (value / 1_000_000).toLong()  // ns → ms
+            value < 1e17 -> (value / 1000).toLong()       // us -> ms
+            value < 1e20 -> (value / 1_000_000).toLong()  // ns -> ms
             else -> null
         }
     }

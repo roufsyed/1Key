@@ -108,7 +108,7 @@ class MainActivity : FragmentActivity() {
             // Read isSetupComplete ONCE for the lifetime of this Activity composition.
             // NavHost.startDestination is one-shot per graph instance, but if we tracked
             // setupComplete reactively the `when` arm would change at the moment setup
-            // finishes (false → true), passing a different `startDestination` to
+            // finishes (false -> true), passing a different `startDestination` to
             // OneKeyNavGraph and remounting the graph - which yanks the user from
             // VaultReadyPage straight to LockScreen and short-circuits the post-setup
             // hand-off. The onboarding flow does its own navigation via onSetupComplete;

@@ -93,7 +93,7 @@ class OtpGeneratorTest {
 
     @Test fun period_drives_remaining_seconds() {
         val params = OtpParams(type = OtpType.TOTP, secret = SHA1_SECRET_B32, period = 60L)
-        // 0ms past the start of a 60s window → 60s remaining.
+        // 0ms past the start of a 60s window -> 60s remaining.
         val out = gen.generate(params, timeMillis = 60_000L)
         assertEquals(60, out.remainingSeconds)
     }

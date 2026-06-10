@@ -180,6 +180,19 @@ val MIGRATION_13_14 = object : Migration(13, 14) {
     }
 }
 
+// Adds `imported_at` to mark rows that arrived via a foreign import (JSON / CSV /
+// encrypted backup). Nullable - no DEFAULT clause - so pre-v15 rows stay null
+// instead of being misread as "imported at epoch 0". In-app creates (manual entry
+// via SaveCredentialUseCase) leave the column null; only VaultImporterImpl sets
+// it to `System.currentTimeMillis()`. Stored as a plaintext epoch-ms Long
+// alongside `created_at` / `updated_at` / `accessed_at` - it's an audit-trail
+// timestamp, not a secret, so no encryption / IV is needed.
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN imported_at INTEGER DEFAULT NULL")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -196,7 +209,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
