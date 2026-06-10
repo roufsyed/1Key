@@ -228,7 +228,9 @@ class TaggedCredentialListViewModelTest {
         // "tagged_search_query_$rawTag" so each tag owns its own slot.
         val saved = SavedStateHandle(mapOf("tagName" to "Work"))
         val vmWork = TaggedCredentialListViewModel(
-            saved, repo, deleteUseCase, hardDeleteUseCase, prefs, snapshot, testDispatcher,
+            saved, repo, deleteUseCase, hardDeleteUseCase,
+            com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+            prefs, snapshot, testDispatcher,
         )
         vmWork.setSearchQuery("github")
         advanceUntilIdle()
@@ -236,7 +238,9 @@ class TaggedCredentialListViewModelTest {
 
         val savedBanking = SavedStateHandle(mapOf("tagName" to "Banking"))
         val vmBank = TaggedCredentialListViewModel(
-            savedBanking, repo, deleteUseCase, hardDeleteUseCase, prefs, snapshot, testDispatcher,
+            savedBanking, repo, deleteUseCase, hardDeleteUseCase,
+            com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+            prefs, snapshot, testDispatcher,
         )
         assertEquals("", vmBank.searchQuery.value)
     }
@@ -467,7 +471,9 @@ class TaggedCredentialListViewModelTest {
     private fun buildVm(tag: String): TaggedCredentialListViewModel {
         val saved = SavedStateHandle(mapOf("tagName" to tag))
         return TaggedCredentialListViewModel(
-            saved, repo, deleteUseCase, hardDeleteUseCase, prefs, snapshot, testDispatcher,
+            saved, repo, deleteUseCase, hardDeleteUseCase,
+            com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+            prefs, snapshot, testDispatcher,
         )
     }
 

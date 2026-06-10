@@ -12,6 +12,7 @@ import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.domain.usecase.DeleteCredentialUseCase
 import com.onekey.core.domain.usecase.HardDeleteCredentialUseCase
+import com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.async
@@ -72,6 +73,7 @@ class FavouritesViewModel @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val deleteCredential: DeleteCredentialUseCase,
     private val hardDeleteCredential: HardDeleteCredentialUseCase,
+    private val restoreFromRecycleBin: RestoreFromRecycleBinUseCase,
     private val appPrefs: AppPreferencesRepository,
     @SnapshotStateFlow private val snapshotState: StateFlow<@JvmSuppressWildcards SnapshotState>,
     @DefaultDispatcher private val filterDispatcher: CoroutineDispatcher,
@@ -169,15 +171,33 @@ class FavouritesViewModel @Inject constructor(
         _selectedIds.value = emptySet()
     }
 
+    /**
+     * Restore the credentials that were soft-deleted by the most recent
+     * bulk action. Wired to the "Undo" action on the post-bulk-delete
+     * snackbar. Fire-and-forget under [viewModelScope]; failures are
+     * silently dropped (the row simply stays in the bin and the user can
+     * recover it manually from the recycle-bin screen). Matches the
+     * single-id undo pattern in [com.onekey.core.presentation.viewmodel.AppViewModel.undoRecycleBinDelete].
+     */
+    fun undoBulkDelete(ids: List<String>) {
+        viewModelScope.launch {
+            ids.forEach { restoreFromRecycleBin.restore(it) }
+        }
+    }
+
     /** Soft-delete: moves selected to recycle bin. */
     fun deleteSelected() {
         viewModelScope.launch {
             val ids = _selectedIds.value.toList()
             _selectedIds.value = emptySet()
-            val failures = ids
-                .map { id -> async { deleteCredential(id) } }
+            val results = ids
+                .map { id -> async { id to deleteCredential(id) } }
                 .awaitAll()
-                .count { it is AppResult.Error }
+            val succeeded = results.filter { it.second is AppResult.Success }.map { it.first }
+            val failures = results.size - succeeded.size
+            if (succeeded.isNotEmpty()) {
+                _event.emit(CredentialListEvent.DeleteCompleted(DeleteKind.SOFT, succeeded))
+            }
             if (failures > 0) {
                 _event.emit(CredentialListEvent.DeleteError(failures))
             }
@@ -189,10 +209,14 @@ class FavouritesViewModel @Inject constructor(
         viewModelScope.launch {
             val ids = _selectedIds.value.toList()
             _selectedIds.value = emptySet()
-            val failures = ids
-                .map { id -> async { hardDeleteCredential(id) } }
+            val results = ids
+                .map { id -> async { id to hardDeleteCredential(id) } }
                 .awaitAll()
-                .count { it is AppResult.Error }
+            val succeeded = results.filter { it.second is AppResult.Success }.map { it.first }
+            val failures = results.size - succeeded.size
+            if (succeeded.isNotEmpty()) {
+                _event.emit(CredentialListEvent.DeleteCompleted(DeleteKind.HARD, succeeded))
+            }
             if (failures > 0) {
                 _event.emit(CredentialListEvent.DeleteError(failures))
             }

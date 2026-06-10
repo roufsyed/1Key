@@ -388,6 +388,7 @@ class FavouritesViewModelTest {
         credentialRepository = repo,
         deleteCredential = deleteUseCase,
         hardDeleteCredential = hardDeleteUseCase,
+        restoreFromRecycleBin = com.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
         appPrefs = prefs,
         snapshotState = snapshot,
         filterDispatcher = testDispatcher,

@@ -37,6 +37,7 @@ import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.presentation.lockaware.LockAwareDropdownMenu
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.onekey.feature.vault.presentation.viewmodel.CredentialListState
+import com.onekey.feature.vault.presentation.viewmodel.DeleteKind
 import com.onekey.feature.vault.presentation.viewmodel.FavouritesViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
@@ -94,6 +95,27 @@ fun FavouritesScreen(
             when (event) {
                 is CredentialListEvent.DeleteError ->
                     snackbarHostState.showSnackbar("Failed to delete ${event.count} item(s)")
+                is CredentialListEvent.DeleteCompleted -> {
+                    val n = event.ids.size
+                    val message = when (event.kind) {
+                        DeleteKind.SOFT ->
+                            if (n == 1) "Moved to recycle bin"
+                            else "$n credentials moved to recycle bin"
+                        DeleteKind.HARD ->
+                            if (n == 1) "Deleted"
+                            else "$n credentials deleted"
+                    }
+                    val result = snackbarHostState.showSnackbar(
+                        message = message,
+                        actionLabel = if (event.kind == DeleteKind.SOFT) "Undo" else null,
+                        withDismissAction = false,
+                    )
+                    if (result == SnackbarResult.ActionPerformed &&
+                        event.kind == DeleteKind.SOFT
+                    ) {
+                        viewModel.undoBulkDelete(event.ids)
+                    }
+                }
                 is CredentialListEvent.FavouriteUpdated -> {
                     val verb = if (event.markedAs) "Added" else "Removed"
                     val noun = if (event.count == 1) "credential" else "credentials"
