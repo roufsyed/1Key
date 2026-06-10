@@ -1019,7 +1019,13 @@ private fun CredentialEditContent(
                                 customFields = customFields,
                             ))
                         },
-                        enabled = title.isNotBlank(),
+                        // Save is enabled only when there is something to save. Gating
+                        // on hasUnsavedChanges prevents the user from spending a tap
+                        // (and a Room write + re-encrypt) on a no-op save. Title-blank
+                        // guard stays since saving an empty title is still rejected by
+                        // SaveCredentialUseCase - we surface that as a disabled button
+                        // rather than letting it slip through to an error toast.
+                        enabled = title.isNotBlank() && hasUnsavedChanges,
                     ) { Text("Save") }
                 }
             )
