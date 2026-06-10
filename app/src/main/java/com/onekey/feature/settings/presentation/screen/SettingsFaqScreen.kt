@@ -72,6 +72,33 @@ fun SettingsFaqScreen(
                         "brute-forcing of your password is not possible.",
                 )
                 FaqItem(
+                    question = "How is my master password protected on this device?",
+                    answer = "1Key never stores your master password. To unlock the vault, we wrap " +
+                        "the encryption key with another key that lives inside the Android " +
+                        "Keystore - a system service whose private keys regular apps, " +
+                        "including 1Key, cannot read directly.\n\n" +
+                        "Android offers two tiers of hardware isolation for that wrapping key, " +
+                        "and both are full-strength protection:\n\n" +
+                        "TEE (Trusted Execution Environment). A separate, secure-only mode of " +
+                        "the main CPU. The key lives there; the rest of Android, our app " +
+                        "included, cannot reach into it. Every modern Android phone has a TEE.\n\n" +
+                        "StrongBox. A dedicated tamper-resistant chip, physically separate from " +
+                        "the main CPU. Recent Pixel and many flagship phones have StrongBox. " +
+                        "When it is available, 1Key places the wrapping key in StrongBox " +
+                        "automatically. StrongBox is a stronger qualifier than TEE because " +
+                        "even a compromise of the main CPU does not give an attacker the key.\n\n" +
+                        "You can see which tier this device uses in Security settings, under " +
+                        "Hardware key isolation. Either way, your master password itself is " +
+                        "never stored - only a small verifier blob that the Keystore wraps, " +
+                        "and even that lives inside EncryptedSharedPreferences. Offline " +
+                        "brute-forcing of your password is not possible without live access " +
+                        "to this phone's Keystore.\n\n" +
+                        "On Android 9 and above, the wrapping key additionally requires the " +
+                        "device screen to be unlocked before it can be used. So even with " +
+                        "the phone in hand, an attacker cannot unwrap the vault key on a " +
+                        "locked device.",
+                )
+                FaqItem(
                     question = "What happens if I forget my master password?",
                     answer = "Your data is unrecoverable. There's no \"forgot password\" link " +
                         "because there's no server and no recovery copy of your key anywhere. " +

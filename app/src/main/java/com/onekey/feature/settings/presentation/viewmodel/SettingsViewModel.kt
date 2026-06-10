@@ -16,6 +16,8 @@ import com.onekey.core.domain.usecase.DeleteTagUseCase
 import com.onekey.core.domain.usecase.ResetVaultUseCase
 import com.onekey.core.domain.usecase.SeedDataUseCase
 import com.onekey.core.security.AuthAttemptsStore
+import com.onekey.core.security.HardwareKeyIsolationProbe
+import com.onekey.core.security.HardwareKeyIsolationStatus
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightStore
@@ -48,10 +50,30 @@ class SettingsViewModel @Inject constructor(
     private val lockReasonStore: LockReasonStore,
     private val authAttemptsStore: AuthAttemptsStore,
     private val highlightStore: SettingsHighlightStore,
+    private val hardwareKeyIsolationProbe: HardwareKeyIsolationProbe,
 ) : ViewModel() {
+
+    init {
+        // Idempotent: subsequent reads of [hardwareKeyIsolation] off Security
+        // do not re-probe. First entry into Settings -> Security kicks the
+        // background probe; the StateFlow below holds the result for the
+        // lifetime of the process.
+        hardwareKeyIsolationProbe.start()
+    }
 
     val highlightKey: StateFlow<String?> = highlightStore.pendingKey
     fun clearHighlight() = highlightStore.clear()
+
+    /**
+     * Resolved hardware-isolation tier for the vault wrapping key, or `null`
+     * while the background probe is still running. Started [SharingStarted.Eagerly]
+     * so that by the time Security composes, the StateFlow already holds the
+     * latest value the probe has emitted (which is the cached value on every
+     * subsequent visit to Security in the same process).
+     */
+    val hardwareKeyIsolation: StateFlow<HardwareKeyIsolationStatus?> =
+        hardwareKeyIsolationProbe.status
+            .stateIn(viewModelScope, SharingStarted.Eagerly, hardwareKeyIsolationProbe.status.value)
 
     private val _isSeedingData = MutableStateFlow(false)
     val isSeedingData: StateFlow<Boolean> = _isSeedingData.asStateFlow()

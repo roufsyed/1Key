@@ -3,6 +3,7 @@ package com.onekey.core.security
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.util.Log
 import androidx.annotation.RequiresApi
 import com.lambdapioneer.argon2kt.Argon2Kt
 import com.lambdapioneer.argon2kt.Argon2Mode
@@ -27,6 +28,8 @@ internal const val KEYSTORE_ALIAS_V1 = "onekey_master"
 // Upgraded alias - setUnlockedDeviceRequired(true) on API >= 28. Written during
 // the one-time silent Keystore migration that runs after the first successful unlock.
 internal const val KEYSTORE_ALIAS_V2 = "onekey_master_v2"
+
+private const val TAG_CRYPTO = "CryptoManager"
 
 private const val AES_GCM = "AES/GCM/NoPadding"
 private const val GCM_TAG_LENGTH = 128
@@ -57,30 +60,111 @@ data class EncryptedData(val ciphertext: ByteArray, val iv: ByteArray) {
 }
 
 @Singleton
-class CryptoManager @Inject constructor() {
+open class CryptoManager @Inject constructor() {
 
     // ── Android Keystore ─────────────────────────────────────────────────────
 
+    /**
+     * Process-lifetime flag tracking whether the most recent successful
+     * [getOrCreateKeystoreKey] generation placed the key in StrongBox.
+     *
+     * This is the signal the hardware-isolation detector consumes on API 28-30
+     * where the per-key `KeyInfo.securityLevel` API does not yet exist. On API
+     * 31+ the detector reads `KeyInfo.securityLevel` directly and ignores this
+     * flag. We do NOT persist this to disk: on next launch the detector
+     * re-derives the tier from KeyInfo metadata, which is the source of truth.
+     * The flag is only the lookup hint when KeyInfo cannot tell us.
+     */
+    @Volatile
+    internal var lastKeyCreatedWithStrongBox: Boolean = false
+        private set
+
+    /**
+     * Returns the AndroidKeyStore-backed AES-256/GCM wrapping key for [alias],
+     * creating it on first use.
+     *
+     * StrongBox handling (API 28+):
+     *  - The first creation attempt sets `setIsStrongBoxBacked(true)`. On
+     *    devices with a dedicated tamper-resistant element (recent Pixels,
+     *    many flagships) this places the key in StrongBox, the strongest
+     *    isolation Android exposes to apps.
+     *  - If StrongBox is unavailable, the platform throws
+     *    `StrongBoxUnavailableException`. We catch it, log at INFO, and
+     *    retry without the StrongBox flag. The resulting TEE-backed key is
+     *    still hardware-isolated and full-strength.
+     *  - If the StrongBox attempt throws `ProviderException` (the Keystore
+     *    provider's bucket for chip/firmware misbehaviour, observed in field
+     *    reports across some Pixel firmware updates that bring StrongBox up
+     *    lazily), we treat it the same way: log at WARN and fall back to TEE.
+     *  - Any other exception (a true KeyStore failure, an invalid spec, etc.)
+     *    propagates to the caller. [AuthRepositoryImpl] wraps the call sites
+     *    so the user lands on a setup-failed flow rather than a crash.
+     *  - If BOTH attempts fail, the second exception bubbles up. The migration
+     *    call site in [AuthRepositoryImpl.migrateKeystoreKey] catches it and
+     *    keeps the V1 key for that boot, retrying on the next unlock.
+     *
+     * On API < 28 the StrongBox block is skipped entirely (the
+     * `setIsStrongBoxBacked` builder method and `StrongBoxUnavailableException`
+     * are both API 28+).
+     *
+     * Idempotency: the early-return when the alias already exists is preserved.
+     * A key created under StrongBox=true is returned to callers without
+     * regeneration even if the StrongBox path now misbehaves on this boot,
+     * because re-generating the wrapping key would destroy the user's vault.
+     */
     private fun getOrCreateKeystoreKey(alias: String, unlockedDeviceRequired: Boolean): SecretKey {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         keyStore.getKey(alias, null)?.let { return it as SecretKey }
 
-        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        val spec = KeyGenParameterSpec.Builder(
-            alias,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .setUserAuthenticationRequired(false)
-            .apply {
-                if (unlockedDeviceRequired && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    setUnlockedDeviceRequired(true)
+        // Spec factory so the StrongBox and non-StrongBox builds share one chain.
+        fun buildSpec(useStrongBox: Boolean): KeyGenParameterSpec =
+            KeyGenParameterSpec.Builder(
+                alias,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .setUserAuthenticationRequired(false)
+                .apply {
+                    if (unlockedDeviceRequired && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        setUnlockedDeviceRequired(true)
+                    }
+                    if (useStrongBox && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        setIsStrongBoxBacked(true)
+                    }
                 }
+                .build()
+
+        val keyGenerator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+
+        // StrongBox attempt only on API 28+. setIsStrongBoxBacked,
+        // StrongBoxUnavailableException, and KeyInfo.getSecurityLevel are all API 28+.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                keyGenerator.init(buildSpec(useStrongBox = true))
+                val key = keyGenerator.generateKey()
+                lastKeyCreatedWithStrongBox = true
+                Log.i(TAG_CRYPTO, "Keystore key '" + alias + "' generated in StrongBox")
+                return key
+            } catch (e: android.security.keystore.StrongBoxUnavailableException) {
+                // Device declared no StrongBox at this moment. Fall through to TEE.
+                Log.i(TAG_CRYPTO, "StrongBox unavailable for '" + alias + "'; falling back to TEE", e)
+            } catch (e: java.security.ProviderException) {
+                // ProviderException is the Keystore provider's bucket for chip/firmware
+                // misbehaviour. Fall back to TEE rather than crashing the unlock flow.
+                Log.w(
+                    TAG_CRYPTO,
+                    "StrongBox generateKey threw ProviderException for '" + alias +
+                        "'; falling back to TEE",
+                    e,
+                )
             }
-            .build()
-        keyGenerator.init(spec)
+        }
+
+        // TEE / non-StrongBox attempt. Also the path taken on API < 28.
+        lastKeyCreatedWithStrongBox = false
+        keyGenerator.init(buildSpec(useStrongBox = false))
         return keyGenerator.generateKey()
     }
 
@@ -107,7 +191,7 @@ class CryptoManager @Inject constructor() {
     }
 
     // Returns an existing Keystore key by alias, or null if it has not been created yet.
-    fun loadKeystoreKey(alias: String): SecretKey? {
+    open fun loadKeystoreKey(alias: String): SecretKey? {
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         return keyStore.getKey(alias, null) as? SecretKey
     }

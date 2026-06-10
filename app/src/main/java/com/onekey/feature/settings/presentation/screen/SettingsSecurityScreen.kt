@@ -26,6 +26,7 @@ import com.onekey.core.domain.model.MasterPasswordInterval
 import com.onekey.core.presentation.lockaware.LockAwareDialog
 import com.onekey.core.presentation.lockaware.SecurePasswordTextField
 import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
+import com.onekey.core.security.HardwareKeyIsolationTier
 import com.onekey.feature.settings.presentation.viewmodel.SettingsEvent
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightKeys
 import com.onekey.feature.settings.presentation.viewmodel.SettingsViewModel
@@ -46,6 +47,7 @@ fun SettingsSecurityScreen(
     val isMasterPasswordRecheckEnabled by settingsVm.isMasterPasswordRecheckEnabled.collectAsStateWithLifecycle()
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isRestoreLastScreenOnUnlock by settingsVm.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
+    val hwIsolation by settingsVm.hardwareKeyIsolation.collectAsStateWithLifecycle()
 
     val canUseBiometric = rememberCanUseBiometric()
     val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
@@ -71,6 +73,7 @@ fun SettingsSecurityScreen(
     var showBackgroundLockDialog by remember { mutableStateOf(false) }
     var showInactivityLockDialog by remember { mutableStateOf(false) }
     var showRestoreLastScreenDialog by remember { mutableStateOf(false) }
+    var showHwIsolationDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
@@ -373,6 +376,55 @@ fun SettingsSecurityScreen(
                         },
                     )
                 }
+            }
+
+            // Hardware key isolation status row. Read-only; tap to open an
+            // explainer dialog. The probe behind the StateFlow runs once per
+            // process on a background coroutine, so the first frame may show
+            // "Checking..." for a short window before the resolved tier
+            // appears. STRONGBOX and TEE both get the checkmark - the
+            // requirement frames TEE as full-strength protection. Only the
+            // SOFTWARE fallback surfaces the warning icon.
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Hardware key isolation")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    headlineContent = { Text("Hardware key isolation") },
+                    supportingContent = {
+                        Text(
+                            when (hwIsolation?.tier) {
+                                HardwareKeyIsolationTier.STRONGBOX ->
+                                    "Hardware-isolated (StrongBox)"
+                                HardwareKeyIsolationTier.TEE ->
+                                    "Hardware-backed (TEE)"
+                                HardwareKeyIsolationTier.SOFTWARE ->
+                                    "Software fallback (no hardware support)"
+                                null -> "Checking..."
+                            }
+                        )
+                    },
+                    leadingContent = { Icon(Icons.Default.Lock, contentDescription = null) },
+                    trailingContent = {
+                        when (hwIsolation?.tier) {
+                            HardwareKeyIsolationTier.STRONGBOX,
+                            HardwareKeyIsolationTier.TEE ->
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = "Secure hardware",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            HardwareKeyIsolationTier.SOFTWARE ->
+                                Icon(
+                                    Icons.Default.Warning,
+                                    contentDescription = "Software fallback",
+                                    tint = MaterialTheme.colorScheme.error,
+                                )
+                            null ->
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                        }
+                    },
+                    modifier = Modifier.clickable { showHwIsolationDialog = true },
+                )
             }
         }
     }
@@ -690,6 +742,53 @@ fun SettingsSecurityScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRestoreLastScreenDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showHwIsolationDialog) {
+        // Read-only explainer. Body is ~5 short sentences, ASCII-only, framed
+        // positively for both StrongBox and TEE (TEE is full-strength
+        // protection, not a downgrade). The "Close" action is the only one.
+        LockAwareDialog(
+            onDismissRequest = { showHwIsolationDialog = false },
+            icon = { Icon(Icons.Default.Lock, contentDescription = null) },
+            title = { Text("Hardware key isolation") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        when (hwIsolation?.tier) {
+                            HardwareKeyIsolationTier.STRONGBOX ->
+                                "Your device has a dedicated secure chip (StrongBox). " +
+                                    "1Key stores the vault wrapping key inside it. " +
+                                    "Even a compromise of the main CPU cannot extract the key. " +
+                                    "This is the strongest isolation Android offers."
+                            HardwareKeyIsolationTier.TEE ->
+                                "Your device uses a Trusted Execution Environment (TEE). " +
+                                    "The TEE is a separate secure mode of the main CPU. " +
+                                    "Regular apps, 1Key included, cannot read keys stored there. " +
+                                    "This is the standard hardware-backed protection on Android."
+                            HardwareKeyIsolationTier.SOFTWARE ->
+                                "On this device the vault wrapping key is not in secure hardware. " +
+                                    "Android's software keystore is being used as a fallback. " +
+                                    "This usually means the device is rooted or running on an emulator. " +
+                                    "We recommend installing 1Key on a non-rooted device for full protection."
+                            null ->
+                                "Checking your device's secure hardware..."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "StrongBox and TEE both protect your vault to the highest standard " +
+                            "Android exposes to apps. StrongBox is an additional qualifier on " +
+                            "devices that have a dedicated chip.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHwIsolationDialog = false }) { Text("Close") }
             },
         )
     }
