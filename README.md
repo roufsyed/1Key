@@ -96,31 +96,37 @@ The importer auto-detects format and column headers - no manual mapping required
 
 ## How 1Key compares
 
-A quick at-a-glance comparison against three of the most popular password managers.
+A quick at-a-glance comparison against five of the most popular password managers.
 
-| | 1Password | Bitwarden | Proton Pass | 1Key |
-|---|---|---|---|---|
-| Cost | $2.99-9.99/mo | Free + paid tiers | Free + paid | Free, all features |
-| Account not required | ✗ | ✗ | ✗ | ✓ |
-| INTERNET permission not required | ✗ | ✗ | ✗ | ✓ |
-| Vault stored on vendor servers | ✓ E2EE | ✓ E2EE | ✓ E2EE | ✗ - local only |
-| Account metadata held off-device | Email, billing, devices | Email, devices | Proton account graph | None |
-| Telemetry / analytics | Opt-out | Configurable | Opt-out | None - no INTERNET |
-| Built-in TOTP / 2FA codes | ✓ | Premium only | ✓ | ✓ |
-| PIN code unlock | ✓ | ✓ | ✓ | ✓ |
-| OCR (camera scan) | ✓ (cards / docs) | ✗ | ✗ | ✓ (any field) |
-| Categories | ✓ | Folders instead | Vaults instead | ✓ |
-| Encrypted local backup file | ✓ (1pux) | ✓ (JSON) | ✓ | ✓ (V4 envelope) |
-| Recycle bin (soft delete) | ✓ Archive | ✓ Trash | ✓ Trash | ✓ |
-| KDF | PBKDF2-650k + Secret Key | PBKDF2-600k or Argon2id (opt-in) | bcrypt cost 10 | Argon2id (m=64 MiB, t=3, p=1) |
-| Verifier brute-forceable from leaked file | If cloud breached | If cloud breached | If cloud breached | No - Keystore-bound |
-| Open source | Closed | Client + server | Clients | Single repo |
+| | 1Password | Bitwarden | Dashlane | LastPass | Proton Pass | 1Key |
+|---|---|---|---|---|---|---|
+| Cost | $47.88/yr (no free tier) | Free; Premium $19.80/yr | ❌ $59.88/yr (free plan ended Sept 2025) | Free (1 device type); Premium $36/yr | Free; Plus $23.88/yr | ✅ Free, all features |
+| Account signup required | ❌ Yes - email + verify | ❌ Yes - email | ❌ Yes - email | ❌ Yes - email + verify | ❌ Yes - Proton account | ✅ No - install and go |
+| **Hacked / compromised / leaked** | No major incident known | No major incident known | ❌ **June 2026: encrypted vaults stolen via 2FA brute-force, ~20 accounts** [^dl2026] | ❌ **2022: backup DB stolen via two-stage employee laptop compromise; customer names, emails, phone numbers, and vault URLs all left unencrypted; 1.6M UK users hit; £1.2M ICO fine Dec 2025** [^lp2022] | No major incident known | ✅ **None - no server to breach** |
+| INTERNET permission not required | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Vault stored on vendor servers | E2EE | E2EE | ⚠️ E2EE (breached 2026) | ⚠️ E2EE (breached 2022) | E2EE | ✅ Local only |
+| Account metadata held off-device | Email, billing, devices | Email, devices | ⚠️ Email, devices (cloud breached 2026) | ⚠️ Email, devices, **vault URLs** (leaked 2022) | Proton account graph | ✅ None |
+| Telemetry / analytics | Opt-out | Configurable | Opt-out | Opt-out | Opt-out | ✅ None - no INTERNET |
+| Multi-device sync | ✅ Real-time | ✅ Real-time | ✅ Real-time | ⚠️ Real-time (cloud breached 2022) | ✅ Real-time | ✅ MP-unlock encrypted backup to user-chosen folder |
+| Sync without trusting a vendor server | ❌ 1Password servers | ⚠️ Bitwarden servers (or self-host Vaultwarden) | ❌ Dashlane servers | ❌ LastPass servers | ❌ Proton servers | ✅ User picks the folder: local, USB, Drive, Dropbox, or NAS (Network Attached Storage) |
+| Built-in TOTP / 2FA codes | ✅ | ❌ Premium only | ✅ | ❌ Enterprise / Identity only | ✅ | ✅ |
+| PIN code unlock | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OCR (camera scan) | ✅ cards / docs | ❌ | ✅ cards / receipts | ✅ cards | ❌ | ✅ any field |
+| **Markdown in notes** | ✅ post-save render [^1p-md] | ❌ plain text only [^bw-md] | ❌ plain text only [^dl-md] | ❌ plain text only [^lp-md] | ✅ render [^pp-md] | ✅ **live-preview edit + view-mode render + helper bar** (user can also disable it in Settings) |
+| Categories | ✅ | ✅ Folders | ✅ | ✅ Folders | ✅ Vaults | ✅ |
+| Encrypted local backup file | ❌ **all exports plaintext** [^1p-export] | ✅ JSON, password-encrypted | ✅ Dashlane export | ❌ CSV export only | ✅ | ✅ V4 envelope |
+| Recycle bin (soft delete) | ✅ Archive | ✅ Trash | ❌ delete is immediate | ✅ 30-day | ✅ Trash | ✅ default on (user can toggle off in Settings) |
+| KDF | PBKDF2-650k + Secret Key [^1p-kdf] | PBKDF2-600k default; Argon2id (m=64 MiB, t=3, p=4) opt-in [^bw-kdf] | Argon2d (m=32 MiB, t=3, p=2) [^dl-kdf] | PBKDF2-600k (was 100,100 pre-breach) [^lp-kdf] | bcrypt (cost not disclosed) [^pp-kdf] | Argon2id (m=64 MiB, t=3, p=1) [^1k-kdf] |
+| Verifier brute-forceable from leaked file | If cloud breached | If cloud breached | ❌ **Yes** - proven in 2026 breach for ~20 accounts | ❌ **Yes** - proven in 2022 breach for old-iteration vaults | If cloud breached | ✅ **Not possible** - hardware Keystore-bound (TEE) |
+| Open source | ❌ Closed | ✅ Client + server | ❌ Closed | ❌ Closed | ⚠️ Clients only | ✅ Open source - GPL-3.0 |
+
+**Further reading on password-manager security:** even local-only managers can have attack surface. The KeePass 2.x memory-leak CVE disclosed in May 2023 let an attacker extract the master password in cleartext from KeePass application memory on an already-compromised device. 1Key mitigates the same threat by holding the derived vault key in hardware-backed Android Keystore so it never sits in the app's heap. See https://www.secureworld.io/industry-news/keepass-security-flaw-password
 
 ---
 
 ## Encryption compared
 
-For a full technical and strategic overview, see the **[1Key white paper](docs/whitepaper.md)** - cryptographic architecture, threat model, and a frank statement of what the project does and doesn't defend against.
+For a full technical and strategic overview, see the **[1Key white paper](https://roufsyed.github.io/1Key/whitepaper.html)** - cryptographic architecture, threat model, and a frank statement of what the project does and doesn't defend against.
 
 1Key matches the modern cryptographic baseline used by 1Password, Bitwarden, and Proton Pass - Argon2id, authenticated encryption, end-to-end-encrypted vault material - and adds local-only hardening tailored to the Android threat model: the vault key never leaves the device, the master-password verifier is held in Keystore-backed `EncryptedSharedPreferences` (so a stolen DB file alone cannot be brute-forced offline), and Room columns are encrypted at rest with HKDF-derived per-field subkeys. This is **not stronger crypto than well-funded competitors** - 1Password's Secret Key in particular remains unmatched against cloud-blob brute force - but for users who don't want a server in the loop, it removes the off-device auth blob entirely.
 
@@ -248,3 +254,22 @@ The name **"1Key"**, the wordmark, and the application icon are not licensed und
 1Key is licensed GPL-3.0 and you have every legal right to fork it. We ask that you don't, unless 1Key is unmaintained or is going somewhere you can't follow. Bug reports, security audits, and pull requests against this repository are far more useful to users than a parallel build.
 
 If you do fork, you must rename the app, change the package ID, and remove the 1Key icon and wordmark per [TRADEMARKS.md](TRADEMARKS.md) - users deserve to know whose binary they are trusting with their vault.
+
+---
+
+## Sources
+
+[^dl2026]: Dashlane confirmed encrypted vaults were stolen for around 20 customer accounts after attackers brute-forced 2FA in early June 2026. https://techcrunch.com/2026/06/02/password-manager-dashlane-says-hackers-stole-some-customers-password-vaults/
+[^lp2022]: LastPass 2022 breach: backup database exfiltrated via a two-stage employee laptop compromise (corporate laptop, then a senior DevOps engineer's home machine with malware that captured the master password). Customer names, emails, phone numbers, and vault URLs were stored unencrypted in the leaked database. UK ICO fined LastPass £1.2M in December 2025 for inadequate security, citing 1.6 million UK users affected. https://www.forbes.com/sites/daveywinder/2025/12/14/lastpass-data-breach---insufficient-security-exposed-16-million-users/
+[^1p-md]: 1Password renders Markdown in secure notes after save - bold, italic, headings, lists, links. No live preview while typing. https://support.1password.com/markdown/
+[^bw-md]: Bitwarden secure notes are plain text only; rich-text / markdown is a long-standing community feature request that is still open. https://community.bitwarden.com/t/add-additional-formatting-options-to-secure-notes-rich-markdown/14517
+[^dl-md]: Dashlane secure notes have no markdown or rich-text formatting in their documented feature set. https://support.dashlane.com/hc/en-us/articles/202699381-Add-and-manage-Secure-Notes-in-Dashlane
+[^lp-md]: LastPass secure notes use structured field templates and have no markdown formatting documented. https://support.lastpass.com/help/manage-your-secure-notes-lp050001
+[^pp-md]: Proton Pass renders Markdown in secure notes; users have asked for an opt-out switch alongside disabling smart-text interpretation. https://protonmail.uservoice.com/forums/953584-proton-pass/suggestions/49589450-add-settings-option-for-plaintext-in-secure-notes
+[^1p-export]: 1Password 8 only offers unencrypted exports (1PUX / 1PIF / CSV / TXT) - per their own docs. The older encrypted "opvault" local-vault format was discontinued when 1P8 moved to cloud-only storage; the planned "1pex" encrypted export from 2021 has not shipped. https://support.1password.com/1pux-format/
+[^1p-kdf]: 1Password derives the encryption key with 650,000 iterations of PBKDF2-HMAC-SHA256 combined with a 128-bit Secret Key. https://support.1password.com/pbkdf2/
+[^bw-kdf]: Bitwarden defaults to PBKDF2-SHA256 with 600,000 iterations. Argon2id is opt-in; default Argon2id parameters are m=64 MiB, t=3, p=4. https://bitwarden.com/help/kdf-algorithms/
+[^dl-kdf]: Dashlane uses Argon2d with t=3 iterations, m=32 MiB ("32Mo" in their whitepaper), p=2. Legacy accounts may still be on PBKDF2-SHA2 200k; that path is being deprecated in 2026. https://www.dashlane.com/download/whitepaper-en.pdf
+[^lp-kdf]: LastPass currently mandates a 600,000-iteration PBKDF2-SHA256 minimum (raised after the 2022 breach). The pre-breach default was 100,100 iterations and many older accounts were configured as low as 5,000 - or even 1. https://blog.lastpass.com/posts/notice-of-recent-security-incident
+[^pp-kdf]: Proton Pass uses bcrypt for master-password derivation per their published security model. The specific cost factor is not disclosed. https://proton.me/blog/proton-pass-security-model
+[^1k-kdf]: 1Key uses Argon2id with t=3, m=65,536 KiB (64 MiB), p=1, 256-bit output. See `app/src/main/java/com/onekey/core/security/CryptoManager.kt` lines 42-44.
