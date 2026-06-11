@@ -213,18 +213,48 @@ open class CryptoManager @Inject constructor() {
     // password is NOT zeroed here - the caller owns the CharArray and must zero it.
     // The UTF-8 byte conversion is done without creating an intermediate String
     // (CharBuffer.encode) to avoid interning key material in immutable heap objects.
+    //
+    // Two overloads:
+    //  - The zero-extra-arg variant runs Argon2id with the Standard preset
+    //    parameters (t=3, m=64 MiB, p=1, hashLength=32). This is the OWASP
+    //    2023 interactive-auth recommendation and the historical default
+    //    used by every existing verifier. The constants above
+    //    (ARGON2_T_COST etc.) match `KdfPreset.STANDARD.toKdfParams()`
+    //    exactly so behaviour is unchanged for existing call sites.
+    //  - The parametric variant takes an explicit [KdfParams] so the
+    //    encryption-strength picker can derive the verifier under any
+    //    user-chosen preset (Standard-plus, Hardened, Maximum, or a Custom
+    //    (m, t) tuple). Used by `ChangeKdfPresetUseCase` for the migration
+    //    flow and by `unlockWithPassword` for the read path under a
+    //    non-Standard verifier.
 
-    fun deriveKeyFromPasswordArgon2id(password: CharArray, salt: ByteArray): SecretKey {
+    fun deriveKeyFromPasswordArgon2id(password: CharArray, salt: ByteArray): SecretKey =
+        deriveKeyFromPasswordArgon2id(
+            password = password,
+            salt = salt,
+            params = KdfParams(
+                mCostKiB = ARGON2_M_COST,
+                tCost = ARGON2_T_COST,
+                parallelism = ARGON2_PARALLELISM,
+                hashLengthBytes = ARGON2_HASH_LENGTH,
+            ),
+        )
+
+    fun deriveKeyFromPasswordArgon2id(
+        password: CharArray,
+        salt: ByteArray,
+        params: KdfParams,
+    ): SecretKey {
         val passwordBytes = password.toUtf8ByteArray()
         return try {
             val raw = Argon2Kt().hash(
                 mode = Argon2Mode.ARGON2_ID,
                 password = passwordBytes,
                 salt = salt,
-                tCostInIterations = ARGON2_T_COST,
-                mCostInKibibyte = ARGON2_M_COST,
-                parallelism = ARGON2_PARALLELISM,
-                hashLengthInBytes = ARGON2_HASH_LENGTH,
+                tCostInIterations = params.tCost,
+                mCostInKibibyte = params.mCostKiB,
+                parallelism = params.parallelism,
+                hashLengthInBytes = params.hashLengthBytes,
             ).rawHashAsByteArray()
             val key = SecretKeySpec(raw, "AES")
             raw.fill(0)

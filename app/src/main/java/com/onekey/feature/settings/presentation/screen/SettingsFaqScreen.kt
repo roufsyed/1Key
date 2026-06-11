@@ -118,6 +118,46 @@ fun SettingsFaqScreen(
                         "You don't need to do anything - none of this changes your master " +
                         "password, your vault, or your saved credentials.",
                 )
+                FaqItem(
+                    question = "Encryption strength - what do these settings mean?",
+                    answer = "Argon2id is the memory-hard function that turns your master " +
+                        "password into the AES-256 key that unlocks your vault. \"Memory-hard\" " +
+                        "means it needs a large block of RAM to run, not just CPU - that makes " +
+                        "it many times more expensive for an attacker to brute-force on GPU " +
+                        "farms or rented cloud compute than older algorithms like PBKDF2.\n\n" +
+                        "1Key ships four presets you can choose in Settings > Security > " +
+                        "Encryption strength. The default (\"Standard\") is OWASP's 2023 " +
+                        "interactive-auth recommendation and is what every fresh install starts " +
+                        "with. Stronger presets cost more time and RAM on every unlock, so 1Key " +
+                        "only offers presets your device can run smoothly.\n\n" +
+                        "Preset         Params (mem/iter)   Min RAM   Unlock on rec. device   Attacker cost*\n" +
+                        "Standard       64 MiB / 3 passes    any       ~0.3-0.6s              ~$200,000 / year\n" +
+                        "Standard-plus  64 MiB / 8 passes    any       ~0.8-1.5s              ~$530,000 / year\n" +
+                        "Hardened       128 MiB / 4 passes   4 GB+     ~1.0-2.0s              ~$1.0M / year\n" +
+                        "Maximum        128 MiB / 8 passes   6 GB+     ~2.0-4.0s              ~$2.1M / year\n\n" +
+                        "*Cost to crack an 8-character mixed-case + digit password on a 10-GPU " +
+                        "rig at typical 2026 cloud prices ($10/hr). Estimates assume full " +
+                        "keyspace brute-force; targeted attacks against weak passwords cost " +
+                        "less.\n\n" +
+                        "All four presets are infeasible to crack against a strong master " +
+                        "password (12+ characters with mixed cases, digits, and a symbol or " +
+                        "two) - the table above shows the gradient against a weaker password. " +
+                        "The cost differences matter most if you suspect your password is on " +
+                        "the weak side, or if your threat model includes a well-funded " +
+                        "adversary with physical access to your device. Hardened roughly " +
+                        "quintuples the attacker cost vs. Standard at the price of about 2x " +
+                        "longer unlocks.\n\n" +
+                        "Advanced users can also pick custom Argon2id parameters via \"Custom " +
+                        "(advanced)\" in the picker. Parallelism is locked to 1: higher " +
+                        "parallelism reduces attacker cost more than defender cost on " +
+                        "commodity hardware and is not recommended.\n\n" +
+                        "Changing the preset re-derives the verifier under the new Argon2id " +
+                        "parameters. Your vault encryption key is wrapped by the Android " +
+                        "Keystore (not by your password), so the migration does NOT re-encrypt " +
+                        "your credentials - their AES-256-GCM ciphertext is unchanged. " +
+                        "Migration is transactional: if anything fails part-way, the previous " +
+                        "preset stays active and your vault remains unlocked.",
+                )
             }
 
             Spacer(Modifier.height(8.dp))

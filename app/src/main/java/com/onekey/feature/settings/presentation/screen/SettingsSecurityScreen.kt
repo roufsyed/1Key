@@ -37,6 +37,7 @@ fun SettingsSecurityScreen(
     onBack: () -> Unit,
     onSetupPin: () -> Unit,
     onChangePassword: () -> Unit,
+    onEncryptionStrength: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
@@ -48,6 +49,8 @@ fun SettingsSecurityScreen(
     val masterPasswordRecheckInterval by settingsVm.masterPasswordRecheckInterval.collectAsStateWithLifecycle()
     val isRestoreLastScreenOnUnlock by settingsVm.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
     val hwIsolation by settingsVm.hardwareKeyIsolation.collectAsStateWithLifecycle()
+    val activeKdfPreset by settingsVm.activeKdfPreset.collectAsStateWithLifecycle()
+    val activeKdfCustomParams by settingsVm.activeKdfCustomParams.collectAsStateWithLifecycle()
 
     val canUseBiometric = rememberCanUseBiometric()
     val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
@@ -74,6 +77,7 @@ fun SettingsSecurityScreen(
     var showInactivityLockDialog by remember { mutableStateOf(false) }
     var showRestoreLastScreenDialog by remember { mutableStateOf(false) }
     var showHwIsolationDialog by remember { mutableStateOf(false) }
+    var showAdvancedKdfWarning by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         settingsVm.event.collect { event ->
@@ -385,6 +389,56 @@ fun SettingsSecurityScreen(
             // appears. STRONGBOX and TEE both get the checkmark - the
             // requirement frames TEE as full-strength protection. Only the
             // SOFTWARE fallback surfaces the warning icon.
+            Spacer(Modifier.height(8.dp))
+            SectionHeader("Encryption strength")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                HighlightableRow(
+                    isHighlighted = highlightKey == SettingsHighlightKeys.ENCRYPTION_STRENGTH,
+                    onHighlightConsumed = settingsVm::clearHighlight,
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Encryption strength") },
+                        supportingContent = {
+                            Column {
+                                // CUSTOM gets a more descriptive label on this row
+                                // only - the rest of the app (picker cards, snackbars)
+                                // keeps the canonical "Custom" via KdfPreset.displayName.
+                                Text(
+                                    if (activeKdfPreset == com.onekey.core.security.KdfPreset.CUSTOM)
+                                        "KDF strength customization"
+                                    else
+                                        activeKdfPreset.displayName
+                                )
+                                val customParams = activeKdfCustomParams
+                                if (activeKdfPreset == com.onekey.core.security.KdfPreset.CUSTOM &&
+                                    customParams != null
+                                ) {
+                                    Text(
+                                        "Argon2id m=${customParams.first} MiB, t=${customParams.second}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        },
+                        leadingContent = { Icon(Icons.Default.Tune, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = {
+                            // If the active preset is already CUSTOM, the
+                            // user is going to edit advanced parameters - so
+                            // pop the speed-bump warning before navigating.
+                            // On any fixed preset the row navigates straight
+                            // to the picker
+                            if (activeKdfPreset == com.onekey.core.security.KdfPreset.CUSTOM) {
+                                showAdvancedKdfWarning = true
+                            } else {
+                                onEncryptionStrength()
+                            }
+                        }),
+                    )
+                }
+            }
+
             Spacer(Modifier.height(8.dp))
             SectionHeader("Hardware key isolation")
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -742,6 +796,63 @@ fun SettingsSecurityScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRestoreLastScreenDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showAdvancedKdfWarning) {
+        // Speed-bump for the case where the active preset is already CUSTOM
+        // and the user is about to edit advanced parameters. Body is the
+        // same as the picker-screen warning Card so users see one consistent
+        // message no matter how they reach the slider dialog.
+        LockAwareDialog(
+            onDismissRequest = { showAdvancedKdfWarning = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            },
+            title = {
+                Text(
+                    "Advanced KDF (Key Derivation Function) Configuration",
+                    color = MaterialTheme.colorScheme.error,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Warning",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        "These settings control how encryption keys are derived from " +
+                            "your master password. Higher values generally increase " +
+                            "resistance to offline attacks but may increase unlock " +
+                            "times and battery usage.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        "The default configuration has been carefully selected and is " +
+                            "recommended for most users. Modify these settings only if " +
+                            "you understand the trade-offs and have a specific reason " +
+                            "to do so.",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAdvancedKdfWarning = false
+                    onEncryptionStrength()
+                }) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAdvancedKdfWarning = false }) {
+                    Text("Cancel")
+                }
             },
         )
     }

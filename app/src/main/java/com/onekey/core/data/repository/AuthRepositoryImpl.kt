@@ -10,8 +10,18 @@ import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.security.CryptoManager
 import com.onekey.core.security.EncryptedData
+import com.onekey.core.security.KDF_LEGACY_ARGON2ID
+import com.onekey.core.security.KDF_LEGACY_PBKDF2
+import com.onekey.core.security.KDF_V3_CUSTOM
+import com.onekey.core.security.KDF_V3_HARDENED
+import com.onekey.core.security.KDF_V3_MAXIMUM
+import com.onekey.core.security.KDF_V3_STANDARD
+import com.onekey.core.security.KDF_V3_STANDARD_PLUS
 import com.onekey.core.security.KEYSTORE_ALIAS_V1
 import com.onekey.core.security.KEYSTORE_ALIAS_V2
+import com.onekey.core.security.KdfMigrator
+import com.onekey.core.security.KdfParams
+import com.onekey.core.security.KdfPreset
 import com.onekey.core.security.VaultKeyHolder
 import com.onekey.core.security.VaultVersionTracker
 import com.onekey.feature.sync.domain.SyncEngine
@@ -67,6 +77,7 @@ class AuthRepositoryImpl @Inject constructor(
     private val keyHolder: VaultKeyHolder,
     private val vaultVersionTracker: VaultVersionTracker,
     private val syncEngine: SyncEngine,
+    private val kdfMigrator: KdfMigrator,
     @ApplicationScope appScope: CoroutineScope,
 ) : AuthRepository {
 
@@ -84,6 +95,17 @@ class AuthRepositoryImpl @Inject constructor(
             } finally {
                 migrationComplete.complete(Unit)
             }
+        }
+        // After the DataStore migration completes, sweep any KDF migration
+        // that was interrupted between Phase 1 (staged) and Phase 2 (commit)
+        // - e.g. process killed mid-migrate. resumeIfPending() is mutex-guarded
+        // inside KdfMigrator and idempotent, so racing a user-initiated
+        // migrateTo() is safe. runCatching shields the init from a recovery
+        // error so the rest of auth still bootstraps; the user can retry from
+        // Settings if recovery fails.
+        appScope.launch(Dispatchers.IO) {
+            migrationComplete.await()
+            runCatching { kdfMigrator.resumeIfPending() }
         }
     }
 
@@ -349,6 +371,32 @@ class AuthRepositoryImpl @Inject constructor(
         verifyPinInternal(pin)
     }
 
+    /**
+     * Public reauth check used by Settings flows that already hold an
+     * unlocked vault and just need to confirm the user still knows the
+     * master password. Defensively copies [password] so the implementation
+     * can zero its own array without disturbing the caller's copy
+     * (mirrors [verifyPin]'s contract). The caller SHOULD still zero its
+     * own array on return.
+     *
+     * Reads the stored KDF version itself; callers don't need to know
+     * the encoding. Recognises legacy codes (0, 1) AND the v3 preset
+     * codes (30-34) so this method works regardless of whether the user
+     * has migrated to a non-Standard preset.
+     */
+    override suspend fun verifyMasterPassword(password: CharArray): AppResult<Unit> =
+        runCatchingResult {
+            migrationComplete.await()
+            val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
+            // Hand verifyMasterPassword a copy so the caller's array survives.
+            val copy = password.copyOf()
+            try {
+                verifyMasterPassword(copy, kdfVersion)
+            } finally {
+                copy.fill(' ')
+            }
+        }
+
     // ── Core verification helpers ─────────────────────────────────────────────
 
     private fun verifyMasterPassword(password: CharArray, kdfVersion: Int) {
@@ -360,10 +408,7 @@ class AuthRepositoryImpl @Inject constructor(
         val verCt   = parts[1].decodeBase64()
         val verIv   = parts[2].decodeBase64()
 
-        val verifierKey = when (kdfVersion) {
-            KDF_ARGON2ID -> crypto.deriveKeyFromPasswordArgon2id(password, verSalt)
-            else         -> crypto.deriveKeyFromPassword(password, verSalt)
-        }
+        val verifierKey = deriveVerifierKey(password, verSalt, kdfVersion)
         password.fill(' ')
 
         val plainVerifier = try {
@@ -372,6 +417,40 @@ class AuthRepositoryImpl @Inject constructor(
             throw IllegalStateException("Incorrect master password. Please try again.", e)
         }
         check(plainVerifier == "VALID") { "Incorrect master password. Please try again." }
+    }
+
+    /**
+     * Derives the verifier key for the stored [kdfVersion] code. Recognises
+     * both the legacy two-value encoding (0=PBKDF2, 1=Argon2id Standard) and
+     * the v3 explicit-preset encoding (30..34). For [KDF_V3_CUSTOM] the
+     * (m, t) parameters are read from the SP_KDF_CUSTOM_M/T side-table; if
+     * those are absent we fall back to Standard params and log - this
+     * matches the silent-migration ethos of the rest of this repository.
+     */
+    private fun deriveVerifierKey(
+        password: CharArray,
+        salt: ByteArray,
+        kdfVersion: Int,
+    ): javax.crypto.SecretKey = when (kdfVersion) {
+        KDF_LEGACY_PBKDF2 -> crypto.deriveKeyFromPassword(password, salt)
+        KDF_LEGACY_ARGON2ID, KDF_V3_STANDARD ->
+            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.STANDARD.toKdfParams())
+        KDF_V3_STANDARD_PLUS ->
+            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.STANDARD_PLUS.toKdfParams())
+        KDF_V3_HARDENED ->
+            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.HARDENED.toKdfParams())
+        KDF_V3_MAXIMUM ->
+            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.MAXIMUM.toKdfParams())
+        KDF_V3_CUSTOM -> {
+            val mMiB = authPrefs.getInt("kdf_custom_m", 64)
+            val tCost = authPrefs.getInt("kdf_custom_t", 3)
+            crypto.deriveKeyFromPasswordArgon2id(
+                password,
+                salt,
+                KdfParams(mCostKiB = mMiB * 1024, tCost = tCost, parallelism = 1),
+            )
+        }
+        else -> error("Unknown KDF version: $kdfVersion")
     }
 
     private fun verifyPinInternal(pin: CharArray) {
@@ -491,6 +570,59 @@ class AuthRepositoryImpl @Inject constructor(
         emitAll(authPrefs.watchString(SP_PIN_HASH).map { it != null })
     }.distinctUntilChanged()
 
+    /**
+     * Resolves the integer KDF version code to a [KdfPreset]. Legacy codes
+     * (0, 1) are folded into [KdfPreset.STANDARD] since that is the semantic
+     * config they represent. Unknown codes also fall back to STANDARD - this
+     * is the same defensive default the rest of the file uses on the read
+     * side; the picker will then offer the user a chance to apply a real
+     * preset which will overwrite the unknown code on commit.
+     */
+    private fun kdfVersionIntToPreset(code: Int): KdfPreset = when (code) {
+        KDF_LEGACY_PBKDF2, KDF_LEGACY_ARGON2ID, KDF_V3_STANDARD -> KdfPreset.STANDARD
+        KDF_V3_STANDARD_PLUS -> KdfPreset.STANDARD_PLUS
+        KDF_V3_HARDENED -> KdfPreset.HARDENED
+        KDF_V3_MAXIMUM -> KdfPreset.MAXIMUM
+        KDF_V3_CUSTOM -> KdfPreset.CUSTOM
+        else -> KdfPreset.STANDARD
+    }
+
+    override fun observeActiveKdfPreset(): Flow<KdfPreset> = flow {
+        migrationComplete.await()
+        // We piggy-back on watchInt for the version key; whenever SP_KDF_VERSION
+        // is written - by changePassword, the silent legacy migration, or
+        // KdfMigrator's Phase 2 commit - the SharedPreferences listener fires
+        // and the flow re-emits the resolved preset.
+        emitAll(
+            authPrefs.watchInt(SP_KDF_VERSION, KDF_PBKDF2).map { kdfVersionIntToPreset(it) }
+        )
+    }.distinctUntilChanged()
+
+    override fun observeActiveKdfCustomParams(): Flow<Pair<Int, Int>?> = flow {
+        migrationComplete.await()
+        // Compose the custom-params view from three keys: the version int (to
+        // know whether custom is even active), and the two side-table entries
+        // SP_KDF_CUSTOM_M / SP_KDF_CUSTOM_T. A change to any of the three
+        // recomputes the emitted pair. Using kotlinx.coroutines.flow.combine
+        // here would pull in another flow operator import set; the explicit
+        // map { } over watchInt(version) covers the common case (version
+        // transitions are what flip the value on/off), and a separate
+        // edge-trigger on m or t alone without a version change is impossible
+        // because KdfMigrator's Phase 2 commit writes all three keys atomically
+        // and the silent migrations never touch the custom side table.
+        emitAll(
+            authPrefs.watchInt(SP_KDF_VERSION, KDF_PBKDF2).map { code ->
+                if (code == KDF_V3_CUSTOM) {
+                    val mMiB = authPrefs.getInt("kdf_custom_m", 64)
+                    val tCost = authPrefs.getInt("kdf_custom_t", 3)
+                    mMiB to tCost
+                } else {
+                    null
+                }
+            }
+        )
+    }.distinctUntilChanged()
+
     override suspend fun clearAll(): AppResult<Unit> = runCatchingResult {
         authPrefs.edit().clear().commit()
         dataStore.edit { it.clear() }
@@ -516,6 +648,16 @@ class AuthRepositoryImpl @Inject constructor(
             }
             registerOnSharedPreferenceChangeListener(listener)
             trySend(getString(key, null))
+            awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
+        }
+
+    private fun SharedPreferences.watchInt(key: String, default: Int): Flow<Int> =
+        callbackFlow {
+            val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+                if (k == key) trySend(getInt(key, default))
+            }
+            registerOnSharedPreferenceChangeListener(listener)
+            trySend(getInt(key, default))
             awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
         }
 

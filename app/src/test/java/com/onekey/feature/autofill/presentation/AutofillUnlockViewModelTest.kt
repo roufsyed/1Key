@@ -636,6 +636,7 @@ class AutofillUnlockViewModelTest {
         override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = error("unused")
         override suspend fun unlockWithBiometric(): AppResult<Unit> = error("unused")
         override suspend fun verifyPin(pin: CharArray): AppResult<Unit> = error("unused")
+        override suspend fun verifyMasterPassword(password: CharArray): AppResult<Unit> = error("unused")
         override suspend fun setupPin(pin: CharArray): AppResult<Unit> = error("unused")
         override suspend fun changePassword(oldPassword: CharArray, newPassword: CharArray): AppResult<Unit> = error("unused")
         override suspend fun lock(): AppResult<Unit> = error("unused")
@@ -643,6 +644,8 @@ class AutofillUnlockViewModelTest {
         override suspend fun resetPin(): AppResult<Unit> = error("unused")
         override suspend fun resetVault(): AppResult<Unit> = error("unused")
         override suspend fun clearAll(): AppResult<Unit> = error("unused")
+        override fun observeActiveKdfPreset(): Flow<com.onekey.core.security.KdfPreset> = error("unused")
+        override fun observeActiveKdfCustomParams(): Flow<Pair<Int, Int>?> = error("unused")
     }
 
     /**

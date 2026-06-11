@@ -16,8 +16,14 @@ import com.onekey.core.domain.usecase.DeleteTagUseCase
 import com.onekey.core.domain.usecase.ResetVaultUseCase
 import com.onekey.core.domain.usecase.SeedDataUseCase
 import com.onekey.core.security.AuthAttemptsStore
+import com.onekey.core.security.CapacitySnapshot
+import com.onekey.core.security.DeviceCapacityDetector
 import com.onekey.core.security.HardwareKeyIsolationProbe
 import com.onekey.core.security.HardwareKeyIsolationStatus
+import com.onekey.core.security.KdfBenchmark
+import com.onekey.core.security.KdfMigrator
+import com.onekey.core.security.KdfParams
+import com.onekey.core.security.KdfPreset
 import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightStore
@@ -37,6 +43,20 @@ sealed class SettingsEvent {
     data class BiometricConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
     data class DeleteVaultConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
     data object VaultLocked : SettingsEvent()
+
+    /**
+     * Emitted after [SettingsViewModel.selectPreset] / [SettingsViewModel.applyCustom]
+     * successfully completes a KDF migration. The new active preset is carried
+     * so the snackbar can render "Encryption strength updated to <displayName>".
+     */
+    data class KdfPresetApplied(val preset: KdfPreset) : SettingsEvent()
+
+    /**
+     * Emitted on a wrong master-password attempt during a KDF preset change.
+     * Mirrors [BiometricConfirmFailed] / [PinRemoveConfirmFailed] - the dialog
+     * stays open and surfaces the remaining attempts to the user.
+     */
+    data class KdfPresetConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
 }
 
 @HiltViewModel
@@ -51,6 +71,9 @@ class SettingsViewModel @Inject constructor(
     private val authAttemptsStore: AuthAttemptsStore,
     private val highlightStore: SettingsHighlightStore,
     private val hardwareKeyIsolationProbe: HardwareKeyIsolationProbe,
+    private val deviceCapacityDetector: DeviceCapacityDetector,
+    private val kdfBenchmark: KdfBenchmark,
+    private val kdfMigrator: KdfMigrator,
 ) : ViewModel() {
 
     init {
@@ -129,6 +152,77 @@ class SettingsViewModel @Inject constructor(
 
     val isRestoreLastScreenOnUnlock: StateFlow<Boolean> = appPrefs.isRestoreLastScreenOnUnlock()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    // ── KDF (encryption strength) state ────────────────────────────────────
+    //
+    // The KDF picker reads four flows:
+    //  - [activeKdfPreset]:        which preset is currently bound to the verifier
+    //  - [activeKdfCustomParams]:  (m, t) iff activePreset == CUSTOM, else null
+    //  - [deviceCapacity]:         RAM-derived rules table for picker gating
+    //  - [kdfBenchmarks]:          per-preset measured unlock time in ms
+    //
+    // The picker also calls [refreshBenchmark] / [selectPreset] / [applyCustom];
+    // [isKdfMigrating] disables the picker while a Phase-1-then-Phase-2
+    // migration is in flight on the background dispatcher.
+
+    /** Currently-active Argon2id preset, resolved from the stored KDF version int. */
+    val activeKdfPreset: StateFlow<KdfPreset> = authRepository.observeActiveKdfPreset()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, KdfPreset.STANDARD)
+
+    /**
+     * Custom (m, t) pair when [activeKdfPreset] is [KdfPreset.CUSTOM]; null
+     * for any of the four fixed presets. Subscribed to by the Settings UI to
+     * render the secondary subtitle line under the Encryption strength row.
+     */
+    val activeKdfCustomParams: StateFlow<Pair<Int, Int>?> = authRepository.observeActiveKdfCustomParams()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Device capacity snapshot. We hold the value in a StateFlow (rather than
+     * a plain val) so test fakes that flip the snapshot mid-test can drive UI
+     * recomposition predictably. The DeviceCapacityDetector itself memoises so
+     * repeated reads here are free.
+     */
+    val deviceCapacity: StateFlow<CapacitySnapshot> = MutableStateFlow(deviceCapacityDetector.snapshot())
+        .asStateFlow()
+
+    /**
+     * Per-preset measured unlock time. The picker uses this to render the
+     * "Estimated unlock: ~Xms" subtitle on each preset row. Backed by the
+     * shared singleton [KdfBenchmark] so refresh-from-anywhere updates are
+     * visible everywhere.
+     */
+    val kdfBenchmarks: StateFlow<Map<KdfParams, Long>> = kdfBenchmark.cachedTimings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    private val _isKdfMigrating = MutableStateFlow(false)
+    /** True while a `kdfMigrator.migrateTo` call is in flight. */
+    val isKdfMigrating: StateFlow<Boolean> = _isKdfMigrating.asStateFlow()
+
+    private val _isKdfBenchmarking = MutableStateFlow(false)
+    /** True while a `KdfBenchmark.benchmark` or `refreshBenchmark()` is in flight. */
+    val isKdfBenchmarking: StateFlow<Boolean> = _isKdfBenchmarking.asStateFlow()
+
+    init {
+        // First-launch warmup: kick benchmarks for every enabled fixed preset
+        // (and the currently-active one) so the picker has data to show when
+        // the user opens it. Each benchmark is gated by the mutex inside
+        // KdfBenchmark, so this serialises naturally and stays bounded.
+        //
+        // We avoid the picker UI showing "Estimating..." for the user's
+        // own active preset by giving that one priority (first in the loop).
+        viewModelScope.launch {
+            val snapshot = deviceCapacityDetector.snapshot()
+            val current = authRepository.observeActiveKdfPreset().first()
+            val toMeasure = buildList {
+                if (current != KdfPreset.CUSTOM) add(current)
+                addAll(snapshot.enabledPresets.filter { it != current })
+            }
+            toMeasure.forEach { preset ->
+                runCatching { kdfBenchmark.benchmarkIfMissing(preset.toKdfParams()) }
+            }
+        }
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         if (mode == themeMode.value) return
@@ -347,6 +441,156 @@ class SettingsViewModel @Inject constructor(
                 is AppResult.Success -> _event.emit(SettingsEvent.TwoFaSeedComplete(result.data))
                 is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to seed 2FA data"))
             }
+        }
+    }
+
+    // ── KDF preset actions ─────────────────────────────────────────────────
+    //
+    // Reauth + migrate flow. The Settings UI:
+    //  1. Shows the picker, user selects preset P.
+    //  2. Picker opens [MasterPasswordReauthDialog].
+    //  3. On confirm, the dialog hands a CharArray to one of [selectPreset]
+    //     or [applyCustom]. The caller passes ownership to the VM; we zero
+    //     it in `finally` after [KdfMigrator] is done with it (the migrator
+    //     also defensively zeroes its own copy on the way out).
+    //
+    // The 3-strike lockout shares the same counter as biometric-enable and
+    // PIN-removal flows (the `authAttemptsStore.incrementBiometricEnable()`
+    // singleton-scoped counter). Three wrong attempts across any reauth-gated
+    // Settings flow trips the lockout - this is intentional: the threat is
+    // someone shoulder-surfing the Settings reauth UI, regardless of which
+    // specific action they were trying to hijack.
+
+    /**
+     * Re-derive the verifier under one of the four fixed presets. The picker
+     * already confirmed [preset] is enabled on this device; this method does
+     * NOT re-check (KdfMigrator does as defence in depth) but does refuse
+     * [KdfPreset.CUSTOM] - that lives on [applyCustom].
+     *
+     * @param password Caller-supplied CharArray. We take ownership and zero
+     *                 it in a finally block.
+     */
+    fun selectPreset(preset: KdfPreset, password: CharArray) {
+        require(preset != KdfPreset.CUSTOM) { "Use applyCustom for CUSTOM preset" }
+        applyKdfMigration(preset = preset, params = preset.toKdfParams(), password = password)
+    }
+
+    /**
+     * Re-derive the verifier under user-chosen custom (m, t) params. The
+     * Custom dialog already validated that `m` is within the per-device
+     * `maxCustomMemoryMb` cap and `t` is in `2..16`; KdfMigrator does not
+     * re-check those numeric bounds because the only callers are this method
+     * (UI-gated) and tests (which set explicit values).
+     *
+     * @param params  KdfParams holding the chosen mCostKiB / tCost / p=1.
+     * @param password Caller-supplied CharArray. We take ownership and zero
+     *                 it in a finally block.
+     */
+    fun applyCustom(params: KdfParams, password: CharArray) {
+        applyKdfMigration(preset = KdfPreset.CUSTOM, params = params, password = password)
+    }
+
+    private fun applyKdfMigration(
+        preset: KdfPreset,
+        params: KdfParams,
+        password: CharArray,
+    ) {
+        viewModelScope.launch {
+            // Bind the verify-copy to a named local so the `finally` below can
+            // zero it deterministically. `authRepository.verifyMasterPassword`
+            // makes its own internal copy and zeros THAT, but the array we hand
+            // it stays in the heap until GC unless we zero it ourselves.
+            val verifyCopy = password.copyOf()
+            try {
+                _isKdfMigrating.value = true
+                // Reauth: the migrator does its own verifier check as part of
+                // Phase 1a, but a verifyMasterPassword() round before the slow
+                // Argon2id derivation lets us short-circuit wrong-password
+                // attempts cleanly through the attempt counter / lockout path
+                // without burning an Argon2id derivation under the new params.
+                when (authRepository.verifyMasterPassword(verifyCopy)) {
+                    is AppResult.Success -> {
+                        authAttemptsStore.resetBiometricEnable()
+                        when (val res = kdfMigrator.migrateTo(params, preset, password)) {
+                            is AppResult.Success -> {
+                                // Eagerly schedule a fresh benchmark of the new
+                                // active params so the picker subtitle updates
+                                // ("Estimated unlock: ~X ms") without waiting
+                                // for the next time the user opens the screen.
+                                viewModelScope.launch {
+                                    runCatching { kdfBenchmark.benchmark(params) }
+                                }
+                                _event.emit(SettingsEvent.KdfPresetApplied(preset))
+                            }
+                            is AppResult.Error -> _event.emit(
+                                SettingsEvent.Error(
+                                    res.message ?: "Could not change encryption strength"
+                                )
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
+                            lockReasonStore.set(
+                                LockReason.TooManyFailedAttempts("encryption strength change")
+                            )
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.KdfPresetConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - attempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                // KdfMigrator zeroes its own internal copy; this zeroes both
+                // the VM's view of the caller's array AND the throwaway copy
+                // we handed to verifyMasterPassword. Idempotent if the inner
+                // callees already overwrote them.
+                password.fill(' ')
+                verifyCopy.fill(' ')
+                _isKdfMigrating.value = false
+            }
+        }
+    }
+
+    /**
+     * Re-runs benchmarks for every preset enabled on this device. Single
+     * shared mutex inside [KdfBenchmark] serialises the work, so this is safe
+     * to spam-tap.
+     */
+    fun refreshBenchmark() {
+        if (_isKdfBenchmarking.value) return
+        viewModelScope.launch {
+            try {
+                _isKdfBenchmarking.value = true
+                val snapshot = deviceCapacityDetector.snapshot()
+                snapshot.enabledPresets.forEach { preset ->
+                    runCatching { kdfBenchmark.benchmark(preset.toKdfParams()) }
+                }
+            } finally {
+                _isKdfBenchmarking.value = false
+            }
+        }
+    }
+
+    /**
+     * One-shot benchmark for a user-chosen Custom (m, t) pair. Used by the
+     * Custom dialog's "Estimate" button before the user can press "Apply".
+     * Returns null on failure (OOM, timeout, native crash); the dialog maps
+     * null to "Could not measure on this device" inline error.
+     */
+    suspend fun benchmarkCustom(params: KdfParams): Long? {
+        return try {
+            _isKdfBenchmarking.value = true
+            kdfBenchmark.benchmark(params)
+        } finally {
+            _isKdfBenchmarking.value = false
         }
     }
 

@@ -46,6 +46,7 @@ import com.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
 import com.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScreen
 import com.onekey.feature.settings.presentation.screen.SettingsAutofillScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
+import com.onekey.feature.settings.presentation.screen.SettingsKdfStrengthScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSyncScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
@@ -79,6 +80,7 @@ sealed class Screen(val route: String) {
     data object RecycleBin : Screen("recycle_bin")
     data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
+    data object SettingsKdfStrength : Screen("settings/security/kdf_strength")
     data object SettingsAutofill : Screen("settings/autofill")
     data object SettingsSync : Screen("settings/sync")
     data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
@@ -347,7 +349,14 @@ fun OneKeyNavGraph(
                         onBack = { navController.popBackStack() },
                         onSetupPin = { navController.navigate(Screen.SetupPin.route) },
                         onChangePassword = { navController.navigate(Screen.ChangePassword.route) },
+                        onEncryptionStrength = {
+                            navController.navigate(Screen.SettingsKdfStrength.route)
+                        },
                     )
+                }
+
+                composable(Screen.SettingsKdfStrength.route) {
+                    SettingsKdfStrengthScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.SettingsAutofill.route) {

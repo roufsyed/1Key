@@ -49,6 +49,7 @@ object SettingsHighlightKeys {
     const val MASTER_PASSWORD_RECHECK = "master_password_recheck"
     const val ALLOW_SCREENSHOTS = "allow_screenshots"
     const val AUTOFILL_ENABLED = "autofill_enabled"
+    const val ENCRYPTION_STRENGTH = "encryption_strength"
 }
 
 internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
@@ -206,6 +207,17 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         keywords = listOf("screenshot", "screen record", "recent apps", "capture"),
         action = SettingsAction.Navigate(SettingsDestination.Security),
         highlightKey = SettingsHighlightKeys.ALLOW_SCREENSHOTS,
+    ),
+    SettingsEntry(
+        title = "Encryption strength",
+        subtitle = "Pick Argon2id parameters: Standard, Standard-plus, Hardened, Maximum, Custom",
+        sectionLabel = "Security",
+        keywords = listOf(
+            "kdf", "argon2", "argon2id", "key derivation", "memory hard",
+            "strong encryption", "hardened", "brute force", "iterations",
+        ),
+        action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.ENCRYPTION_STRENGTH,
     ),
 
     // ── Autofill ─────────────────────────────────────────────────────────────

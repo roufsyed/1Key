@@ -123,6 +123,7 @@ private class CapturingFakeAuth : AuthRepository {
     override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = unused()
     override suspend fun unlockWithBiometric(): AppResult<Unit> = unused()
     override suspend fun verifyPin(pin: CharArray): AppResult<Unit> = unused()
+    override suspend fun verifyMasterPassword(password: CharArray): AppResult<Unit> = unused()
     override suspend fun setupPin(pin: CharArray): AppResult<Unit> = unused()
     override suspend fun changePassword(oldPassword: CharArray, newPassword: CharArray): AppResult<Unit> = unused()
     override suspend fun lock(): AppResult<Unit> = unused()
@@ -131,6 +132,8 @@ private class CapturingFakeAuth : AuthRepository {
     override suspend fun resetPin(): AppResult<Unit> = unused()
     override suspend fun resetVault(): AppResult<Unit> = unused()
     override suspend fun clearAll(): AppResult<Unit> = unused()
+    override fun observeActiveKdfPreset(): Flow<com.onekey.core.security.KdfPreset> = unused()
+    override fun observeActiveKdfCustomParams(): Flow<Pair<Int, Int>?> = unused()
 
     private fun unused(): Nothing = error("not used by SetupFromBackupUseCase")
 }
