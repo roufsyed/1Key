@@ -106,15 +106,18 @@ class SyncEngineImpl @Inject constructor(
         }
     }
 
-    override fun maybeTriggerSync(password: CharArray) {
+    override fun maybeTriggerSync(password: CharArray, secretKey: ByteArray?) {
         // Always launch - even if sync is disabled, we need a suspending context to read
-        // the gate. The launched body is the single owner of `password` from this point.
+        // the gate. The launched body is the single owner of `password` AND `secretKey`
+        // from this point. Both are zeroed in the finally block at the end of the
+        // coroutine, no matter which branch we take.
         currentJob = appScope.launch(Dispatchers.IO) {
             // Step 1 - gate read. Race-free direct read so a recent setSyncEnabled is
             // visible without StateFlow propagation lag.
             val gate = appPrefs.getSyncGateDirect()
             if (!gate.enabled || gate.locationUri == null) {
                 password.fill(' ')
+                secretKey?.fill(0)
                 return@launch
             }
 
@@ -123,20 +126,26 @@ class SyncEngineImpl @Inject constructor(
             if (!mutex.tryLock()) {
                 Log.i(TAG, "Sync already in flight; dropping this attempt")
                 password.fill(' ')
+                secretKey?.fill(0)
                 return@launch
             }
 
             var material: BackupKeyMaterial? = null
             try {
                 // Step 3 - derive backup key. This consumes (zeros) `password`.
-                material = crypto.deriveBackupKey(password)
+                // The SK (when non-null) is mixed into the Argon2id input so
+                // the resulting backup is tied to BOTH master password and
+                // Secret Key. CryptoManager.deriveBackupKey does NOT zero
+                // the SK byte array - that ownership stays with this method,
+                // and the finally block below handles it on every exit path.
+                material = crypto.deriveBackupKey(password, secretKey)
 
                 // Step 4 - flip to Syncing AFTER mutex is held + key is derived, so
                 // a quick check on state.value can never observe Syncing without an
                 // associated in-flight job.
                 _state.value = SyncState.Syncing
 
-                runSync(gate.locationUri, material)
+                runSync(gate.locationUri, material, requiresSecretKey = secretKey != null)
             } catch (e: CancellationException) {
                 // Vault-lock cancellation OR a structured cancellation from elsewhere.
                 _state.value = SyncState.Failed(SyncFailureReason.VAULT_LOCKED)
@@ -164,6 +173,11 @@ class SyncEngineImpl @Inject constructor(
                     // Defensive double-zero of password in case any branch above failed to
                     // call deriveBackupKey (which is the path that consumes the array).
                     password.fill(' ')
+                    // SK is OURS to zero - the unlock path passed us a fresh defensive
+                    // copy and entrusted us with the cleanup. Zero on every branch
+                    // including the cancellation case so even a vault-lock mid-sync
+                    // never leaves SK bytes lingering on the sync coroutine's heap.
+                    secretKey?.fill(0)
                     if (mutex.isLocked) {
                         runCatching { mutex.unlock() }
                     }
@@ -180,7 +194,11 @@ class SyncEngineImpl @Inject constructor(
         }
     }
 
-    private suspend fun runSync(uriString: String, material: BackupKeyMaterial) {
+    private suspend fun runSync(
+        uriString: String,
+        material: BackupKeyMaterial,
+        requiresSecretKey: Boolean,
+    ) {
         val treeUri = Uri.parse(uriString)
         val tree = DocumentFile.fromTreeUri(context, treeUri)
             ?: run {
@@ -214,8 +232,12 @@ class SyncEngineImpl @Inject constructor(
         val plaintext = vaultExporter.serializeForSync(all, ExportFormat.JSON)
         val vaultVersion = vaultVersionTracker.getVersion()
 
-        // Encrypt with pre-derived key (skips Argon2id - we already paid that cost above
-        // in deriveBackupKey). V4 envelope binds timestamp + vault version into the AAD.
+        // Encrypt with pre-derived key (skips Argon2id - we already paid that
+        // cost above in deriveBackupKey). When SK is enabled on this device,
+        // the pre-derived key was derived from MP || SK and the envelope
+        // version is V5 with FLAGS=1 so a new-device restore must supply
+        // the Emergency Kit alongside MP. When SK is disabled, the envelope
+        // version is V4 with no FLAGS byte (legacy compatible).
         val encryptedBytes = BackupEncryption.encryptWithKey(
             plaintext = plaintext,
             key = material.key,
@@ -224,6 +246,7 @@ class SyncEngineImpl @Inject constructor(
             crypto = crypto,
             createdAtMs = System.currentTimeMillis(),
             vaultVersion = vaultVersion,
+            requiresSecretKey = requiresSecretKey,
         )
 
         // Write to .part first, then atomic rename. Never overwrites the live

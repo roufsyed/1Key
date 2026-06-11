@@ -102,7 +102,12 @@ fun SettingsFaqScreen(
                     question = "What happens if I forget my master password?",
                     answer = "Your data is unrecoverable. There's no \"forgot password\" link " +
                         "because there's no server and no recovery copy of your key anywhere. " +
-                        "Only you can decrypt your vault - that's what makes it truly private.",
+                        "Only you can decrypt your vault - that's what makes it truly private.\n\n" +
+                        "If you had Secret Key enabled when you took an encrypted backup, you " +
+                        "also need that backup's Emergency Kit (the printed PDF or scanned QR) " +
+                        "to restore the file - the master password alone is not enough on a " +
+                        "Secret-Key-protected backup. The kit lives outside the device, so " +
+                        "make sure you have a copy stored somewhere safe before relying on it.",
                 )
                 FaqItem(
                     question = "What changed if I had 1Key installed before the recent security update?",
@@ -177,6 +182,153 @@ fun SettingsFaqScreen(
                         "three passes over it to turn your master password into the encryption " +
                         "key. The slowness is the feature - it makes guessing your password too " +
                         "expensive to be practical, even for an attacker with serious hardware.",
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            FaqGroup("Secret Key") {
+                FaqItem(
+                    question = "What is Secret Key, and why does 1Key recommend it?",
+                    answer = "Secret Key is a 128-bit random value that 1Key mixes into your " +
+                        "master password before deriving the vault encryption key. It is " +
+                        "generated on this device, stored only on this device (wrapped inside " +
+                        "the Android Keystore), and printed onto your Emergency Kit so you can " +
+                        "keep an offline copy.\n\n" +
+                        "What it buys you: even if an encrypted backup of your vault is " +
+                        "leaked, an attacker needs BOTH your master password AND your Secret " +
+                        "Key to decrypt it. A guess at your master password alone - no matter " +
+                        "how much GPU time the attacker has - cannot brute-force a " +
+                        "Secret-Key-protected backup, because the 128 bits of Secret Key " +
+                        "entropy are not in the file.\n\n" +
+                        "This is the same model 1Password has used for years. New 1Key " +
+                        "installs default it on; existing installs can turn it on in " +
+                        "Settings > Security > Secret Key.",
+                )
+                FaqItem(
+                    question = "What is the Emergency Kit, and where should I keep it?",
+                    answer = "The Emergency Kit is a two-page A4 PDF that prints your Secret " +
+                        "Key in large monospace, a QR code, and a labelled line where you can " +
+                        "write your master password. It is generated entirely on-device and " +
+                        "saved to a folder you pick - 1Key does not see the file again after " +
+                        "it is written.\n\n" +
+                        "Keep it offline. A printed copy in a safe, a locked drawer, or a " +
+                        "fireproof file folder is the intended use. A digital copy on a USB " +
+                        "stick that you keep separately from your phone also works. What you " +
+                        "want to avoid is the same place as the encrypted backup file - the " +
+                        "whole point of Secret Key is that a leak of the backup AND a leak of " +
+                        "the kit have to happen together to expose the vault.",
+                )
+                FaqItem(
+                    question = "Is Secret Key the same as two-factor authentication (2FA)?",
+                    answer = "No. 2FA usually means a second login factor (a code from an " +
+                        "authenticator app, a hardware key) that you present to a server when " +
+                        "you sign in. 1Key has no server and no sign-in - there is nothing to " +
+                        "present a 2FA token to.\n\n" +
+                        "Secret Key is a second secret you must possess to derive the vault " +
+                        "encryption key, on top of the master password you must know. In " +
+                        "everyday terms it plays a similar role to 2FA (something you have, " +
+                        "in addition to something you know), but the mechanism is " +
+                        "cryptographic, not protocol-based, and it protects offline files - " +
+                        "not server logins.",
+                )
+                FaqItem(
+                    question = "What happens to my existing backups when I enable or disable Secret Key?",
+                    answer = "Existing backup files are never touched. Backups are immutable " +
+                        "snapshots: a backup written before you turned Secret Key on remains " +
+                        "decryptable with just your master password forever, and a backup " +
+                        "written after you turned it on always needs both master password and " +
+                        "Secret Key to decrypt.\n\n" +
+                        "If you disable Secret Key later, future backups go back to " +
+                        "master-password-only, but any older Secret-Key-protected backups you " +
+                        "still keep continue to require the kit. Rotating the Secret Key has " +
+                        "the same property: old backups stay decryptable with the old kit, new " +
+                        "backups need the new kit. That is why 1Key prompts you to save a " +
+                        "fresh kit on every rotate.",
+                )
+                FaqItem(
+                    question = "Why do I need the Emergency Kit even though I am not changing phones?",
+                    answer = "Two reasons. First, the Secret Key lives inside this phone's " +
+                        "Keystore - if the phone is lost, broken, factory-reset, or the app is " +
+                        "uninstalled, the Keystore-wrapped copy goes with it. The Emergency " +
+                        "Kit is your only path back into a Secret-Key-protected backup in " +
+                        "that case.\n\n" +
+                        "Second, even on this phone, the Secret Key is bound to a Keystore " +
+                        "alias that can be invalidated by certain device events (factory " +
+                        "reset, secure-hardware key wipe, some OS upgrades on a small number " +
+                        "of devices). The kit is the offline copy that survives any " +
+                        "on-device event. Treat it like a wallet recovery phrase: you may " +
+                        "never need it, but you should never not have it.",
+                )
+                FaqItem(
+                    question = "What happens if I lose my Emergency Kit but still have my master password?",
+                    answer = "You can still unlock and use 1Key on this phone normally. The " +
+                        "Secret Key is on this device's Keystore; the kit is the offline " +
+                        "backup of the same value. As long as the phone is intact, the " +
+                        "in-phone copy is what 1Key reads on every unlock.\n\n" +
+                        "What you lose without the kit is the ability to restore a " +
+                        "Secret-Key-protected backup on any other device. Generate a fresh " +
+                        "kit as soon as possible: open Settings > Security > Secret Key and " +
+                        "tap Save Emergency Kit. That writes a new PDF with the same Secret " +
+                        "Key on it, so the lost copy is no longer the only one.\n\n" +
+                        "If you want to invalidate the lost kit entirely (e.g. you suspect " +
+                        "the document was found), rotate the Secret Key from the same " +
+                        "screen. Rotating mints a fresh Secret Key, makes the lost kit " +
+                        "useless on any future backup, and prompts you to save the new kit " +
+                        "in its place. Existing backups stay readable with the old kit only.",
+                )
+                FaqItem(
+                    question = "What happens if I lose my master password but still have my Emergency Kit?",
+                    answer = "Your data is still unrecoverable. The Secret Key only " +
+                        "supplements the master password; it never replaces it. 1Key derives " +
+                        "the vault encryption key from both inputs combined, and the master " +
+                        "password is the one that can be guessed by a human - the kit alone " +
+                        "carries no information about it.\n\n" +
+                        "There is no \"forgot password\" path. The kit is for the OTHER half " +
+                        "of the equation: a leaked backup file alone (without the kit) " +
+                        "cannot be brute-forced. The reverse - kit alone, without the " +
+                        "password - cannot decrypt anything either.",
+                )
+                FaqItem(
+                    question = "What does rotating my Secret Key do, and when should I rotate?",
+                    answer = "Rotating mints a fresh 128-bit Secret Key, drops the old one " +
+                        "from this phone, re-derives the verifier under the new key, and " +
+                        "asks you to save a new Emergency Kit. No grace period and no second " +
+                        "slot - the old key is gone the moment the rotate completes.\n\n" +
+                        "Rotate when you suspect the old Emergency Kit has leaked or might " +
+                        "leak (left in an old shared workspace, exposed in a cloud-drive " +
+                        "screenshot, etc.), or as a routine refresh on a schedule that fits " +
+                        "your threat model. Future backups will need the new kit; existing " +
+                        "backups continue to require the old kit, so do not throw the old " +
+                        "kit away as long as you might want to restore from a pre-rotate " +
+                        "backup. 1Key shows a persistent banner on Settings until you save " +
+                        "the new kit after rotating, so you cannot forget the step.",
+                )
+                FaqItem(
+                    question = "Where on my phone is the Secret Key stored?",
+                    answer = "The Secret Key is wrapped (encrypted) by a key inside the " +
+                        "Android Keystore and the wrapped blob is stored in 1Key's " +
+                        "EncryptedSharedPreferences. The wrapping key never leaves the " +
+                        "Keystore - regular apps, 1Key included, cannot read it.\n\n" +
+                        "1Key requests StrongBox isolation for the wrapping key on devices " +
+                        "that support it (a dedicated secure chip, separate from the main " +
+                        "CPU) and falls back to TEE (Trusted Execution Environment, a " +
+                        "secure-only mode of the main CPU) on devices that do not. Both are " +
+                        "full-strength protection. You can see which tier this device uses " +
+                        "in Settings > Security > Hardware key isolation.",
+                )
+                FaqItem(
+                    question = "Will Secret Key still work if I set up 1Key on a phone without StrongBox?",
+                    answer = "Yes. Every modern Android device has a TEE (Trusted Execution " +
+                        "Environment), which is the standard hardware-backed key isolation " +
+                        "tier on Android. 1Key automatically falls back to TEE when " +
+                        "StrongBox is not available on the device, and the Secret Key feature " +
+                        "is fully supported in both cases.\n\n" +
+                        "StrongBox is an additional qualifier on devices that have a " +
+                        "dedicated secure chip - it does not change WHAT the Secret Key " +
+                        "protects, only HOW it is protected at rest on the device. The kit " +
+                        "you print is the same format on every device, and a kit saved on a " +
+                        "TEE phone can be used to restore a backup onto a StrongBox phone " +
+                        "(and vice versa).",
                 )
             }
 

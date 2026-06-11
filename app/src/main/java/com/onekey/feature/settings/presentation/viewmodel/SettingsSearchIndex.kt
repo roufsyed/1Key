@@ -50,6 +50,7 @@ object SettingsHighlightKeys {
     const val ALLOW_SCREENSHOTS = "allow_screenshots"
     const val AUTOFILL_ENABLED = "autofill_enabled"
     const val ENCRYPTION_STRENGTH = "encryption_strength"
+    const val SECRET_KEY = "secret_key"
 }
 
 internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
@@ -218,6 +219,21 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         ),
         action = SettingsAction.Navigate(SettingsDestination.Security),
         highlightKey = SettingsHighlightKeys.ENCRYPTION_STRENGTH,
+    ),
+    SettingsEntry(
+        title = "Secret Key",
+        subtitle = "128-bit two-factor key derivation, Emergency Kit, and QR recovery",
+        sectionLabel = "Security",
+        keywords = listOf(
+            "secret key", "secret-key", "secretkey",
+            "emergency kit", "emergency", "kit",
+            "2fa", "two factor", "two-factor", "second factor",
+            "extra security", "qr", "qr code", "scan", "pdf", "recovery",
+            "rotate secret key", "disable secret key", "enable secret key",
+            "128 bit", "128-bit", "entropy",
+        ),
+        action = SettingsAction.Navigate(SettingsDestination.Security),
+        highlightKey = SettingsHighlightKeys.SECRET_KEY,
     ),
 
     // ── Autofill ─────────────────────────────────────────────────────────────

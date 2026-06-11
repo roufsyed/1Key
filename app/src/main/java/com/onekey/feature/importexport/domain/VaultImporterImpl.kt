@@ -45,24 +45,43 @@ class VaultImporterImpl @Inject constructor(
         }
     }
 
-    override suspend fun parseEncrypted(path: String, password: CharArray): AppResult<ParsedImport> =
+    override suspend fun parseEncrypted(
+        path: String,
+        password: CharArray,
+        secretKey: ByteArray?,
+    ): EncryptedParseResult =
         runCatching {
             val fileBytes = File(path).readBytes()
-            val (plaintext, format) = BackupEncryption.decrypt(fileBytes, password, crypto)
+            val (plaintext, format) = BackupEncryption.decrypt(
+                fileBytes = fileBytes,
+                password = password,
+                secretKey = secretKey,
+                crypto = crypto,
+            )
             when (format) {
                 ExportFormat.JSON -> parseJsonContent(plaintext.toString(Charsets.UTF_8))
                 ExportFormat.CSV -> parseCsvReader(InputStreamReader(ByteArrayInputStream(plaintext)))
             }
         }.fold(
-            onSuccess = { AppResult.Success(it) },
+            onSuccess = { EncryptedParseResult.Success(it) },
             onFailure = { e ->
+                // SK-required is a control-flow branch, not a failure. The
+                // catch order matters: SecretKeyRequiredException is checked
+                // FIRST so the message-matching below never folds it into a
+                // generic "Failed to decrypt backup" bucket.
+                if (e is BackupEncryption.SecretKeyRequiredException) {
+                    return@fold EncryptedParseResult.SecretKeyRequired(
+                        createdAtMs = e.createdAtMs,
+                        vaultVersion = e.vaultVersion,
+                    )
+                }
                 val msg = when {
                     e is javax.crypto.AEADBadTagException -> "Wrong password or corrupted backup"
                     e.message?.startsWith("Not a 1Key") == true -> "This is not a 1Key encrypted backup"
                     e.message?.startsWith("Unsupported backup") == true -> e.message!!
                     else -> e.message ?: "Failed to decrypt backup"
                 }
-                AppResult.Error(IllegalStateException(msg), msg)
+                EncryptedParseResult.Failure(throwable = IllegalStateException(msg), message = msg)
             }
         )
 

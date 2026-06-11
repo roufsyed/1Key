@@ -4,11 +4,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -150,7 +153,13 @@ fun MasterPasswordReauthDialog(
 
     LockAwareDialog(
         modifier = modifier,
-        onDismissRequest = dismissAction,
+        // Click-outside / back-gesture only dismisses when the dialog is
+        // NOT actively verifying. Without this gate the Argon2id derive
+        // coroutine survives the dismiss and races with the parent's
+        // state machine - on a wrong-password retry the caller's
+        // pendingChoice could be cleared before the WrongPassword event
+        // lands, swallowing the error toast.
+        onDismissRequest = { if (!isVerifying) dismissAction() },
         icon = { Icon(Icons.Default.Key, contentDescription = null) },
         title = { Text(title) },
         text = {
@@ -209,8 +218,25 @@ fun MasterPasswordReauthDialog(
                     onVerify(passwordState.consume())
                 },
                 enabled = !isVerifying && !passwordState.isEmpty,
+                // Stable lower bound so the button does not visibly shrink
+                // when the idle label is replaced by an 18.dp spinner.
+                modifier = Modifier.widthIn(min = 160.dp),
             ) {
-                Text(confirmButtonLabel)
+                // While the caller's verification call is in flight, swap
+                // the button label for an in-button spinner so the user has
+                // a clear "your tap is being processed" signal. Argon2id
+                // derivation can take 0.3-4 s; without the spinner the
+                // dialog looks frozen. Spinner color matches onPrimary
+                // because the default Button contentColor is onPrimary.
+                if (isVerifying) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(confirmButtonLabel)
+                }
             }
         },
         dismissButton = {

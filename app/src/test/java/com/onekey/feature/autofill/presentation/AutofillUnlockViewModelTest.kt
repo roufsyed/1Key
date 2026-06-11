@@ -632,6 +632,17 @@ class AutofillUnlockViewModelTest {
 
         override fun isSetupComplete(): Flow<Boolean> = flowOf(true)
         override suspend fun setupMasterPassword(password: CharArray): AppResult<Unit> = error("unused")
+        override suspend fun setupMasterPasswordWithSecretKey(
+            password: CharArray,
+            secretKey: ByteArray,
+        ): AppResult<Unit> = error("unused")
+        override suspend fun setupMasterPasswordOptingOutOfSecretKey(
+            password: CharArray,
+        ): AppResult<Unit> = error("unused")
+        override suspend fun setupWithSecretKeyFromBackup(
+            password: CharArray,
+            secretKey: ByteArray,
+        ): AppResult<Unit> = error("unused")
         override suspend fun unlockWithPassword(password: CharArray): AppResult<Unit> = error("unused")
         override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = error("unused")
         override suspend fun unlockWithBiometric(): AppResult<Unit> = error("unused")
@@ -646,6 +657,10 @@ class AutofillUnlockViewModelTest {
         override suspend fun clearAll(): AppResult<Unit> = error("unused")
         override fun observeActiveKdfPreset(): Flow<com.onekey.core.security.KdfPreset> = error("unused")
         override fun observeActiveKdfCustomParams(): Flow<Pair<Int, Int>?> = error("unused")
+        override suspend fun activeKdfParams(): com.onekey.core.security.KdfParams = error("unused")
+        override suspend fun isSecretKeyEnabled(): Boolean = error("unused")
+        override fun observeIsSecretKeyEnabled(): Flow<Boolean> = error("unused")
+        override fun observeSecretKeyOptedOut(): Flow<Boolean> = error("unused")
     }
 
     /**

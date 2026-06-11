@@ -20,12 +20,17 @@ import com.onekey.core.security.LockReasonStore
 import com.onekey.core.security.PasswordAttemptTracker
 import com.onekey.core.security.PinAttemptTracker
 import com.onekey.core.security.PinAttemptTracker.Companion.lockoutDurationMs
+import com.onekey.core.security.SecretKeyHolder
+import com.onekey.feature.importexport.domain.EncryptedParseResult
+import com.onekey.feature.importexport.domain.VaultImporter
+import com.onekey.feature.secretkey.scan.canonicalSkToBytes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.SecureRandom
 import javax.inject.Inject
 
 @Immutable
@@ -35,6 +40,58 @@ sealed class AuthUiState {
     data object Unlocked : AuthUiState()
     data class Error(val message: String) : AuthUiState()
     data object SetupComplete : AuthUiState()
+
+    /**
+     * Restore-from-backup detected a V5 envelope whose FLAGS bit 0 is set
+     * (the backup was produced with the Secret Key feature enabled) and the
+     * caller did not supply an SK on this attempt. The Onboarding screen
+     * pivots to the SK scanner so the user can scan their Emergency Kit;
+     * the [pendingUri] / [pendingPassword] are preserved so the retry
+     * after scan does not require re-picking the file or retyping the
+     * password.
+     *
+     * Memory hygiene: [pendingPassword] is a defensive copy that the VM
+     * owns. The restore-with-SK retry consumes (zeros) the array; if the
+     * user cancels the SK scanner pivot, [clearPendingSecretKeyRestore]
+     * zeros the array and drops the state.
+     *
+     * [error] carries the human-readable message from the most recent
+     * failed retry attempt (wrong Secret Key, malformed input, corrupted
+     * backup), so the SK input UI can surface it in supportingText on
+     * the same pivot state without dropping the user back to a generic
+     * Error state and losing the preserved file / password context. Null
+     * on the initial pivot.
+     */
+    data class SecretKeyRequiredForRestore(
+        val pendingUri: Uri,
+        val pendingPassword: CharArray,
+        val backupCreatedAtMs: Long,
+        val backupVaultVersion: Int,
+        val error: String? = null,
+    ) : AuthUiState() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is SecretKeyRequiredForRestore) return false
+            // Reference equality on pendingPassword; deep equality would
+            // require iterating the zeroed CharArray and the only sensible
+            // identity check here is "the same in-flight retry context".
+            return pendingUri == other.pendingUri &&
+                pendingPassword === other.pendingPassword &&
+                backupCreatedAtMs == other.backupCreatedAtMs &&
+                backupVaultVersion == other.backupVaultVersion &&
+                error == other.error
+        }
+        override fun hashCode(): Int {
+            // Reference-based hash to match equals - matches the "same
+            // in-flight retry context" identity semantics above.
+            var r = pendingUri.hashCode()
+            r = 31 * r + System.identityHashCode(pendingPassword)
+            r = 31 * r + backupCreatedAtMs.hashCode()
+            r = 31 * r + backupVaultVersion
+            r = 31 * r + (error?.hashCode() ?: 0)
+            return r
+        }
+    }
 }
 
 sealed class AuthEvent {
@@ -70,6 +127,13 @@ class AuthViewModel @Inject constructor(
     private val passwordAttemptTracker: PasswordAttemptTracker,
     private val pinAttemptTracker: PinAttemptTracker,
     private val biometricAttemptTracker: BiometricAttemptTracker,
+    // SK collaborators for the onboarding ceremony + restore-from-backup-with-SK
+    // flows. The holder is populated after a successful SK-enabled setup so
+    // EmergencyKitSavePromptScreen can render the canonical printed form
+    // straight from the in-memory bytes.
+    private val secretKeyHolder: SecretKeyHolder,
+    private val importer: VaultImporter,
+    private val credentialRepository: com.onekey.core.domain.repository.CredentialRepository,
 ) : ViewModel() {
 
     fun notifyPickerLaunched() { autoLockManager.suppressForPicker() }
@@ -159,6 +223,180 @@ class AuthViewModel @Inject constructor(
             _state.value = when (result) {
                 is AppResult.Success -> AuthUiState.SetupComplete
                 is AppResult.Error -> AuthUiState.Error(result.message ?: "Setup failed")
+            }
+        }
+    }
+
+    // ── Secret Key onboarding ceremony ───────────────────────────────────────
+
+    /**
+     * Fresh 16 raw bytes generated on first reach of the SK ceremony step. The
+     * value is retained across recompositions / page transitions inside the
+     * onboarding flow so the canonical preview the user sees on the ceremony
+     * step is the same value that gets committed when they tap Save & Continue.
+     *
+     * Stored as a [ByteArray] so we can zero it deterministically on commit
+     * (the array is consumed by [setupWithSecretKey] or
+     * [setupSkippingSecretKey]). Process death drops this field; the
+     * onboarding screen handles that case by regenerating on next reach of
+     * the SK step.
+     */
+    private var pendingSecretKey: ByteArray? = null
+
+    private val _pendingSecretKeyCanonical = MutableStateFlow<String?>(null)
+    /**
+     * Canonical printed form of the [pendingSecretKey] for display on the
+     * SK ceremony step. Mirrors the format the Emergency Kit PDF uses
+     * (`A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX`). Null until
+     * [ensurePendingSecretKey] runs.
+     *
+     * The canonical String is a non-secret transit form (it carries the
+     * same entropy as the raw bytes, but only this VM holds the raw bytes
+     * themselves). Recomposition-safe to store in a StateFlow.
+     */
+    val pendingSecretKeyCanonical: StateFlow<String?> = _pendingSecretKeyCanonical.asStateFlow()
+
+    /**
+     * Idempotent: on first call generates a fresh 16-byte SK via SecureRandom
+     * and publishes its canonical printed form on [pendingSecretKeyCanonical].
+     * Subsequent calls are no-ops so a recomposition that re-runs the
+     * LaunchedEffect cannot rotate the SK out from under a user mid-ceremony.
+     *
+     * Called from the SK ceremony step's first composition. The actual setup
+     * commit happens later via [setupWithSecretKey] or [setupSkippingSecretKey].
+     */
+    fun ensurePendingSecretKey() {
+        if (pendingSecretKey != null) return
+        val raw = ByteArray(SecretKeyHolder.SECRET_KEY_RAW_LENGTH)
+        SecureRandom().nextBytes(raw)
+        pendingSecretKey = raw
+        // Canonical form is needed for display; the raw bytes themselves
+        // stay in pendingSecretKey for the eventual setup commit.
+        _pendingSecretKeyCanonical.value =
+            com.onekey.feature.secretkey.scan.formatCanonicalSkForPrint(
+                com.onekey.feature.secretkey.scan.bytesToCanonicalSk(raw),
+            )
+    }
+
+    /**
+     * Drops the pending SK without setting up the vault. Used by the
+     * onboarding back-stack when the user navigates back from the SK step
+     * (e.g. to revise their master password) - the SK is regenerated on
+     * the next reach of the ceremony step. Idempotent.
+     */
+    fun clearPendingSecretKey() {
+        pendingSecretKey?.fill(0)
+        pendingSecretKey = null
+        _pendingSecretKeyCanonical.value = null
+    }
+
+    /**
+     * Completes onboarding with the SK feature enabled. The [password] and
+     * the in-memory [pendingSecretKey] are both consumed - this method
+     * succeeds at most once per [ensurePendingSecretKey] cycle.
+     *
+     * On success:
+     *  - The vault is set up under the SK-aware verifier
+     *    (`K = Argon2id(MP || SK, salt, params)`).
+     *  - The SK is wrapped under a fresh Keystore alias and persisted.
+     *  - SP_SECRET_KEY_ENABLED is flipped to true.
+     *  - The in-memory SK is installed into [SecretKeyHolder] so the
+     *    Emergency Kit save prompt can render the printed form.
+     *  - [AuthUiState.SetupComplete] is emitted; the onboarding screen
+     *    navigates to the kit save flow.
+     *
+     * Failure modes:
+     *  - No pending SK (programmer error: caller forgot
+     *    [ensurePendingSecretKey]) - surfaces as
+     *    [AuthUiState.Error] with a generic message.
+     *  - Argon2id / Keystore / SP write failure - same as
+     *    [setupMasterPasswordWithSecretKey]; the SK bytes are zeroed in
+     *    the finally block regardless.
+     */
+    fun setupWithSecretKey(password: CharArray) {
+        viewModelScope.launch {
+            val sk = pendingSecretKey
+            if (sk == null) {
+                password.fill(' ')
+                _state.value = AuthUiState.Error(
+                    "Internal error: no Secret Key was generated. Please go back and try again.",
+                )
+                return@launch
+            }
+            _state.value = AuthUiState.Loading
+            try {
+                // Argon2id verifier + vault key wrap (~600-1600ms) - off Main
+                // so the Loading spinner paints. The repo zeros the password
+                // array in its own finally; we belt-and-suspenders here too.
+                val result = withContext(Dispatchers.Default) {
+                    if (password.size < 8) {
+                        AppResult.Error(IllegalArgumentException("Master password must be at least 8 characters"))
+                    } else {
+                        authRepository.setupMasterPasswordWithSecretKey(password, sk)
+                    }
+                }
+                _state.value = when (result) {
+                    is AppResult.Success -> {
+                        appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+                        // The repo installs the SK into the holder; we keep
+                        // our local pendingSecretKey ref alive so the kit
+                        // save prompt can re-read via holder.withBytes
+                        // without round-tripping through the VM.
+                        AuthUiState.SetupComplete
+                    }
+                    is AppResult.Error -> AuthUiState.Error(result.message ?: "Setup failed")
+                }
+                if (result is AppResult.Success) {
+                    // Drop our local SK reference now the holder owns the
+                    // canonical copy. The bytes are already zeroed inside
+                    // setupMasterPasswordWithSecretKey's defensive copies,
+                    // but a second fill costs nothing.
+                    sk.fill(0)
+                    pendingSecretKey = null
+                    _pendingSecretKeyCanonical.value = null
+                }
+            } finally {
+                password.fill(' ')
+            }
+        }
+    }
+
+    /**
+     * Completes onboarding WITHOUT the SK feature. Records the user's explicit
+     * opt-out (`sk_opted_out=true`) so the Settings screen surfaces the
+     * "you opted out" tile.
+     *
+     * Called from the OnboardingScreen after the user confirms the
+     * [SecretKeySkipOnboardingDialog]. The pending SK is zeroed and
+     * dropped before the underlying MP-only setup runs.
+     */
+    fun setupSkippingSecretKey(password: CharArray) {
+        viewModelScope.launch {
+            // Drop the generated SK BEFORE running setup. The opt-out flag
+            // is the only persistent state; the bytes themselves never
+            // reach the Keystore.
+            pendingSecretKey?.fill(0)
+            pendingSecretKey = null
+            _pendingSecretKeyCanonical.value = null
+
+            _state.value = AuthUiState.Loading
+            try {
+                val result = withContext(Dispatchers.Default) {
+                    if (password.size < 8) {
+                        AppResult.Error(IllegalArgumentException("Master password must be at least 8 characters"))
+                    } else {
+                        authRepository.setupMasterPasswordOptingOutOfSecretKey(password)
+                    }
+                }
+                if (result is AppResult.Success) {
+                    appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+                }
+                _state.value = when (result) {
+                    is AppResult.Success -> AuthUiState.SetupComplete
+                    is AppResult.Error -> AuthUiState.Error(result.message ?: "Setup failed")
+                }
+            } finally {
+                password.fill(' ')
             }
         }
     }
@@ -472,6 +710,11 @@ class AuthViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = AuthUiState.Loading
             val tmpFile = File(context.cacheDir, "restore.1key")
+            // Defensive copy of the password so we can preserve it for the
+            // SK-required pivot path WITHOUT relying on the caller's array
+            // surviving the zeroing inside setupFromBackup.
+            val passwordSnapshot = password.copyOf()
+            var pivotedToSkRequired = false
             try {
                 // Detect a missing or revoked URI explicitly so the user sees a clean message
                 // instead of a cryptic decryption failure further down the pipeline.
@@ -488,20 +731,259 @@ class AuthViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                when (val result = withContext(Dispatchers.Default) {
-                    setupFromBackup(password, tmpFile.absolutePath)
-                }) {
-                    is AppResult.Success -> {
-                        appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
-                        _state.value = AuthUiState.SetupComplete
+
+                // Peek the encrypted-parse result FIRST so we can pivot to
+                // SK-needed before any vault state is written. parseEncrypted
+                // distinguishes SecretKeyRequired from a plain Failure; the
+                // SK-required branch is a control-flow pivot, not an error.
+                val parseResult = withContext(Dispatchers.Default) {
+                    importer.parseEncrypted(tmpFile.absolutePath, password.copyOf(), secretKey = null)
+                }
+                when (parseResult) {
+                    is EncryptedParseResult.SecretKeyRequired -> {
+                        // Pivot to the SK scanner UI. Preserve the password and
+                        // uri so the retry after scan does not require the user
+                        // to re-type or re-pick. The tmpFile is deleted here -
+                        // the retry path re-reads the original URI which is
+                        // still valid for the SAF session.
+                        pivotedToSkRequired = true
+                        _state.value = AuthUiState.SecretKeyRequiredForRestore(
+                            pendingUri = uri,
+                            pendingPassword = passwordSnapshot,
+                            backupCreatedAtMs = parseResult.createdAtMs,
+                            backupVaultVersion = parseResult.vaultVersion,
+                        )
                     }
-                    is AppResult.Error ->
-                        _state.value = AuthUiState.Error(result.message ?: "Restore failed")
+                    is EncryptedParseResult.Failure -> {
+                        _state.value = AuthUiState.Error(parseResult.message)
+                    }
+                    is EncryptedParseResult.Success -> {
+                        // Decryption succeeded with no SK requirement (V4 or
+                        // V5-FLAGS=0 envelope). Set up the MP-only vault and
+                        // import the credentials. We fall back to the
+                        // SetupFromBackupUseCase path so the existing
+                        // password-snapshot-then-setup logic stays canonical;
+                        // the use case re-parses but the second parse is
+                        // cheap relative to the Argon2id cost of setup.
+                        when (val result = withContext(Dispatchers.Default) {
+                            setupFromBackup(password, tmpFile.absolutePath)
+                        }) {
+                            is AppResult.Success -> {
+                                appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+                                _state.value = AuthUiState.SetupComplete
+                            }
+                            is AppResult.Error ->
+                                _state.value = AuthUiState.Error(result.message ?: "Restore failed")
+                        }
+                    }
                 }
             } finally {
                 withContext(Dispatchers.IO) { tmpFile.delete() }
+                if (!pivotedToSkRequired) {
+                    // Zero both copies. On the SK-required pivot the snapshot
+                    // is the one preserved in the UI state for retry; zeroing
+                    // it here would break that flow. The retry path
+                    // (restoreFromEncryptedBackupWithSecretKey) is responsible
+                    // for zeroing the snapshot when it finishes.
+                    passwordSnapshot.fill(' ')
+                }
                 password.fill(' ')
             }
+        }
+    }
+
+    /**
+     * Restore-from-backup-with-SK retry. Called from the OnboardingScreen
+     * after the user scans their Emergency Kit QR (or types the SK by hand).
+     *
+     * Contract: [canonicalSk] is the bare 26-character Crockford base32
+     * canonical SK string (no dashes, no prefix). The VM decodes it into
+     * raw bytes, parses the backup file with the SK, and on success calls
+     * [AuthRepository.setupWithSecretKeyFromBackup] to commit the vault key,
+     * verifier, and wrapped-SK blob in a single edit().commit().
+     *
+     * The [pendingPassword] / [pendingUri] are pulled from the current
+     * [AuthUiState.SecretKeyRequiredForRestore]; this method refuses to run
+     * when the state is anything else.
+     *
+     * Memory hygiene:
+     *  - The decoded raw SK bytes are zeroed in finally.
+     *  - The pendingPassword from the state is zeroed in finally.
+     *  - On Malformed / WrongVersion / wrong-password we surface an error
+     *    and KEEP the SecretKeyRequiredForRestore state so the user can
+     *    retry the scan without re-uploading the file.
+     */
+    fun restoreFromEncryptedBackupWithSecretKey(
+        canonicalSk: String,
+        context: Context,
+    ) {
+        val current = _state.value
+        if (current !is AuthUiState.SecretKeyRequiredForRestore) {
+            return
+        }
+        val uri = current.pendingUri
+        // Work on a defensive copy so the finally's password.fill(' ') below
+        // does NOT poison the snapshot we re-emit on retry-failure. The
+        // prior snapshot (current.pendingPassword) is zeroed immediately so
+        // only ONE live copy of the master password exists at a time, in our
+        // local `password` variable. On retry-failure we publish a fresh
+        // copy via current.copy(pendingPassword = password.copyOf(), ...);
+        // on Success the local copy is the last to die in the finally.
+        val password = current.pendingPassword.copyOf()
+        current.pendingPassword.fill(' ')
+        viewModelScope.launch {
+            _state.value = AuthUiState.Loading
+            val tmpFile = File(context.cacheDir, "restore_sk.1key")
+            var skBytes: ByteArray? = null
+            try {
+                // Decode the canonical SK string into raw bytes. Failure here
+                // (bad QR scan, hand-typed typo) is a recoverable error - the
+                // file and password stay alive for the next retry.
+                val decoded = try {
+                    canonicalSkToBytes(canonicalSk)
+                } catch (e: IllegalArgumentException) {
+                    // Restore the pivot state with the malformed-SK message
+                    // attached so the SK input UI can render it in
+                    // supportingText. Allocate a fresh password copy so the
+                    // re-emitted state does not alias our local working
+                    // buffer (which the finally below zeros).
+                    _state.value = current.copy(
+                        pendingPassword = password.copyOf(),
+                        error = e.message ?: "The Secret Key value couldn't be read. Please scan again.",
+                    )
+                    return@launch
+                }
+                skBytes = decoded
+
+                val copied = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val input = context.contentResolver.openInputStream(uri) ?: return@runCatching false
+                        input.use { inp -> tmpFile.outputStream().use { os -> inp.copyTo(os) } }
+                        true
+                    }.getOrDefault(false)
+                }
+                if (!copied) {
+                    // The file went away between the original pick and this
+                    // retry. This is unrecoverable from the pivot state, so
+                    // drop to a plain Error - the user has to re-pick.
+                    _state.value = AuthUiState.Error(
+                        "Couldn't read the backup file. It may have been moved, deleted, or the app no longer has permission."
+                    )
+                    return@launch
+                }
+                // Parse the file with the SK. parseEncrypted's contract
+                // zeros its password argument; pass a copy so the original
+                // remains alive for setupWithSecretKeyFromBackup.
+                val parseResult = withContext(Dispatchers.Default) {
+                    importer.parseEncrypted(
+                        path = tmpFile.absolutePath,
+                        password = password.copyOf(),
+                        secretKey = decoded,
+                    )
+                }
+                when (parseResult) {
+                    is EncryptedParseResult.SecretKeyRequired -> {
+                        // SK didn't match the FLAGS bit - should not happen
+                        // here because we passed an SK; treat as a corrupt
+                        // file but keep the pivot alive so the user can
+                        // retry with a different Secret Key. Re-emit the
+                        // pivot with a fresh password copy so a subsequent
+                        // retry holds clean bytes.
+                        _state.value = current.copy(
+                            pendingPassword = password.copyOf(),
+                            error = "The backup is corrupted or the Secret Key was rejected.",
+                        )
+                    }
+                    is EncryptedParseResult.Failure -> {
+                        _state.value = current.copy(
+                            pendingPassword = password.copyOf(),
+                            error = parseResult.message,
+                        )
+                    }
+                    is EncryptedParseResult.Success -> {
+                        // Commit the SK-enabled vault state. Use a fresh
+                        // password copy because setupWithSecretKeyFromBackup
+                        // zeros its argument internally.
+                        val setupResult = withContext(Dispatchers.Default) {
+                            authRepository.setupWithSecretKeyFromBackup(
+                                password = password.copyOf(),
+                                secretKey = decoded,
+                            )
+                        }
+                        when (setupResult) {
+                            is AppResult.Success -> {
+                                // Import the parsed credentials into the
+                                // freshly-set-up vault.
+                                val credentials = parseResult.parsed.credentials
+                                if (credentials.isNotEmpty()) {
+                                    val importResult = withContext(Dispatchers.Default) {
+                                        credentialRepository.importCredentials(credentials)
+                                    }
+                                    if (importResult is AppResult.Error) {
+                                        _state.value = AuthUiState.Error(
+                                            importResult.message ?: "Restore failed",
+                                        )
+                                        return@launch
+                                    }
+                                }
+                                appPrefs.setLastMasterPasswordTimestamp(System.currentTimeMillis())
+                                _state.value = AuthUiState.SetupComplete
+                            }
+                            is AppResult.Error -> {
+                                _state.value = current.copy(
+                                    pendingPassword = password.copyOf(),
+                                    error = setupResult.message ?: "Restore failed",
+                                )
+                            }
+                        }
+                    }
+                }
+            } finally {
+                withContext(Dispatchers.IO) { tmpFile.delete() }
+                skBytes?.fill(0)
+                // Zero this method's local working copy. The pivot snapshot
+                // held by the UI state is either (a) a fresh copy emitted on
+                // retry-failure, or (b) zeroed at function entry on Success.
+                // Either way, this fill does NOT touch any other live copy.
+                password.fill(' ')
+            }
+        }
+    }
+
+    /**
+     * Cancels the SK-required-restore pivot and returns the UI to Idle. Zeros
+     * the preserved password CharArray so the next attempt requires a fresh
+     * type-in. Called when the user dismisses the SK scanner without scanning.
+     */
+    fun clearPendingSecretKeyRestore() {
+        val current = _state.value
+        if (current is AuthUiState.SecretKeyRequiredForRestore) {
+            current.pendingPassword.fill(' ')
+        }
+        _state.value = AuthUiState.Idle
+    }
+
+    /**
+     * Clears the `error` field on the current SK-required pivot state while
+     * keeping the file / password snapshot alive. Called when the user starts
+     * typing a fresh Secret Key value after a failed retry so the supportingText
+     * disappears as soon as they edit the input. No-op if the state is anything
+     * other than [AuthUiState.SecretKeyRequiredForRestore].
+     */
+    fun clearSkRestoreError() {
+        val current = _state.value as? AuthUiState.SecretKeyRequiredForRestore ?: return
+        if (current.error != null) {
+            _state.value = current.copy(error = null)
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pendingSecretKey?.fill(0)
+        pendingSecretKey = null
+        val current = _state.value
+        if (current is AuthUiState.SecretKeyRequiredForRestore) {
+            current.pendingPassword.fill(' ')
         }
     }
 }

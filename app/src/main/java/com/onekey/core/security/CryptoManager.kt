@@ -185,10 +185,59 @@ open class CryptoManager @Inject constructor() {
     }
 
     // Deletes both aliases. Called from resetVault() to ensure a full wipe.
+    //
+    // Also deletes the Secret Key wrapping alias so a reset never leaves the
+    // SK Keystore key orphaned (the matching SP entries are wiped by
+    // AuthRepositoryImpl.resetVault() clearing authPrefs). Without this the
+    // alias would survive a reset and the next vault setup would observe a
+    // dormant SK wrapping key from the previous vault, weakening the "drop
+    // old SK on rotate / reset" property locked by the design.
     fun deleteAllVaultKeys() {
         deleteKeystoreKey(KEYSTORE_ALIAS_V1)
         deleteKeystoreKey(KEYSTORE_ALIAS_V2)
+        // Secret Key aliases are versioned per the counter scheme
+        // (1key_secret_key_v1, _v2, _v3, ...). Enumerate every alias
+        // matching the prefix so a vault reset after one or more
+        // rotates leaves no dormant SK wrapping key behind. Without
+        // this, hardcoding _v1 would leak the _v2+ aliases on a reset
+        // by a user who had rotated their Secret Key.
+        runCatching {
+            val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+            keyStore.aliases().toList()
+                .filter { it.startsWith(KEYSTORE_ALIAS_SECRET_KEY_PREFIX) }
+                .forEach { runCatching { keyStore.deleteEntry(it) } }
+        }
     }
+
+    /**
+     * Returns the AndroidKeyStore-backed AES-256/GCM wrapping key for the
+     * Secret Key feature, creating it on first use. Mirrors the
+     * StrongBox-prefer-with-TEE-fallback semantics of the vault-key wrapping
+     * via the shared [getOrCreateKeystoreKey] helper.
+     *
+     * `unlockedDeviceRequired = true` ties the wrapping key to a user-unlocked
+     * device when the platform supports the flag (API 28+); on older devices
+     * the flag is silently skipped by [getOrCreateKeystoreKey] and the
+     * resulting key still benefits from hardware isolation where available.
+     *
+     * Exposed for the [SecretKeyKeystoreWrapper] which currently keeps an
+     * inlined copy of the keystore plumbing. New call sites SHOULD prefer
+     * this helper so any future StrongBox / fallback policy change lands
+     * in one place. The historical wrapper inlining will collapse onto
+     * this helper in a follow-up cleanup once the SK feature is shipped.
+     *
+     * **CAVEAT**: this helper hardcodes the v1 alias name. With the
+     * counter-alias scheme in the wrapper, the v1 alias is only the
+     * FIRST generation of SK; subsequent rotations live under v2, v3,
+     * etc. Do not call this method for resolving the current active SK
+     * alias - use [SecretKeyKeystoreWrapper.unwrap] (or wrap with the
+     * right target version) instead. Retained here only to keep the
+     * existing test for the StrongBox-Robolectric-absence failure mode
+     * compiling; safe to remove once that test is rewritten to use the
+     * wrapper directly.
+     */
+    fun getOrCreateSecretKeyWrappingKey(): SecretKey =
+        getOrCreateKeystoreKey(KEYSTORE_ALIAS_SECRET_KEY_V1, unlockedDeviceRequired = true)
 
     // Returns an existing Keystore key by alias, or null if it has not been created yet.
     open fun loadKeystoreKey(alias: String): SecretKey? {
@@ -198,7 +247,10 @@ open class CryptoManager @Inject constructor() {
 
     // ── PBKDF2 key derivation (backward-compat read path only) ───────────────
 
-    fun deriveKeyFromPassword(password: CharArray, salt: ByteArray): SecretKey {
+    // `open` so the Secret Key V5 decrypt test can subclass and prove the
+    // derivation was NOT called before the SK-required guard fires (challenger
+    // Issue 13). Production callers see the same behaviour as before.
+    open fun deriveKeyFromPassword(password: CharArray, salt: ByteArray): SecretKey {
         val factory = SecretKeyFactory.getInstance(PBKDF2_ALGORITHM)
         val spec = PBEKeySpec(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEY_LENGTH)
         val raw = factory.generateSecret(spec).encoded
@@ -228,7 +280,11 @@ open class CryptoManager @Inject constructor() {
     //    flow and by `unlockWithPassword` for the read path under a
     //    non-Standard verifier.
 
-    fun deriveKeyFromPasswordArgon2id(password: CharArray, salt: ByteArray): SecretKey =
+    // `open` so spy subclasses in tests (challenger Issue 13) can observe
+    // whether the derivation was called - the V5 SK-required guard MUST fire
+    // before any Argon2id work, and the spy is how we lock that down in
+    // BackupEncryptionV5Test.
+    open fun deriveKeyFromPasswordArgon2id(password: CharArray, salt: ByteArray): SecretKey =
         deriveKeyFromPasswordArgon2id(
             password = password,
             salt = salt,
@@ -240,7 +296,7 @@ open class CryptoManager @Inject constructor() {
             ),
         )
 
-    fun deriveKeyFromPasswordArgon2id(
+    open fun deriveKeyFromPasswordArgon2id(
         password: CharArray,
         salt: ByteArray,
         params: KdfParams,
@@ -261,6 +317,59 @@ open class CryptoManager @Inject constructor() {
             key
         } finally {
             passwordBytes.fill(0)
+        }
+    }
+
+    // ── Secret Key (SK) - mixed into the Argon2id input ──────────────────────
+    //
+    // K = Argon2id(MP_utf8_bytes || SK_raw16_bytes, salt, params)
+    //
+    // Byte concatenation (MP first, SK second) is the locked-design KDF input
+    // when the Secret Key feature is enabled. XOR was considered and rejected:
+    // concatenation lets Argon2id's avalanche absorb the SK across every
+    // memory pass, where XOR would only pre-combine 16 bytes at the front of
+    // the password input and offer the attacker an algebraic shortcut on
+    // short MPs (recover MP[0..15], XOR with known SK chars, etc.).
+    //
+    // Memory hygiene:
+    //  - The concatenated buffer (passwordBytes || secretKey) lives only on
+    //    the JVM heap for the duration of one Argon2id call.
+    //  - `passwordBytes` and `combined` are both zeroed in `finally`.
+    //  - The caller-owned `password: CharArray` is NOT zeroed here (consistent
+    //    with the rest of the `deriveKey*` family). The repository layer
+    //    above this owns the password lifecycle.
+    //  - `secretKey: ByteArray` is read-only here and not zeroed; the caller
+    //    typically passes it via `SecretKeyHolder.withBytes { sk -> ... }`
+    //    which zeros its own defensive copy on lambda exit.
+    open fun deriveKeyFromPasswordWithSecretKeyArgon2id(
+        password: CharArray,
+        secretKey: ByteArray,
+        salt: ByteArray,
+        params: KdfParams,
+    ): SecretKey {
+        require(secretKey.size == SecretKeyHolder.SECRET_KEY_RAW_LENGTH) {
+            "Secret Key must be ${SecretKeyHolder.SECRET_KEY_RAW_LENGTH} bytes, was ${secretKey.size}"
+        }
+        val passwordBytes = password.toUtf8ByteArray()
+        val combined = ByteArray(passwordBytes.size + secretKey.size)
+        System.arraycopy(passwordBytes, 0, combined, 0, passwordBytes.size)
+        System.arraycopy(secretKey, 0, combined, passwordBytes.size, secretKey.size)
+        return try {
+            val raw = Argon2Kt().hash(
+                mode = Argon2Mode.ARGON2_ID,
+                password = combined,
+                salt = salt,
+                tCostInIterations = params.tCost,
+                mCostInKibibyte = params.mCostKiB,
+                parallelism = params.parallelism,
+                hashLengthInBytes = params.hashLengthBytes,
+            ).rawHashAsByteArray()
+            val key = SecretKeySpec(raw, "AES")
+            raw.fill(0)
+            key
+        } finally {
+            passwordBytes.fill(0)
+            combined.fill(0)
         }
     }
 
@@ -342,13 +451,37 @@ open class CryptoManager @Inject constructor() {
     // (AuthRepositoryImpl.unlockWithPassword) and crosses no boundaries. See
     // memory note `project_auto_backup.md` (2026-06-09 reopening) for rationale.
 
-    fun deriveBackupKey(password: CharArray): BackupKeyMaterial {
+    /**
+     * Derives a one-shot backup key from the master password plus, when
+     * non-null, the wrapped Secret Key. The SK is concatenated AFTER the
+     * UTF-8-encoded password bytes (the same input shape used by
+     * [deriveKeyFromPasswordWithSecretKeyArgon2id]) so a sync backup
+     * written under [secretKey] != null can only be decrypted by a
+     * restore that supplies both MP and the same SK.
+     *
+     * **Consumes [password]:** the CharArray is zeroed regardless of branch.
+     * **Does NOT consume [secretKey]:** ownership remains with the caller
+     * (typically the unlock path that read it from the Keystore wrapper).
+     * The caller MUST zero its own copy in a finally block.
+     */
+    fun deriveBackupKey(
+        password: CharArray,
+        secretKey: ByteArray? = null,
+    ): BackupKeyMaterial {
         val salt = generateSalt(SALT_LEN_BACKUP)
         val passwordBytes = password.toUtf8ByteArray()
+        val inputBytes: ByteArray = if (secretKey != null) {
+            val combined = ByteArray(passwordBytes.size + secretKey.size)
+            System.arraycopy(passwordBytes, 0, combined, 0, passwordBytes.size)
+            System.arraycopy(secretKey, 0, combined, passwordBytes.size, secretKey.size)
+            combined
+        } else {
+            passwordBytes
+        }
         return try {
             val rawKey = Argon2Kt().hash(
                 mode = Argon2Mode.ARGON2_ID,
-                password = passwordBytes,
+                password = inputBytes,
                 salt = salt,
                 tCostInIterations = ARGON2_T_COST,
                 mCostInKibibyte = ARGON2_M_COST,
@@ -357,6 +490,7 @@ open class CryptoManager @Inject constructor() {
             ).rawHashAsByteArray()
             BackupKeyMaterial(salt = salt, key = rawKey)
         } finally {
+            if (inputBytes !== passwordBytes) inputBytes.fill(0)
             passwordBytes.fill(0)
             password.fill(' ')
         }

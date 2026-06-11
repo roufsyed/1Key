@@ -175,6 +175,14 @@ dependencies {
     // resolves to the markdown-jvm artifact for Android. Apache-2.0.
     implementation(libs.jetbrains.markdown)
 
+    // ZXing core - pure-Java QR encoder consumed solely by
+    // EmergencyKitPdfGenerator to draw the Secret Key QR on the printed kit.
+    // We deliberately add ONLY the core artifact: the companion
+    // zxing-android-embedded library brings in a CameraX-style scanner UI we
+    // do not need (decoding stays on ML Kit). Apache-2.0; tree-shaken down to
+    // QRCodeWriter + transitive encoder helpers in release builds.
+    implementation(libs.zxing.core)
+
     // Testing - JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).

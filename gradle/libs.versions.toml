@@ -27,6 +27,7 @@ argon2kt = "1.6.0"
 securityCrypto = "1.1.0"
 documentfile = "1.0.1"
 jetbrainsMarkdown = "0.7.3"
+zxingCore = "3.5.3"
 # Android instrumented testing - Room MigrationTestHelper + the AndroidX
 # test orchestrator harness. Versions track the Room artifact (room-testing
 # is part of the Room project) and the latest stable AndroidX test runner /
@@ -100,6 +101,13 @@ security-crypto = { group = "androidx.security", name = "security-crypto", versi
 # Markdown parser - JetBrains pure-Kotlin CommonMark + GFM. KMP umbrella coordinate
 # resolves to markdown-jvm-0.7.3 on Android. Apache-2.0.
 jetbrains-markdown = { group = "org.jetbrains", name = "markdown", version.ref = "jetbrainsMarkdown" }
+# ZXing core - pure-Java QR encoder. Used ONLY by EmergencyKitPdfGenerator to
+# encode the Secret Key into a QR bitmap on Page 1 of the printed kit. The
+# DECODE path (2FA scanner + SK kit scanner) continues to use ML Kit's
+# BarcodeScanning - no change there. Apache-2.0, ~600 KiB jar, no Android
+# dependencies; R8 tree-shakes everything except QRCodeWriter + transitive
+# encoder support classes in release builds.
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 # Room MigrationTestHelper - opens a fixture DB at any prior schema and replays
 # a real migration against it. Required for the v14->v15 instrumented test.
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }

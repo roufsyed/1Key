@@ -74,3 +74,28 @@ data class ConflictPair(
 /** What to do with conflicts: merge into existing (existing wins), or add as a separate item. */
 enum class ConflictResolution { MERGE, ADD_AS_SEPARATE }
 
+/**
+ * Result of a `parseEncrypted` call. Three terminal states:
+ *  - [Success] - the file decrypted and parsed; carries the [ParsedImport].
+ *  - [Failure] - the file is corrupt, the password is wrong, the format is
+ *    unrecognised, or any other error surfaced with a user-facing message.
+ *  - [SecretKeyRequired] - the file is a V5 envelope whose FLAGS bit 0 is
+ *    set but the caller passed no SK. The ViewModel pivots to the SK
+ *    scanner UI, retrieves the user's SK, and calls `parseEncrypted` again
+ *    with the [BackupEncryption.SecretKeyRequiredException.createdAtMs] /
+ *    [BackupEncryption.SecretKeyRequiredException.vaultVersion] available
+ *    for display ("This backup was taken on Jun 10, vault v42, scan your
+ *    Secret Key to restore").
+ *
+ * Using a sealed interface rather than [com.onekey.core.domain.model.AppResult]
+ * is deliberate: the SK-required pivot is not a failure but a control-flow
+ * branch the UI is expected to handle. Squeezing it into AppResult.Error
+ * would force string-matching in the UI layer and would prevent the
+ * timestamp / vault-version metadata from flowing through.
+ */
+sealed interface EncryptedParseResult {
+    data class Success(val parsed: ParsedImport) : EncryptedParseResult
+    data class Failure(val throwable: Throwable, val message: String) : EncryptedParseResult
+    data class SecretKeyRequired(val createdAtMs: Long, val vaultVersion: Int) : EncryptedParseResult
+}
+

@@ -40,13 +40,16 @@ import com.onekey.feature.auth.presentation.screen.OnboardingScreen
 import com.onekey.feature.auth.presentation.screen.SetupPinScreen
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.onekey.feature.importexport.presentation.screen.BackupScreen
+import com.onekey.feature.settings.presentation.screen.EmergencyKitSavePromptScreen
 import com.onekey.feature.settings.presentation.screen.ManageCategoriesScreen
+import com.onekey.feature.settings.presentation.screen.SecretKeyEnableExplainerScreen
 import com.onekey.feature.settings.presentation.screen.SettingsFaqScreen
 import com.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
 import com.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScreen
 import com.onekey.feature.settings.presentation.screen.SettingsAutofillScreen
 import com.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.onekey.feature.settings.presentation.screen.SettingsKdfStrengthScreen
+import com.onekey.feature.settings.presentation.screen.SettingsSecretKeyScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSecurityScreen
 import com.onekey.feature.settings.presentation.screen.SettingsSyncScreen
 import com.onekey.feature.twofa.presentation.screen.QrScannerScreen
@@ -58,6 +61,19 @@ import com.onekey.feature.vault.presentation.screen.TaggedCredentialListScreen
 import com.onekey.feature.vault.presentation.screen.VaultScreen
 import com.onekey.feature.vault.presentation.viewmodel.DeleteKind
 import kotlinx.coroutines.launch
+
+/**
+ * SavedStateHandle key used by [Screen.SecretKeyImportScanner] to return
+ * the decoded Secret Key canonical-form string to the previous back-stack
+ * entry. The Onboarding screen (which hosts the restore-from-backup
+ * dialog) reads this key after the scanner pops to populate its SK input.
+ *
+ * Value type: String (the 26-char canonical form WITHOUT the "A3-"
+ * prefix, as produced by [com.onekey.feature.secretkey.scan.parseEmergencyKitQr]
+ * Ok branch). Null / absent means the user cancelled or scanned a
+ * non-emergency-kit QR.
+ */
+const val SK_IMPORT_SCAN_RESULT_KEY = "sk_import_scan_result"
 
 sealed class Screen(val route: String) {
     data object Onboarding : Screen("onboarding")
@@ -76,11 +92,23 @@ sealed class Screen(val route: String) {
         fun createRoute(tagName: String) = "tagged/${Uri.encode(tagName)}"
     }
     data object QrScanner : Screen("qr_scanner")
+    /**
+     * Dedicated QR scanner for the Secret-Key-required restore flow. Distinct
+     * from [QrScanner] (which is 2FA-only and saves OTP credentials directly
+     * to the database). This route returns the decoded payload to the
+     * previous back-stack entry via SavedStateHandle key
+     * [SK_IMPORT_SCAN_RESULT_KEY] so the onboarding restore dialog can
+     * populate its SK input field.
+     */
+    data object SecretKeyImportScanner : Screen("secret_key_import_scanner")
     data object Backup : Screen("backup")
     data object RecycleBin : Screen("recycle_bin")
     data object SettingsGeneral : Screen("settings/general")
     data object SettingsSecurity : Screen("settings/security")
     data object SettingsKdfStrength : Screen("settings/security/kdf_strength")
+    data object SettingsSecretKey : Screen("settings/security/secret_key")
+    data object SettingsSecretKeyEnableExplainer : Screen("settings/security/secret_key/explainer")
+    data object SettingsSecretKeyEmergencyKit : Screen("settings/security/secret_key/emergency_kit")
     data object SettingsAutofill : Screen("settings/autofill")
     data object SettingsSync : Screen("settings/sync")
     data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
@@ -188,15 +216,27 @@ fun OneKeyNavGraph(
                 popExitTransition = { fadeOut(tween(NAV_TRANSITION_MS)) },
             ) {
 
-                composable(Screen.Onboarding.route) {
+                composable(Screen.Onboarding.route) { backStackEntry ->
                     val vm = hiltViewModel<AuthViewModel>()
+                    // SavedStateHandle landing pad for the SK scanner's
+                    // result. When the scanner pops it writes the
+                    // canonical SK string under SK_IMPORT_SCAN_RESULT_KEY;
+                    // the onboarding screen reads it on the next
+                    // composition and forwards to the restore dialog.
+                    val scannedSk: String? = backStackEntry
+                        .savedStateHandle
+                        .remove(SK_IMPORT_SCAN_RESULT_KEY)
                     OnboardingScreen(
                         viewModel = vm,
                         onSetupComplete = {
                             navController.navigate(Screen.Vault.route) {
                                 popUpTo(Screen.Onboarding.route) { inclusive = true }
                             }
-                        }
+                        },
+                        onScanEmergencyKitQr = {
+                            navController.navigate(Screen.SecretKeyImportScanner.route)
+                        },
+                        scannedSecretKey = scannedSk,
                     )
                 }
 
@@ -316,6 +356,28 @@ fun OneKeyNavGraph(
                     )
                 }
 
+                composable(Screen.SecretKeyImportScanner.route) {
+                    // On a successful scan, write the canonical SK
+                    // string to the PREVIOUS back-stack entry's
+                    // SavedStateHandle under SK_IMPORT_SCAN_RESULT_KEY
+                    // and pop. The onboarding screen (which owns the
+                    // restore-from-backup dialog) observes that key
+                    // and populates its SK input field. Using
+                    // SavedStateHandle survives configuration changes
+                    // and rotates - the field will still be filled
+                    // even if the user rotates the device on the way
+                    // back from the scanner.
+                    com.onekey.feature.secretkey.scan.SecretKeyImportScannerScreen(
+                        onScanned = { canonicalSk ->
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(SK_IMPORT_SCAN_RESULT_KEY, canonicalSk)
+                            navController.popBackStack()
+                        },
+                        onCancel = { navController.popBackStack() },
+                    )
+                }
+
                 composable(Screen.Settings.route) {
                     SettingsScreen(
                         onBack = { navController.popBackStack() },
@@ -352,11 +414,76 @@ fun OneKeyNavGraph(
                         onEncryptionStrength = {
                             navController.navigate(Screen.SettingsKdfStrength.route)
                         },
+                        onSecretKey = {
+                            navController.navigate(Screen.SettingsSecretKey.route)
+                        },
                     )
                 }
 
                 composable(Screen.SettingsKdfStrength.route) {
                     SettingsKdfStrengthScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(Screen.SettingsSecretKey.route) {
+                    SettingsSecretKeyScreen(
+                        onBack = { navController.popBackStack() },
+                        onNavigateToEnableExplainer = {
+                            navController.navigate(Screen.SettingsSecretKeyEnableExplainer.route)
+                        },
+                        onNavigateToSaveKitPrompt = {
+                            navController.navigate(Screen.SettingsSecretKeyEmergencyKit.route)
+                        },
+                    )
+                }
+
+                composable(Screen.SettingsSecretKeyEnableExplainer.route) {
+                    // The explainer reuses the SK Settings VM scoped to the
+                    // PARENT (SettingsSecretKey) back-stack entry, so the
+                    // markEnableRequested call lands on the same VM instance
+                    // SettingsSecretKeyScreen will observe after the pop.
+                    val parentEntry = remember(it) {
+                        navController.getBackStackEntry(Screen.SettingsSecretKey.route)
+                    }
+                    val skSettingsVm: com.onekey.feature.settings.presentation.viewmodel
+                        .SecretKeySettingsViewModel = hiltViewModel(parentEntry)
+                    SecretKeyEnableExplainerScreen(
+                        // Continue signals the parent screen (via the shared
+                        // VM) to mount the master-password reauth dialog.
+                        // Without this signal-then-pop pair, popping the
+                        // explainer would return the user to a static
+                        // SettingsSecretKeyScreen with no reauth surface,
+                        // and the user could never actually enable SK -
+                        // see blocker B4.
+                        onContinue = {
+                            skSettingsVm.markEnableRequested()
+                            navController.popBackStack()
+                        },
+                        onCancel = { navController.popBackStack() },
+                    )
+                }
+
+                composable(Screen.SettingsSecretKeyEmergencyKit.route) {
+                    // Share the SK Settings VM scoped to the PARENT
+                    // (SettingsSecretKey) back-stack entry. Without this
+                    // shared scope, hiltViewModel() defaults to the
+                    // kit-save back-stack entry and we get a SEPARATE
+                    // VM instance from the one SettingsSecretKeyScreen
+                    // is observing. After a successful save the kit-
+                    // save VM's refreshState() would update its own
+                    // _state, but the parent's _state would stay stale
+                    // until something else forced a re-read - leaving
+                    // the "Save a fresh Emergency Kit" banner stuck on
+                    // the parent screen after a successful save.
+                    val parentEntry = remember(it) {
+                        navController.getBackStackEntry(Screen.SettingsSecretKey.route)
+                    }
+                    val skSettingsVm: com.onekey.feature.settings.presentation.viewmodel
+                        .SecretKeySettingsViewModel = hiltViewModel(parentEntry)
+                    EmergencyKitSavePromptScreen(
+                        onDone = { navController.popBackStack() },
+                        onBack = { navController.popBackStack() },
+                        vm = skSettingsVm,
+                    )
                 }
 
                 composable(Screen.SettingsAutofill.route) {
@@ -383,7 +510,16 @@ fun OneKeyNavGraph(
                     RecycleBinScreen(onBack = { navController.popBackStack() })
                 }
 
-                composable(Screen.Backup.route) {
+                composable(Screen.Backup.route) { backStackEntry ->
+                    // Same SavedStateHandle pattern as the Onboarding host:
+                    // when the SK scanner pops it leaves the canonical SK
+                    // string under SK_IMPORT_SCAN_RESULT_KEY. BackupScreen
+                    // reads + clears the value, then forwards it into
+                    // ImportSecretKeyDialog's preFilledFromScan parameter
+                    // so the field auto-fills on return from the scanner.
+                    val scannedSk: String? = backStackEntry
+                        .savedStateHandle
+                        .remove(SK_IMPORT_SCAN_RESULT_KEY)
                     BackupScreen(
                         onBack = { navController.popBackStack() },
                         onNavigateToVault = {
@@ -392,6 +528,10 @@ fun OneKeyNavGraph(
                                 launchSingleTop = true
                             }
                         },
+                        onScanEmergencyKitQr = {
+                            navController.navigate(Screen.SecretKeyImportScanner.route)
+                        },
+                        scannedSecretKey = scannedSk,
                     )
                 }
 

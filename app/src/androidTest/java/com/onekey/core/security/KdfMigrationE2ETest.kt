@@ -52,6 +52,7 @@ class KdfMigrationE2ETest {
     private lateinit var authPrefs: SharedPreferences
     private lateinit var crypto: CryptoManager
     private lateinit var detector: DeviceCapacityDetector
+    private lateinit var skWrapper: SecretKeyKeystoreWrapper
     private lateinit var migrator: KdfMigrator
 
     @Before fun setUp() {
@@ -84,7 +85,12 @@ class KdfMigrationE2ETest {
                     .toSet(),
             )
         }
-        migrator = KdfMigrator(authPrefs, crypto, detector)
+        // SK wrapper is the 4th constructor arg added when the Secret Key
+        // feature shipped. Required for the migrator's runSecretKeyTransition
+        // path even though this test only exercises the KDF-preset migrateTo
+        // path; the constructor will reject a null.
+        skWrapper = SecretKeyKeystoreWrapper(authPrefs)
+        migrator = KdfMigrator(authPrefs, crypto, detector, skWrapper)
     }
 
     @After fun tearDown() {

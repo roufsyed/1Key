@@ -4,6 +4,7 @@ import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.security.CryptoManager
+import com.onekey.core.security.SecretKeyHolder
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -43,7 +44,11 @@ class BackupRoundTripMarkdownTest {
     @get:Rule val tmp = TemporaryFolder()
 
     private val crypto = CryptoManager()
-    private val exporter = VaultExporterImpl(crypto)
+    // The exporter pulls in SecretKeyHolder for the encrypted V5 path;
+    // this test only exercises plaintext export, so a fresh holder is
+    // sufficient. The KDF params and SK-enabled flag are passed via
+    // EncryptedExportContext at call time - no auth repo dependency here.
+    private val exporter = VaultExporterImpl(crypto, SecretKeyHolder())
     private val importer = VaultImporterImpl(crypto)
 
     @Test fun csv_round_trip_of_markdown_notes_is_byte_identical_after_first_pass() = runBlocking {

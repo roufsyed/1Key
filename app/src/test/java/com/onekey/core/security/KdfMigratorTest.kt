@@ -57,6 +57,7 @@ class KdfMigratorTest {
     private lateinit var authPrefs: SharedPreferences
     private lateinit var crypto: CryptoManager
     private lateinit var detector: FakeDeviceCapacityDetector
+    private lateinit var secretKeyWrapper: SecretKeyKeystoreWrapper
 
     @Before fun setUp() {
         val context: Context = RuntimeEnvironment.getApplication()
@@ -67,6 +68,14 @@ class KdfMigratorTest {
         authPrefs = context.getSharedPreferences("auth_test_${System.nanoTime()}", Context.MODE_PRIVATE)
         authPrefs.edit().clear().commit()
         crypto = CryptoManager()
+        // The migrator now takes a SecretKeyKeystoreWrapper for SK transitions
+        // (Stage 3). The wrapper uses the same in-memory SharedPreferences and
+        // does not eagerly touch the Keystore in its constructor, so it is
+        // safe to instantiate under Robolectric. Tests that exercise the
+        // KDF-only paths don't trigger any wrapper Keystore calls; the SK
+        // transition tests live in a separate test file that uses a stub
+        // wrapper to avoid Robolectric's AndroidKeyStore absence.
+        secretKeyWrapper = SecretKeyKeystoreWrapper(authPrefs)
         detector = FakeDeviceCapacityDetector(
             snapshot = CapacitySnapshot(
                 totalRamMb = 4_096L,
@@ -92,7 +101,7 @@ class KdfMigratorTest {
     // ── resumeIfPending: no-op when no pending state exists ────────────────
 
     @Test fun resumeIfPending_returns_false_when_no_pending_state() = runBlocking {
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
 
         val rolledBack = migrator.resumeIfPending()
 
@@ -112,7 +121,7 @@ class KdfMigratorTest {
             putInt(SP_KDF_VERSION, KDF_V3_STANDARD)
         }.commit()
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         migrator.resumeIfPending()
 
         assertEquals("salt_b64:ct_b64:iv_b64", authPrefs.getString(SP_PASSWORD_VERIFIER, null))
@@ -134,7 +143,7 @@ class KdfMigratorTest {
             startedAtMs = System.currentTimeMillis(),
         )
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         val rolledBack = migrator.resumeIfPending()
 
         assertTrue(
@@ -166,7 +175,7 @@ class KdfMigratorTest {
             startedAtMs = System.currentTimeMillis(),
         )
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         migrator.resumeIfPending()
 
         assertEquals(
@@ -196,7 +205,7 @@ class KdfMigratorTest {
             pendingCustomT = 5,
         )
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         migrator.resumeIfPending()
 
         assertEquals(0, authPrefs.getInt(SP_KDF_PENDING_CUSTOM_M, 0))
@@ -216,7 +225,7 @@ class KdfMigratorTest {
             startedAtMs = twoDaysAgo,
         )
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         val rolledBack = migrator.resumeIfPending()
 
         assertTrue("Stale pending state must still trigger rollback", rolledBack)
@@ -236,7 +245,7 @@ class KdfMigratorTest {
             startedAtMs = anHourFromNow,
         )
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         val rolledBack = migrator.resumeIfPending()
 
         assertTrue(rolledBack)
@@ -255,7 +264,7 @@ class KdfMigratorTest {
             startedAtMs = System.currentTimeMillis(),
         )
 
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         val firstRollback = migrator.resumeIfPending()
         val secondRollback = migrator.resumeIfPending()
 
@@ -274,7 +283,7 @@ class KdfMigratorTest {
         // The error path returns Error AND leaves everything on disk
         // untouched.
         seedActiveVerifier()
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
 
         val result = migrator.migrateTo(
             newParams = KdfPreset.MAXIMUM.toKdfParams(),
@@ -313,7 +322,7 @@ class KdfMigratorTest {
         // start with NO active verifier - the migrator's verify step will
         // fail with "No verifier stored", proving the gate let CUSTOM
         // through past the enabled-set check.
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
 
         val result = migrator.migrateTo(
             newParams = KdfParams(mCostKiB = 96 * 1024, tCost = 5, parallelism = 1),
@@ -340,7 +349,7 @@ class KdfMigratorTest {
         // disabled-preset gate (no Argon2id needed) and confirm the array
         // is all-spaces after.
         seedActiveVerifier()
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
         val password = "secretmasterpassword".toCharArray()
 
         migrator.migrateTo(
@@ -361,7 +370,7 @@ class KdfMigratorTest {
         // It must be a sentence (not an exception stack tag), and it must
         // identify the actionable problem. Pin the string shape.
         seedActiveVerifier()
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
 
         val result = migrator.migrateTo(
             newParams = KdfPreset.MAXIMUM.toKdfParams(),
@@ -383,7 +392,7 @@ class KdfMigratorTest {
         // verify step throws "No verifier stored" which the migrator
         // surfaces as Error. Confirms the early-bail path doesn't write
         // any pending state.
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
 
         val result = migrator.migrateTo(
             newParams = KdfPreset.HARDENED.toKdfParams(),
@@ -405,7 +414,7 @@ class KdfMigratorTest {
             putString(SP_PASSWORD_VERIFIER, "only_one_part")
             putInt(SP_KDF_VERSION, KDF_V3_STANDARD)
         }.commit()
-        val migrator = KdfMigrator(authPrefs, crypto, detector)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
 
         val result = migrator.migrateTo(
             newParams = KdfPreset.HARDENED.toKdfParams(),
@@ -507,6 +516,273 @@ class KdfMigratorTest {
         assertTrue(KDF_LEGACY_ARGON2ID < 30)
     }
 
+    // ── Secret Key transition: rejected paths (no Argon2id required) ──────
+    //
+    // Argon2id is unavailable on host JVMs (argon2kt's .so targets Android
+    // ABIs only - see the test-scope rationale comment at the top of this
+    // file). The transition paths that fail BEFORE any Argon2id derivation
+    // are unit-testable here; the happy-path coverage lives in androidTest.
+
+    @Test fun runSecretKeyTransition_zeros_the_master_password_array() = runBlocking {
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+        val password = "anothermasterpassword".toCharArray()
+
+        // No active verifier -> verifyAgainstActive returns Error -> the
+        // try/finally still zeros the password before returning.
+        migrator.runSecretKeyTransition(
+            masterPassword = password,
+            transition = SecretKeyTransition.Enable(newSk = ByteArray(16) { (it + 1).toByte() }),
+        )
+
+        assertTrue(
+            "Password CharArray must be zeroed (filled with ' ') after runSecretKeyTransition",
+            password.all { it == ' ' },
+        )
+    }
+
+    @Test fun runSecretKeyTransition_Enable_refuses_when_SK_is_already_enabled() = runBlocking {
+        // Defence in depth: the use cases SHOULD validate the precondition
+        // before calling the migrator, but the migrator refuses the
+        // contradictory transition without doing any crypto work either way.
+        seedActiveVerifier()
+        authPrefs.edit().putBoolean(SP_SECRET_KEY_ENABLED, true).commit()
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val result = migrator.runSecretKeyTransition(
+            masterPassword = "x".toCharArray(),
+            transition = SecretKeyTransition.Enable(newSk = ByteArray(16)),
+        )
+
+        assertTrue(result is AppResult.Error)
+        val error = result as AppResult.Error
+        assertNotNull(error.message)
+        assertTrue(
+            "Enable must surface the 'already enabled' message: ${error.message}",
+            error.message!!.contains("already enabled"),
+        )
+        // No pending state should have leaked through the rejection path.
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+    }
+
+    @Test fun runSecretKeyTransition_Disable_refuses_when_SK_is_already_disabled() = runBlocking {
+        seedActiveVerifier()
+        // SP_SECRET_KEY_ENABLED defaults to false on a fresh test SP.
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val result = migrator.runSecretKeyTransition(
+            masterPassword = "x".toCharArray(),
+            transition = SecretKeyTransition.Disable,
+        )
+
+        assertTrue(result is AppResult.Error)
+        val error = result as AppResult.Error
+        assertNotNull(error.message)
+        assertTrue(
+            "Disable must surface the 'already disabled' message: ${error.message}",
+            error.message!!.contains("already disabled"),
+        )
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+    }
+
+    @Test fun runSecretKeyTransition_Rotate_refuses_when_SK_is_not_enabled() = runBlocking {
+        seedActiveVerifier()
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val result = migrator.runSecretKeyTransition(
+            masterPassword = "x".toCharArray(),
+            transition = SecretKeyTransition.Rotate(newSk = ByteArray(16)),
+        )
+
+        assertTrue(result is AppResult.Error)
+        val error = result as AppResult.Error
+        assertNotNull(error.message)
+        assertTrue(
+            "Rotate must surface the 'must be enabled' message: ${error.message}",
+            error.message!!.contains("must be enabled"),
+        )
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+    }
+
+    @Test fun runSecretKeyTransition_Enable_rejects_wrong_SK_length() = runBlocking {
+        // The migrator checks length AFTER the precondition check (which
+        // requires SP_SECRET_KEY_ENABLED to be false here) but BEFORE any
+        // verifyAgainstActive call. The exception flows out via the catch-
+        // all in the try/finally and is surfaced as Error.
+        seedActiveVerifier()
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val result = migrator.runSecretKeyTransition(
+            masterPassword = "x".toCharArray(),
+            transition = SecretKeyTransition.Enable(newSk = ByteArray(15)),
+        )
+
+        assertTrue(result is AppResult.Error)
+        // Length-rejected path must not have written any pending state.
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+        assertEquals(0L, authPrefs.getLong(SP_SK_PENDING_STARTED_AT, 0L))
+    }
+
+    @Test fun runSecretKeyTransition_returns_error_when_no_verifier_is_stored() = runBlocking {
+        // verifyAgainstActive's "No verifier stored" branch fires when
+        // SP_PASSWORD_VERIFIER is absent. The migrator surfaces Error and
+        // does NOT write any pending SK state.
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val result = migrator.runSecretKeyTransition(
+            masterPassword = "x".toCharArray(),
+            transition = SecretKeyTransition.Enable(newSk = ByteArray(16) { 0xAA.toByte() }),
+        )
+
+        assertTrue(result is AppResult.Error)
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+        assertNull(authPrefs.getString(SP_SK_PENDING_VERIFIER, null))
+    }
+
+    // ── resumeIfPending: SK pending state ─────────────────────────────────
+
+    @Test fun resumeIfPending_returns_true_when_only_SK_pending_state_exists() = runBlocking {
+        // Pending KDF migration absent; pending SK transition present.
+        // Recovery must report a non-trivial sweep so any UI snackbar can
+        // surface the rollback to the user.
+        seedSkPendingState(transition = 0, startedAtMs = System.currentTimeMillis())
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val rolledBack = migrator.resumeIfPending()
+
+        assertTrue(
+            "resumeIfPending must return true when SK pending state is present",
+            rolledBack,
+        )
+    }
+
+    @Test fun resumeIfPending_clears_all_SK_pending_keys_when_state_exists() = runBlocking {
+        seedSkPendingState(transition = 2, startedAtMs = System.currentTimeMillis())
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        migrator.resumeIfPending()
+
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+        assertNull(authPrefs.getString(SP_SK_PENDING_VERIFIER, null))
+        assertNull(authPrefs.getString(SP_SK_PENDING_DIGEST, null))
+        assertEquals(0L, authPrefs.getLong(SP_SK_PENDING_STARTED_AT, 0L))
+        // Pending-wrapped key (owned by the wrapper) must also be wiped.
+        assertNull(authPrefs.getString(SP_SK_PENDING_WRAPPED, null))
+    }
+
+    @Test fun resumeIfPending_preserves_active_SK_blob_and_enabled_flag_when_only_pending_is_rolled_back() = runBlocking {
+        // The fundamental safety property for SK recovery: rollback never
+        // touches active state. We seed a pretend-active SK blob + enabled
+        // flag and confirm recovery leaves them byte-identical.
+        authPrefs.edit().apply {
+            putString(SP_SECRET_KEY_WRAPPED, "active-wrapped-blob")
+            putBoolean(SP_SECRET_KEY_ENABLED, true)
+            putString(SP_PASSWORD_VERIFIER, "active-verifier")
+        }.commit()
+        seedSkPendingState(transition = 2, startedAtMs = System.currentTimeMillis())
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        migrator.resumeIfPending()
+
+        assertEquals(
+            "Active SK blob must survive SK rollback",
+            "active-wrapped-blob",
+            authPrefs.getString(SP_SECRET_KEY_WRAPPED, null),
+        )
+        assertTrue(
+            "Active SK enabled flag must survive SK rollback",
+            authPrefs.getBoolean(SP_SECRET_KEY_ENABLED, false),
+        )
+        assertEquals(
+            "Active verifier must survive SK rollback",
+            "active-verifier",
+            authPrefs.getString(SP_PASSWORD_VERIFIER, null),
+        )
+    }
+
+    @Test fun resumeIfPending_handles_stale_SK_pending_state_without_crashing() = runBlocking {
+        val twoDaysAgo = System.currentTimeMillis() - (48L * 60L * 60L * 1000L)
+        seedSkPendingState(transition = 1, startedAtMs = twoDaysAgo)
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val rolledBack = migrator.resumeIfPending()
+
+        assertTrue("Stale SK pending state must still trigger rollback", rolledBack)
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+    }
+
+    @Test fun resumeIfPending_handles_both_KDF_and_SK_pending_state_in_same_sweep() = runBlocking {
+        // The two transitions share a mutex but the pending key sets are
+        // disjoint - recovery sweeps BOTH when called. Ensures one transition
+        // can't dodge cleanup by being attempted in parallel with the other.
+        seedActiveVerifier()
+        seedPendingState(
+            pendingVersion = KDF_V3_HARDENED,
+            pendingVerifier = "salt:ct:iv",
+            startedAtMs = System.currentTimeMillis(),
+        )
+        seedSkPendingState(transition = 0, startedAtMs = System.currentTimeMillis())
+
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+        val rolledBack = migrator.resumeIfPending()
+
+        assertTrue(rolledBack)
+        // KDF pending wiped.
+        assertEquals(0, authPrefs.getInt(SP_KDF_PENDING_VERSION, 0))
+        // SK pending wiped.
+        assertEquals(-1, authPrefs.getInt(SP_SK_PENDING_TRANSITION_TYPE, -1))
+    }
+
+    @Test fun resumeIfPending_is_idempotent_under_repeated_SK_pending_calls() = runBlocking {
+        seedSkPendingState(transition = 0, startedAtMs = System.currentTimeMillis())
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+
+        val first = migrator.resumeIfPending()
+        val second = migrator.resumeIfPending()
+
+        assertTrue(first)
+        assertFalse(
+            "Second resumeIfPending must be a no-op (pending state already cleared)",
+            second,
+        )
+    }
+
+    // ── Mutex sharing between migrateTo and runSecretKeyTransition ─────────
+
+    @Test fun migrateTo_and_runSecretKeyTransition_share_a_single_mutex() {
+        // Challenger Issue 10: the two transition entry points MUST hold the
+        // same lock so concurrent calls serialise (otherwise a parallel KDF
+        // preset migration and SK transition could produce a verifier that
+        // does not match either of their intended states).
+        //
+        // Direct test of the shared-mutex property via reflection. The
+        // alternative (race-detection via Dispatchers.Default) requires
+        // Argon2id, which is host-JVM unavailable - a static reflective
+        // assertion is more robust here.
+        val mutexField = KdfMigrator::class.java.getDeclaredField("mutex")
+        mutexField.isAccessible = true
+        val migrator = KdfMigrator(authPrefs, crypto, detector, secretKeyWrapper)
+        val mutexInstance = mutexField.get(migrator)
+        assertNotNull(
+            "KdfMigrator must hold a non-null mutex field",
+            mutexInstance,
+        )
+        // The mutex is declared exactly ONCE on the migrator (line 284 of
+        // KdfMigrator.kt). Both migrateTo and runSecretKeyTransition close
+        // over `mutex.withLock` - the same identity-checked reference here.
+        // A future refactor that introduces a second mutex for SK
+        // transitions would break the serialisation guarantee; this test
+        // pins the single-mutex invariant by counting Mutex-typed fields.
+        val mutexFields = KdfMigrator::class.java.declaredFields.filter {
+            it.type.name == "kotlinx.coroutines.sync.Mutex" ||
+                it.type.name == "kotlinx.coroutines.sync.MutexImpl"
+        }
+        assertEquals(
+            "KdfMigrator must have exactly one Mutex field (shared by migrateTo and runSecretKeyTransition)",
+            1,
+            mutexFields.size,
+        )
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────
 
     private fun seedActiveVerifier() {
@@ -540,6 +816,23 @@ class KdfMigratorTest {
         }.commit()
     }
 
+    /**
+     * Plants a complete Secret Key pending-state set on `authPrefs`. The
+     * [transition] integer matches the migrator's internal codes: 0=Enable,
+     * 1=Disable, 2=Rotate. The pending wrapped blob lives under the
+     * wrapper-owned SP key, so we write that directly too.
+     */
+    private fun seedSkPendingState(transition: Int, startedAtMs: Long) {
+        authPrefs.edit().apply {
+            putInt(SP_SK_PENDING_TRANSITION_TYPE, transition)
+            putString(SP_SK_PENDING_VERIFIER, "pending-sk-verifier")
+            putString(SP_SK_PENDING_DIGEST, "pending-sk-digest")
+            putLong(SP_SK_PENDING_STARTED_AT, startedAtMs)
+            putBoolean(SP_SK_PENDING_ENABLED, transition != 1)
+            putString(SP_SK_PENDING_WRAPPED, "pending-wrapped-blob")
+        }.commit()
+    }
+
     // SharedPreferences keys mirrored from KdfMigrator's private constants.
     // The whole point of the migrator's design is that these strings are
     // append-only and changes to either side trigger a regression here.
@@ -552,6 +845,20 @@ class KdfMigratorTest {
         private const val SP_KDF_PENDING_VERIFIER   = "kdf_pending_verifier"
         private const val SP_KDF_PENDING_STARTED_AT = "kdf_pending_started_at"
         private const val SP_KDF_PENDING_DIGEST     = "kdf_pending_digest"
+
+        // SK transition staging keys mirror KdfMigrator's private constants
+        // plus the wrapper-owned SP_SK_PENDING_WRAPPED literal. These strings
+        // ship in the on-disk auth file, so any rename forces a migration
+        // plan; the tests pin them here.
+        private const val SP_SK_PENDING_VERIFIER        = "sk_pending_verifier"
+        private const val SP_SK_PENDING_DIGEST          = "sk_pending_digest"
+        private const val SP_SK_PENDING_STARTED_AT      = "sk_pending_started_at"
+        private const val SP_SK_PENDING_TRANSITION_TYPE = "sk_pending_transition_type"
+        private const val SP_SK_PENDING_ENABLED         = "sk_pending_enabled"
+        private const val SP_SK_PENDING_WRAPPED         = "sk_pending_wrapped"
+        // Active SK state keys (subset of wrapper-owned constants).
+        private const val SP_SECRET_KEY_ENABLED         = "secret_key_enabled"
+        private const val SP_SECRET_KEY_WRAPPED         = "secret_key_wrapped"
     }
 }
 

@@ -119,6 +119,7 @@ class SettingsKdfStrengthViewModelTest {
     private lateinit var benchmark: KdfBenchmark
     private lateinit var migrator: KdfMigrator
     private lateinit var datastore: StubPreferencesDataStore
+    private lateinit var authPrefs: android.content.SharedPreferences
 
     @Before fun setUp() {
         Dispatchers.setMain(testDispatcher)
@@ -155,9 +156,15 @@ class SettingsKdfStrengthViewModelTest {
         //    stored), so any `migrateTo` call returns Error at the
         //    verifier-read step BEFORE running Argon2id.
         benchmark = KdfBenchmark(datastore)
-        val authPrefs = context.getSharedPreferences("kdf_vm_test_${System.nanoTime()}", Context.MODE_PRIVATE)
+        authPrefs = context.getSharedPreferences("kdf_vm_test_${System.nanoTime()}", Context.MODE_PRIVATE)
         authPrefs.edit().clear().commit()
-        migrator = KdfMigrator(authPrefs, NoKeystoreCryptoManager(), detector)
+        // SecretKeyKeystoreWrapper is constructor-only - it does not touch
+        // the Keystore until wrap()/unwrap() is called. The KDF-migration
+        // tests in this file never exercise an SK transition, so the wrapper
+        // injection is satisfied with a thin instance over the same
+        // in-memory SharedPreferences.
+        val secretKeyWrapper = com.onekey.core.security.SecretKeyKeystoreWrapper(authPrefs)
+        migrator = KdfMigrator(authPrefs, NoKeystoreCryptoManager(), detector, secretKeyWrapper)
 
         // Stub the ActivityManager so HardwareKeyIsolationProbe (constructed
         // inside the VM via its dependency) sees a coherent device state if
@@ -462,6 +469,7 @@ class SettingsKdfStrengthViewModelTest {
             deviceCapacityDetector = detector,
             kdfBenchmark = benchmark,
             kdfMigrator = migrator,
+            authPrefs = authPrefs,
         )
     }
 
@@ -538,6 +546,17 @@ class SettingsKdfStrengthViewModelTest {
         override fun isPinSetup(): Flow<Boolean> = flowOf(false)
 
         override suspend fun setupMasterPassword(password: CharArray): AppResult<Unit> = error("unused")
+        override suspend fun setupMasterPasswordWithSecretKey(
+            password: CharArray,
+            secretKey: ByteArray,
+        ): AppResult<Unit> = error("unused")
+        override suspend fun setupMasterPasswordOptingOutOfSecretKey(
+            password: CharArray,
+        ): AppResult<Unit> = error("unused")
+        override suspend fun setupWithSecretKeyFromBackup(
+            password: CharArray,
+            secretKey: ByteArray,
+        ): AppResult<Unit> = error("unused")
         override suspend fun unlockWithPassword(password: CharArray): AppResult<Unit> = error("unused")
         override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = error("unused")
         override suspend fun unlockWithBiometric(): AppResult<Unit> = error("unused")
@@ -548,6 +567,16 @@ class SettingsKdfStrengthViewModelTest {
         override suspend fun resetPin(): AppResult<Unit> = error("unused")
         override suspend fun resetVault(): AppResult<Unit> = error("unused")
         override suspend fun clearAll(): AppResult<Unit> = error("unused")
+        override suspend fun activeKdfParams(): com.onekey.core.security.KdfParams =
+            activePreset.value.let { preset ->
+                if (preset == KdfPreset.CUSTOM) {
+                    val (m, t) = activeCustomParams.value ?: (64 to 3)
+                    com.onekey.core.security.KdfParams(mCostKiB = m * 1024, tCost = t, parallelism = 1)
+                } else preset.toKdfParams()
+            }
+        override suspend fun isSecretKeyEnabled(): Boolean = false
+        override fun observeIsSecretKeyEnabled(): Flow<Boolean> = flowOf(false)
+        override fun observeSecretKeyOptedOut(): Flow<Boolean> = flowOf(false)
     }
 
     /**

@@ -6,6 +6,7 @@ import com.onekey.core.domain.model.CustomField
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.feature.importexport.domain.ConflictPair
 import com.onekey.feature.importexport.domain.ConflictResolution
+import com.onekey.feature.importexport.domain.EncryptedParseResult
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
 import com.onekey.feature.importexport.domain.ImportResult
@@ -25,8 +26,52 @@ class ImportVaultUseCase @Inject constructor(
 
     suspend fun parseOnly(filePath: String): AppResult<ParsedImport> = importer.parse(filePath)
 
+    /**
+     * Encrypted-import wrapper that folds [EncryptedParseResult] into the
+     * legacy [AppResult] shape used by every other import call site. The
+     * SecretKey-required branch is surfaced as an [AppResult.Error] whose
+     * message starts with "SECRET_KEY_REQUIRED:" so the existing ViewModel
+     * paths (`feature/importexport/...`) can still call this method while
+     * future restore-from-backup ViewModels call [importer.parseEncrypted]
+     * directly to get the full sealed type.
+     *
+     * The serialised message includes the parsed createdAtMs and
+     * vaultVersion so a curious caller can sniff them out, but the
+     * preferred shape for UIs that need to pivot is calling
+     * [VaultImporter.parseEncrypted] directly and matching on
+     * [EncryptedParseResult.SecretKeyRequired].
+     */
     suspend fun parseOnlyEncrypted(filePath: String, password: CharArray): AppResult<ParsedImport> =
-        importer.parseEncrypted(filePath, password)
+        when (val r = importer.parseEncrypted(filePath, password)) {
+            is EncryptedParseResult.Success -> AppResult.Success(r.parsed)
+            is EncryptedParseResult.Failure -> AppResult.Error(r.throwable, r.message)
+            is EncryptedParseResult.SecretKeyRequired -> AppResult.Error(
+                IllegalStateException("SECRET_KEY_REQUIRED"),
+                "SECRET_KEY_REQUIRED: createdAtMs=${r.createdAtMs} vaultVersion=${r.vaultVersion}",
+            )
+        }
+
+    /**
+     * Surfaces the full [EncryptedParseResult] sealed type so a calling
+     * ViewModel can distinguish the three outcomes (Success / Failure /
+     * SecretKeyRequired) and route the SK-required pivot to the scanner UI
+     * without parsing a magic-string from an [AppResult.Error] message.
+     *
+     * Used by [com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel]
+     * for the in-vault import flow (Settings > Backup & Import > Import). The
+     * onboarding restore-from-backup flow calls
+     * [com.onekey.feature.importexport.domain.VaultImporter.parseEncrypted]
+     * directly via AuthViewModel since it has its own SK handling.
+     *
+     * @param secretKey optional 16-byte raw SK. Pass null on the first
+     *                  attempt; on SecretKeyRequired the caller retries with
+     *                  the scanned/typed value.
+     */
+    suspend fun parseEncryptedFull(
+        filePath: String,
+        password: CharArray,
+        secretKey: ByteArray? = null,
+    ): EncryptedParseResult = importer.parseEncrypted(filePath, password, secretKey)
 
     /**
      * Classifies each parsed credential against the vault (active + recycle bin):

@@ -5,6 +5,9 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialSortOrder
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.core.security.KdfParams
+import com.onekey.core.security.KdfPreset
+import com.onekey.feature.importexport.domain.EncryptedParseResult
 import com.onekey.feature.importexport.domain.ParsedImport
 import com.onekey.feature.importexport.domain.VaultImporter
 import kotlinx.coroutines.flow.Flow
@@ -66,10 +69,17 @@ class SetupFromBackupUseCaseTest {
     fun `wrong password (parseEncrypted error) does not invoke setupMasterPassword`() = runBlocking {
         val password = "wrong".toCharArray()
         val fakeImporter = object : ZeroingFakeImporter() {
-            override suspend fun parseEncrypted(path: String, password: CharArray): AppResult<ParsedImport> {
+            override suspend fun parseEncrypted(
+                path: String,
+                password: CharArray,
+                secretKey: ByteArray?,
+            ): EncryptedParseResult {
                 // Mirror real implementation: zero even on failure.
                 password.fill(' ')
-                return AppResult.Error(IllegalStateException("Wrong password"), "Wrong password")
+                return EncryptedParseResult.Failure(
+                    throwable = IllegalStateException("Wrong password"),
+                    message = "Wrong password",
+                )
             }
         }
         val capturingAuth = CapturingFakeAuth()
@@ -99,11 +109,15 @@ private open class ZeroingFakeImporter : VaultImporter {
     override suspend fun parse(path: String): AppResult<ParsedImport> =
         error("parse is not part of the SetupFromBackup path")
 
-    override suspend fun parseEncrypted(path: String, password: CharArray): AppResult<ParsedImport> {
+    override suspend fun parseEncrypted(
+        path: String,
+        password: CharArray,
+        secretKey: ByteArray?,
+    ): EncryptedParseResult {
         parseEncryptedCalls++
         password.fill(' ')
         lastReceivedPasswordAfterReturn = password.copyOf()
-        return AppResult.Success(ParsedImport(emptyList(), emptyList()))
+        return EncryptedParseResult.Success(ParsedImport(emptyList(), emptyList()))
     }
 }
 
@@ -116,6 +130,20 @@ private class CapturingFakeAuth : AuthRepository {
         capturedSetupPassword = password.copyOf()
         return AppResult.Success(Unit)
     }
+
+    override suspend fun setupMasterPasswordWithSecretKey(
+        password: CharArray,
+        secretKey: ByteArray,
+    ): AppResult<Unit> = unused()
+
+    override suspend fun setupMasterPasswordOptingOutOfSecretKey(
+        password: CharArray,
+    ): AppResult<Unit> = unused()
+
+    override suspend fun setupWithSecretKeyFromBackup(
+        password: CharArray,
+        secretKey: ByteArray,
+    ): AppResult<Unit> = unused()
 
     // ── unused in this test - fail loudly if accidentally invoked ──
     override fun isSetupComplete(): Flow<Boolean> = flowOf(false)
@@ -132,8 +160,12 @@ private class CapturingFakeAuth : AuthRepository {
     override suspend fun resetPin(): AppResult<Unit> = unused()
     override suspend fun resetVault(): AppResult<Unit> = unused()
     override suspend fun clearAll(): AppResult<Unit> = unused()
-    override fun observeActiveKdfPreset(): Flow<com.onekey.core.security.KdfPreset> = unused()
+    override fun observeActiveKdfPreset(): Flow<KdfPreset> = unused()
     override fun observeActiveKdfCustomParams(): Flow<Pair<Int, Int>?> = unused()
+    override suspend fun activeKdfParams(): KdfParams = unused()
+    override suspend fun isSecretKeyEnabled(): Boolean = unused()
+    override fun observeIsSecretKeyEnabled(): Flow<Boolean> = unused()
+    override fun observeSecretKeyOptedOut(): Flow<Boolean> = unused()
 
     private fun unused(): Nothing = error("not used by SetupFromBackupUseCase")
 }

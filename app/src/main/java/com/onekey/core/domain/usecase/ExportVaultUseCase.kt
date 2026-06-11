@@ -2,8 +2,10 @@ package com.onekey.core.domain.usecase
 
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
 import com.onekey.core.security.VaultVersionTracker
+import com.onekey.feature.importexport.domain.EncryptedExportContext
 import com.onekey.feature.importexport.domain.VaultExporter
 import javax.inject.Inject
 
@@ -11,6 +13,11 @@ class ExportVaultUseCase @Inject constructor(
     private val repository: CredentialRepository,
     private val exporter: VaultExporter,
     private val vaultVersionTracker: VaultVersionTracker,
+    // The use case (not the exporter) reads from AuthRepository so the
+    // VaultExporter -> AuthRepository -> SyncEngine -> VaultExporter Hilt
+    // cycle stays broken. The use case is downstream of both modules so
+    // it can safely depend on both.
+    private val authRepository: AuthRepository,
 ) {
     suspend operator fun invoke(format: ExportFormat, outputPath: String): AppResult<Unit> {
         val all = collectAll() ?: return repository.getAllCredentials() as AppResult.Error
@@ -20,7 +27,18 @@ class ExportVaultUseCase @Inject constructor(
     suspend fun encrypted(format: ExportFormat, password: CharArray, outputPath: String): AppResult<Unit> {
         val all = collectAll() ?: return repository.getAllCredentials() as AppResult.Error
         val vaultVersion = vaultVersionTracker.getVersion()
-        return exporter.exportEncrypted(all, password, format, outputPath, vaultVersion = vaultVersion)
+        val context = EncryptedExportContext(
+            kdfParams = authRepository.activeKdfParams(),
+            secretKeyEnabled = authRepository.isSecretKeyEnabled(),
+        )
+        return exporter.exportEncrypted(
+            credentials = all,
+            password = password,
+            format = format,
+            path = outputPath,
+            context = context,
+            vaultVersion = vaultVersion,
+        )
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.onekey.feature.settings.presentation.viewmodel
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
@@ -28,9 +29,18 @@ import com.onekey.core.security.LockReason
 import com.onekey.core.security.LockReasonStore
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightStore
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
+
+// SP keys exposed read-only here so the Security row's subtitle can show
+// "Generated <date>" without re-deriving from the SecretKey-Settings VM.
+// The single source of truth for these names lives in
+// SecretKeySettingsViewModel; this constant pair mirrors it.
+private const val SP_SK_GENERATED_AT = "sk_generated_at"
+private const val SP_SK_LAST_KIT_DOWNLOAD_AT = "sk_last_kit_download_at"
 
 sealed class SettingsEvent {
     data object PinRemoved : SettingsEvent()
@@ -74,6 +84,7 @@ class SettingsViewModel @Inject constructor(
     private val deviceCapacityDetector: DeviceCapacityDetector,
     private val kdfBenchmark: KdfBenchmark,
     private val kdfMigrator: KdfMigrator,
+    @Named("auth") private val authPrefs: SharedPreferences,
 ) : ViewModel() {
 
     init {
@@ -175,6 +186,52 @@ class SettingsViewModel @Inject constructor(
      * render the secondary subtitle line under the Encryption strength row.
      */
     val activeKdfCustomParams: StateFlow<Pair<Int, Int>?> = authRepository.observeActiveKdfCustomParams()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    // ── Secret Key state (read-only, for the Security row subtitle) ────────
+    //
+    // The Settings > Security > Secret Key row needs three signals to render
+    // the subtitle locked-design states ("On. Generated <date>. Tap for
+    // options.", "Off. Opted out at vault creation - tap to enable.", and
+    // "Off. Tap to enable."). The full SK lifecycle - reauth, enable,
+    // rotate, disable, kit save - lives on SecretKeySettingsViewModel.
+    // These flows are observe-only so the Security row composes correctly
+    // even before the SK Settings screen has been opened.
+
+    /**
+     * `true` when SP_SECRET_KEY_ENABLED is set. Mirrors
+     * [AuthRepository.isSecretKeyEnabled] as a hot StateFlow so the
+     * Security row's subtitle re-renders on every Enable / Disable /
+     * Rotate transition.
+     */
+    val isSecretKeyOn: StateFlow<Boolean> = authRepository.observeIsSecretKeyEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * `true` when the user explicitly opted out of Secret Key (either at
+     * onboarding or by disabling SK later). Cleared on every Enable.
+     * Combined with [isSecretKeyOn] this drives the row's three subtitle
+     * shapes; the search index points users at the same row regardless.
+     */
+    val wasSecretKeyOptedOut: StateFlow<Boolean> = authRepository.observeSecretKeyOptedOut()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Wall-clock ms epoch when this SK was last generated (Enable or
+     * Rotate). `null` when the feature has never been enabled on this
+     * install. The Security row's "Generated <date>" suffix consults this
+     * directly so it stays in sync with [isSecretKeyOn].
+     */
+    val secretKeyGeneratedAt: StateFlow<Long?> = authPrefs.watchLongOrNull(SP_SK_GENERATED_AT)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Wall-clock ms epoch of the most recent Emergency Kit save. `null`
+     * when no save has occurred yet. Read by the Security row when SK is
+     * present so it can highlight "kit not yet saved" inline before the
+     * user navigates into the SK screen.
+     */
+    val secretKeyLastKitDownloadAt: StateFlow<Long?> = authPrefs.watchLongOrNull(SP_SK_LAST_KIT_DOWNLOAD_AT)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
@@ -598,3 +655,25 @@ class SettingsViewModel @Inject constructor(
         private const val MAX_BIOMETRIC_ATTEMPTS = 3
     }
 }
+
+/**
+ * Cold Flow over a SharedPreferences long key that emits `null` for the
+ * "not set" state instead of a sentinel default. Mirrors the shape of the
+ * existing `watchBoolean` / `watchString` / `watchInt` helpers on
+ * AuthRepositoryImpl but lives here so SettingsViewModel can observe SK
+ * metadata keys without needing to widen [AuthRepository] further.
+ *
+ * "Not set" is a real state (SK never enabled => no generation timestamp,
+ * SK enabled but kit never saved => no last-download timestamp), so the
+ * null-vs-value distinction matters. The Security row reads both and
+ * renders accordingly.
+ */
+private fun SharedPreferences.watchLongOrNull(key: String): Flow<Long?> =
+    callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+            if (k == key) trySend(if (contains(key)) getLong(key, 0L) else null)
+        }
+        registerOnSharedPreferenceChangeListener(listener)
+        trySend(if (contains(key)) getLong(key, 0L) else null)
+        awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
+    }

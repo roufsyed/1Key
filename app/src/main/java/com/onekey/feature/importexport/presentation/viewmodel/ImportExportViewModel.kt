@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.repository.AppPreferencesRepository
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.domain.usecase.ExportVaultUseCase
@@ -15,18 +16,22 @@ import com.onekey.core.domain.usecase.ImportVaultUseCase
 import com.onekey.core.security.AutoLockManager
 import com.onekey.feature.importexport.domain.BackupPasswordValidator
 import com.onekey.feature.importexport.domain.ConflictResolution
+import com.onekey.feature.importexport.domain.EncryptedParseResult
 import com.onekey.feature.importexport.domain.ImportFieldOptions
 import com.onekey.feature.importexport.domain.ImportPlan
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.ParsedImport
+import com.onekey.feature.secretkey.scan.canonicalSkToBytes
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -44,7 +49,12 @@ sealed class ImportExportEvent {
 @Immutable
 sealed class ImportExportUiState {
     data object Idle : ImportExportUiState()
-    data object Loading : ImportExportUiState()
+    // Export and import share `isInteractionBlocked` semantics but were originally
+    // rendered with a single progress bar below both buttons - which made an in-flight
+    // Export look like Import was loading. Split into two so the screen can place the
+    // bar directly below the button that started the operation.
+    data object ExportLoading : ImportExportUiState()
+    data object ImportLoading : ImportExportUiState()
     data class Success(val message: String) : ImportExportUiState()
     data class ImportSuccess(val result: ImportResult) : ImportExportUiState()
     // Parsed data ready for user review - shown before committing anything to the vault.
@@ -58,6 +68,16 @@ sealed class ImportExportUiState {
     data class ImportReview(val plan: ImportPlan) : ImportExportUiState()
     // Encrypted file detected; error is non-null when decryption failed (retry allowed).
     data class AwaitingImportPassword(val error: String? = null) : ImportExportUiState()
+    // V5 envelope with FLAGS bit 0 set: backup was made with Secret Key
+    // enabled. The user has already supplied the password; they now have to
+    // scan or paste the Secret Key from their Emergency Kit. backupCreatedAtMs
+    // / backupVaultVersion come from the parse result's metadata so the UI
+    // can display "Backup taken on... vault v...".
+    data class AwaitingImportSecretKey(
+        val backupCreatedAtMs: Long,
+        val backupVaultVersion: Int,
+        val error: String? = null,
+    ) : ImportExportUiState()
     data class Error(val message: String) : ImportExportUiState()
 }
 
@@ -67,6 +87,7 @@ class ImportExportViewModel @Inject constructor(
     private val importVault: ImportVaultUseCase,
     private val autoLockManager: AutoLockManager,
     private val authRepository: AuthRepository,
+    appPreferencesRepository: AppPreferencesRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<ImportExportUiState>(ImportExportUiState.Idle)
@@ -74,6 +95,16 @@ class ImportExportViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<ImportExportEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<ImportExportEvent> = _events.asSharedFlow()
+
+    /**
+     * Sync-enabled gate, surfaced on the Backup screen so we can warn the user that
+     * the sync engine writes `vault-backup.1key` automatically after every master-
+     * password unlock. Without this banner, a manual Export saved into the same
+     * folder looks like a duplicate file - it isn't; the two files have distinct
+     * names and distinct lifecycles.
+     */
+    val syncEnabled: StateFlow<Boolean> = appPreferencesRepository.isSyncEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), false)
 
     // Held between "file picked" and "password submitted / cancelled".
     private var pendingImportFile: File? = null
@@ -87,6 +118,12 @@ class ImportExportViewModel @Inject constructor(
     // Held between "password dialog confirmed" and "picker callback fires".
     private var pendingExportPassword: CharArray? = null
 
+    // Held between "first parseEncrypted returned SecretKeyRequired" and
+    // "user submits the SK". Lets the retry path re-derive without forcing
+    // the user to retype the password. Zeroed in finally on both successful
+    // SK-aware parse and cancel-pending-import.
+    private var pendingImportPassword: CharArray? = null
+
     private var exportVerifyAttempts = 0
 
     // ── Picker suppression ────────────────────────────────────────────────────
@@ -98,7 +135,7 @@ class ImportExportViewModel @Inject constructor(
 
     fun export(uri: Uri, format: ExportFormat, context: Context) {
         viewModelScope.launch {
-            _uiState.value = ImportExportUiState.Loading
+            _uiState.value = ImportExportUiState.ExportLoading
             val tmpFile = File(context.cacheDir, "export.${format.name.lowercase()}")
             try {
                 withContext(Dispatchers.IO) { tmpFile.createNewFile() }
@@ -139,7 +176,7 @@ class ImportExportViewModel @Inject constructor(
         val pw = pendingExportPassword ?: return
         pendingExportPassword = null
         viewModelScope.launch {
-            _uiState.value = ImportExportUiState.Loading
+            _uiState.value = ImportExportUiState.ExportLoading
             val tmpFile = File(context.cacheDir, "export_enc.1key")
             try {
                 withContext(Dispatchers.IO) { tmpFile.createNewFile() }
@@ -172,7 +209,7 @@ class ImportExportViewModel @Inject constructor(
 
     fun import(uri: Uri, context: Context) {
         viewModelScope.launch {
-            _uiState.value = ImportExportUiState.Loading
+            _uiState.value = ImportExportUiState.ImportLoading
 
             val sizeBytes = context.contentResolver
                 .query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
@@ -229,14 +266,25 @@ class ImportExportViewModel @Inject constructor(
     fun importWithPassword(password: CharArray) {
         val file = pendingImportFile ?: return
         viewModelScope.launch {
-            _uiState.value = ImportExportUiState.Loading
+            _uiState.value = ImportExportUiState.ImportLoading
+            // Defensive copy so we can retain the password across the
+            // SecretKeyRequired pivot. The original `password` is zeroed in
+            // this method's finally; the retained copy is owned by
+            // pendingImportPassword and zeroed in the SK-aware retry or on
+            // import-cancel.
+            val passwordCopy = password.copyOf()
+            var pivotedToSk = false
             try {
-                // Off-main: PBKDF2 + AES-GCM decrypt of the backup file before parse.
-                when (val result = withContext(Dispatchers.Default) {
-                    importVault.parseOnlyEncrypted(file.absolutePath, password)
-                }) {
-                    is AppResult.Success -> {
-                        val parsed = result.data
+                // Off-main: PBKDF2 / Argon2id + AES-GCM decrypt of the
+                // backup file before parse. Use parseEncryptedFull so the
+                // SK-required outcome surfaces as a typed branch rather than
+                // a magic-string error message.
+                val result = withContext(Dispatchers.Default) {
+                    importVault.parseEncryptedFull(file.absolutePath, password, secretKey = null)
+                }
+                when (result) {
+                    is EncryptedParseResult.Success -> {
+                        val parsed = result.parsed
                         withContext(Dispatchers.IO) { file.delete() }
                         pendingImportFile = null
                         pendingParsedImport = parsed
@@ -247,15 +295,113 @@ class ImportExportViewModel @Inject constructor(
                             sensitiveCustomFieldKeys = buildSensitiveCustomFieldKeys(parsed.credentials),
                         )
                     }
-                    is AppResult.Error -> {
+                    is EncryptedParseResult.Failure -> {
                         // Keep pendingImportFile for retry; surface error inside dialog.
                         _uiState.value = ImportExportUiState.AwaitingImportPassword(
-                            result.message ?: "Wrong password or corrupted backup"
+                            result.message,
+                        )
+                    }
+                    is EncryptedParseResult.SecretKeyRequired -> {
+                        // Pivot to the SK dialog. Preserve the password for
+                        // the retry; the file stays alive too. The dialog
+                        // will collect the canonical SK string from the user
+                        // (scan or type) and call importWithSecretKey.
+                        pivotedToSk = true
+                        pendingImportPassword?.fill(' ')
+                        pendingImportPassword = passwordCopy
+                        _uiState.value = ImportExportUiState.AwaitingImportSecretKey(
+                            backupCreatedAtMs = result.createdAtMs,
+                            backupVaultVersion = result.vaultVersion,
                         )
                     }
                 }
             } finally {
                 password.fill(' ')
+                if (!pivotedToSk) {
+                    // No retain - zero the snapshot copy.
+                    passwordCopy.fill(' ')
+                }
+            }
+        }
+    }
+
+    /**
+     * SK-aware retry called from the AwaitingImportSecretKey dialog. The
+     * [canonicalSk] is the bare 26-char Crockford base32 string (manual
+     * paste of A3-... prefix and dashes are normalised by [canonicalSkToBytes]).
+     *
+     * Re-uses the preserved [pendingImportPassword] from the prior
+     * importWithPassword call so the user does not retype.
+     *
+     * Memory hygiene:
+     *  - Decoded SK bytes zeroed in finally.
+     *  - pendingImportPassword zeroed when the decrypt+parse succeeds OR
+     *    when the SK was rejected as Malformed - the user does not get a
+     *    free re-pivot from this method.
+     */
+    fun importWithSecretKey(canonicalSk: String) {
+        val file = pendingImportFile ?: return
+        val savedPassword = pendingImportPassword ?: return
+        val currentSk = _uiState.value as? ImportExportUiState.AwaitingImportSecretKey
+        viewModelScope.launch {
+            _uiState.value = ImportExportUiState.ImportLoading
+            // Decode the canonical SK string into raw bytes. Failure here
+            // (bad QR, hand-typed typo) is a recoverable error - the file
+            // and password stay alive for the next retry.
+            val skBytes = try {
+                canonicalSkToBytes(canonicalSk)
+            } catch (e: IllegalArgumentException) {
+                _uiState.value = ImportExportUiState.AwaitingImportSecretKey(
+                    backupCreatedAtMs = currentSk?.backupCreatedAtMs ?: 0L,
+                    backupVaultVersion = currentSk?.backupVaultVersion ?: 0,
+                    error = e.message ?: "The Secret Key value couldn't be read. Please scan again.",
+                )
+                return@launch
+            }
+            try {
+                val result = withContext(Dispatchers.Default) {
+                    importVault.parseEncryptedFull(
+                        filePath = file.absolutePath,
+                        password = savedPassword.copyOf(),
+                        secretKey = skBytes,
+                    )
+                }
+                when (result) {
+                    is EncryptedParseResult.Success -> {
+                        val parsed = result.parsed
+                        withContext(Dispatchers.IO) { file.delete() }
+                        pendingImportFile = null
+                        pendingParsedImport = parsed
+                        pendingImportPassword?.fill(' ')
+                        pendingImportPassword = null
+                        _uiState.value = ImportExportUiState.ImportPreview(
+                            parsed = parsed,
+                            previewItems = buildPreviewItems(parsed.credentials),
+                            customFieldKeys = buildCustomFieldKeys(parsed.credentials),
+                            sensitiveCustomFieldKeys = buildSensitiveCustomFieldKeys(parsed.credentials),
+                        )
+                    }
+                    is EncryptedParseResult.Failure -> {
+                        // Most likely "wrong SK" (AEADBadTagException). The
+                        // file and password stay alive; the SK can be
+                        // retyped without re-uploading.
+                        _uiState.value = ImportExportUiState.AwaitingImportSecretKey(
+                            backupCreatedAtMs = currentSk?.backupCreatedAtMs ?: 0L,
+                            backupVaultVersion = currentSk?.backupVaultVersion ?: 0,
+                            error = result.message,
+                        )
+                    }
+                    is EncryptedParseResult.SecretKeyRequired -> {
+                        // Should not happen now we passed a non-null SK -
+                        // treat as a corruption error rather than a free
+                        // re-pivot.
+                        _uiState.value = ImportExportUiState.Error(
+                            "The backup is corrupted or the Secret Key was rejected.",
+                        )
+                    }
+                }
+            } finally {
+                skBytes.fill(0)
             }
         }
     }
@@ -268,7 +414,7 @@ class ImportExportViewModel @Inject constructor(
     fun confirmImport(fieldOptions: ImportFieldOptions) {
         val parsed = pendingParsedImport ?: return
         viewModelScope.launch {
-            _uiState.value = ImportExportUiState.Loading
+            _uiState.value = ImportExportUiState.ImportLoading
             val planResult = withContext(Dispatchers.Default) {
                 importVault.planImport(parsed, fieldOptions)
             }
@@ -293,7 +439,7 @@ class ImportExportViewModel @Inject constructor(
     fun confirmConflictResolution(resolution: ConflictResolution) {
         val plan = pendingPlan ?: return
         viewModelScope.launch {
-            _uiState.value = ImportExportUiState.Loading
+            _uiState.value = ImportExportUiState.ImportLoading
             applyPlan(plan, resolution)
         }
     }
@@ -318,6 +464,8 @@ class ImportExportViewModel @Inject constructor(
             pendingImportFile = null
             pendingParsedImport = null
             pendingPlan = null
+            pendingImportPassword?.fill(' ')
+            pendingImportPassword = null
             withContext(Dispatchers.IO) { file?.delete() }
             _uiState.value = ImportExportUiState.Idle
         }
@@ -353,6 +501,13 @@ class ImportExportViewModel @Inject constructor(
                 return@launch
             }
 
+            // Snapshot the password BEFORE unlockWithPassword zeros it. On
+            // success this copy is transferred to pendingExportPassword so the
+            // later SAF-picker callback can run encrypt() against it; the UI
+            // layer's password field state has already been cleared by the
+            // dialog's consume() and cannot supply the bytes a second time.
+            val snapshot = password.copyOf()
+            var transferred = false
             try {
                 // Argon2id derivation runs inside unlockWithPassword - keep it off Main
                 // so the export-verify dialog doesn't freeze the UI on submit.
@@ -362,6 +517,9 @@ class ImportExportViewModel @Inject constructor(
                 when (outcome) {
                     is AppResult.Success -> {
                         exportVerifyAttempts = 0
+                        pendingExportPassword?.fill(' ')
+                        pendingExportPassword = snapshot
+                        transferred = true
                         _events.emit(ImportExportEvent.ExportPasswordVerified)
                     }
                     is AppResult.Error -> {
@@ -377,6 +535,7 @@ class ImportExportViewModel @Inject constructor(
                 }
             } finally {
                 password.fill(' ')
+                if (!transferred) snapshot.fill(' ')
             }
         }
     }
@@ -446,6 +605,8 @@ class ImportExportViewModel @Inject constructor(
         super.onCleared()
         pendingExportPassword?.fill(' ')
         pendingExportPassword = null
+        pendingImportPassword?.fill(' ')
+        pendingImportPassword = null
         pendingParsedImport = null
         pendingImportFile?.delete()
         pendingImportFile = null

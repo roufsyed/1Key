@@ -62,6 +62,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
 import com.onekey.core.presentation.lockaware.LockAwareWindowDialog
 import com.onekey.core.presentation.lockaware.SecurePasswordTextField
 import com.onekey.core.presentation.lockaware.rememberSecurePasswordFieldState
@@ -74,6 +75,10 @@ import com.onekey.feature.importexport.domain.UrlTitleExtractor
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportEvent
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportUiState
 import com.onekey.feature.importexport.presentation.viewmodel.ImportExportViewModel
+import com.onekey.feature.secretkey.scan.QrParseResult
+import com.onekey.feature.secretkey.scan.SECRET_KEY_HUMAN_PREFIX
+import com.onekey.feature.secretkey.scan.formatCanonicalSkForPrint
+import com.onekey.feature.secretkey.scan.parseEmergencyKitQr
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -81,6 +86,21 @@ import kotlinx.coroutines.launch
 fun BackupScreen(
     onBack: () -> Unit,
     onNavigateToVault: () -> Unit = {},
+    /**
+     * Caller-owned navigation hook the screen invokes when the user
+     * taps "Scan QR" inside [ImportSecretKeyDialog]. The NavGraph is
+     * expected to navigate to Screen.SecretKeyImportScanner; the scan
+     * result lands here via [scannedSecretKey] on the next composition.
+     */
+    onScanEmergencyKitQr: () -> Unit = {},
+    /**
+     * Canonical Secret Key string the SK scanner produced (or null when
+     * the user did not just return from the scanner). One-shot fill -
+     * the caller is expected to have already removed the value from
+     * its SavedStateHandle so this is consumed exactly once per round
+     * trip.
+     */
+    scannedSecretKey: String? = null,
     viewModel: ImportExportViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -146,13 +166,27 @@ fun BackupScreen(
                     disableEncPwdError = event.message
                 }
                 is ImportExportEvent.ExportPasswordVerified -> {
-                    viewModel.setPendingExportPassword(exportPasswordState.consume())
+                    // The VM has already transferred the verified password into
+                    // pendingExportPassword - see ImportExportViewModel.
+                    // verifyPasswordForExport. We must NOT call
+                    // exportPasswordState.consume() again here: the dialog's
+                    // verify-button consume() at submit time already cleared
+                    // the field, so a second consume() returns an empty
+                    // CharArray and would clobber the real password with empty
+                    // bytes, encrypting the backup under a key derived from ""
+                    // and breaking restore.
                     showExportPasswordDialog = false
                     exportPasswordVisible = false
                     exportPasswordError = null
                     isVerifyingExportPassword = false
                     viewModel.notifyPickerLaunched()
-                    exportLauncher.launch("1key_backup.1key")
+                    exportLauncher.launch(
+                        defaultExportFilename(
+                            encrypted = true,
+                            format = selectedFormat,
+                            nowMillis = System.currentTimeMillis(),
+                        )
+                    )
                 }
                 is ImportExportEvent.ExportPasswordFailed -> {
                     isVerifyingExportPassword = false
@@ -277,19 +311,40 @@ fun BackupScreen(
             }
 
             val isInteractionBlocked =
-                state is ImportExportUiState.Loading || state is ImportExportUiState.ImportPreview
+                state is ImportExportUiState.ExportLoading ||
+                    state is ImportExportUiState.ImportLoading ||
+                    state is ImportExportUiState.ImportPreview
+
+            val syncEnabled by viewModel.syncEnabled.collectAsStateWithLifecycle()
+            if (syncEnabled) {
+                ExportSyncInfoCard()
+            }
 
             Button(
                 onClick = {
                     if (encryptExport) showExportPasswordDialog = true
                     else {
                         viewModel.notifyPickerLaunched()
-                        exportLauncher.launch("1key_backup.${selectedFormat.name.lowercase()}")
+                        exportLauncher.launch(
+                            defaultExportFilename(
+                                encrypted = false,
+                                format = selectedFormat,
+                                nowMillis = System.currentTimeMillis(),
+                            )
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = !isInteractionBlocked,
             ) { Text("Export Vault") }
+
+            // Loader sits directly below the Export button so an in-flight export
+            // is visually attached to the action that started it (Bug 2). Previously
+            // a single shared loader rendered below the Import button, which made
+            // export work look like import was loading.
+            if (state is ImportExportUiState.ExportLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
 
             // ── Import ────────────────────────────────────────────────────────
             HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -311,7 +366,7 @@ fun BackupScreen(
             ) { Text("Import Credentials") }
 
             when (val s = state) {
-                is ImportExportUiState.Loading ->
+                is ImportExportUiState.ImportLoading ->
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                 is ImportExportUiState.ImportSuccess ->
                     ImportSummaryRow(
@@ -620,6 +675,21 @@ fun BackupScreen(
         )
     }
 
+    // ── Import Secret Key dialog (V5 SK-required backups) ────────────────────
+
+    val awaitingSk = state as? ImportExportUiState.AwaitingImportSecretKey
+    if (awaitingSk != null) {
+        ImportSecretKeyDialog(
+            backupCreatedAtMs = awaitingSk.backupCreatedAtMs,
+            backupVaultVersion = awaitingSk.backupVaultVersion,
+            error = awaitingSk.error,
+            onCancel = { viewModel.cancelPendingImport() },
+            onSubmit = { canonicalSk -> viewModel.importWithSecretKey(canonicalSk) },
+            onScanQr = onScanEmergencyKitQr,
+            preFilledFromScan = scannedSecretKey,
+        )
+    }
+
     // ── Skipped / failed dialogs ──────────────────────────────────────────────
 
     val importSuccessState = state as? ImportExportUiState.ImportSuccess
@@ -877,7 +947,10 @@ private enum class ImportDialogPhase { Preview, Review, Importing, Success, Erro
 private fun ImportExportUiState.toDialogPhase(): ImportDialogPhase = when (this) {
     is ImportExportUiState.ImportPreview -> ImportDialogPhase.Preview
     is ImportExportUiState.ImportReview -> ImportDialogPhase.Review
-    is ImportExportUiState.Loading -> ImportDialogPhase.Importing
+    // The import preview dialog only opens once we have an ImportPreview state, so only
+    // ImportLoading is reachable through it. ExportLoading runs outside this dialog and
+    // maps to Other - it will never be observed here at runtime.
+    is ImportExportUiState.ImportLoading -> ImportDialogPhase.Importing
     is ImportExportUiState.ImportSuccess -> ImportDialogPhase.Success
     is ImportExportUiState.Error -> ImportDialogPhase.Error
     else -> ImportDialogPhase.Other
@@ -1984,6 +2057,194 @@ private fun BackupSectionHeader(title: String) {
         title,
         style = MaterialTheme.typography.titleSmall,
         color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/**
+ * Banner shown above the Export button when sync-on-unlock is enabled. Disambiguates
+ * the two .1key files that can appear in the user's sync folder if they pick the same
+ * destination for a manual export: the auto-sync writes `vault-backup.1key` after every
+ * master-password unlock, while the manual export creates a separate, timestamped file.
+ */
+@Composable
+private fun ExportSyncInfoCard() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                Icons.Default.Sync,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp).padding(top = 2.dp),
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "Sync is on",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "1Key auto-saves your vault as \"vault-backup.1key\" in your sync folder " +
+                        "after every master-password unlock. This Export creates a separate, " +
+                        "timestamped file - not a duplicate of the sync file.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Asks the user for the Secret Key value (text or paste) when a V5 import
+ * detects FLAGS bit 0 in the envelope. Mirrors the onboarding restore-SK
+ * dialog in [com.onekey.feature.auth.presentation.screen.OnboardingScreen]
+ * but lives here so the in-vault import flow does not depend on the
+ * onboarding composable.
+ *
+ * Accepts both the printed form (`A3-XXXXX-XXXXX-...`) and the raw 26-char
+ * canonical Crockford string. Also accepts the full QR URI payload
+ * (`1key-emergency:?sk=...&ver=5`) for cases where the user has the QR text
+ * but no scanner - the parser surfaces a clean error when the format does
+ * not match instead of forcing the user into a guess-and-check.
+ *
+ * The QR scanner pivot is deferred to a future iteration; the dialog
+ * reserves space for the "Scan QR" button so the action row layout stays
+ * stable when scanning lands.
+ */
+@Composable
+private fun ImportSecretKeyDialog(
+    backupCreatedAtMs: Long,
+    backupVaultVersion: Int,
+    error: String?,
+    onCancel: () -> Unit,
+    onSubmit: (String) -> Unit,
+    onScanQr: () -> Unit = {},
+    preFilledFromScan: String? = null,
+) {
+    var skInput by remember { mutableStateOf("") }
+    var localError by remember { mutableStateOf<String?>(null) }
+    val createdAtLabel = remember(backupCreatedAtMs) {
+        if (backupCreatedAtMs <= 0L) "(unknown date)"
+        else java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(backupCreatedAtMs))
+    }
+
+    // One-shot fill from the SK scanner. Render in the PRINTED form
+    // ("A3-XXXXX-XXXXX-...") so the user sees the same value that is
+    // on their paper Emergency Kit, not the raw 26-char canonical
+    // string. The submit handler tolerates either form. The NavGraph
+    // composable has already removed the value from its SavedStateHandle,
+    // so a back-and-forth out of the dialog does not re-trigger this
+    // fill.
+    LaunchedEffect(preFilledFromScan) {
+        if (!preFilledFromScan.isNullOrBlank()) {
+            val printed = runCatching { formatCanonicalSkForPrint(preFilledFromScan) }
+                .getOrDefault(preFilledFromScan)
+            if (skInput != printed) {
+                skInput = printed
+                localError = null
+            }
+        }
+    }
+
+    LockAwareDialog(
+        onDismissRequest = onCancel,
+        icon = { Icon(Icons.Default.VpnKey, contentDescription = null) },
+        title = { Text("Secret Key required") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "This backup was created with the Secret Key feature enabled. " +
+                        "Enter the Secret Key from your Emergency Kit to decrypt it.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    "Backup taken $createdAtLabel, vault version $backupVaultVersion.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val errorText = localError ?: error
+                LockAwareOutlinedTextField(
+                    value = skInput,
+                    onValueChange = { value ->
+                        skInput = value
+                        if (localError != null) localError = null
+                    },
+                    label = { Text("Secret Key") },
+                    placeholder = { Text("${SECRET_KEY_HUMAN_PREFIX}XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX") },
+                    isError = errorText != null,
+                    supportingText = errorText?.let { msg -> { Text(msg) } },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "Paste the printed value from your kit, or scan its QR code. " +
+                        "Dashes and the A3- prefix are optional.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                // Scan-from-camera affordance. Mirrors the onboarding
+                // RestoreSecretKeyDialog's Scan button so both entry
+                // points (Onboarding > Restore from backup AND
+                // Settings > Backup > Import) feel identical.
+                OutlinedButton(
+                    onClick = onScanQr,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text("Scan QR from Emergency Kit")
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val normalized = skInput.trim()
+                        .removePrefix(SECRET_KEY_HUMAN_PREFIX)
+                        .removePrefix(SECRET_KEY_HUMAN_PREFIX.lowercase())
+                        .replace("-", "")
+                        .uppercase()
+                    if (normalized.length != 26) {
+                        localError = "Expected 26 characters of the Secret Key (after stripping dashes)."
+                        return@Button
+                    }
+                    val asUri = parseEmergencyKitQr(skInput.trim())
+                    val canonical = when (asUri) {
+                        is QrParseResult.Ok -> asUri.canonicalSk
+                        QrParseResult.NotEmergencyKit -> normalized
+                        is QrParseResult.WrongVersion -> {
+                            localError = "Emergency Kit version ${asUri.seenVer} is not supported by this build."
+                            return@Button
+                        }
+                        QrParseResult.Malformed -> {
+                            localError = "Couldn't read the Secret Key. Check the value and try again."
+                            return@Button
+                        }
+                    }
+                    onSubmit(canonical)
+                },
+                enabled = skInput.isNotBlank(),
+            ) { Text("Decrypt & Import") }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) {
+                Text("Cancel")
+            }
+        },
     )
 }
 

@@ -22,6 +22,11 @@ import com.onekey.core.security.KEYSTORE_ALIAS_V2
 import com.onekey.core.security.KdfMigrator
 import com.onekey.core.security.KdfParams
 import com.onekey.core.security.KdfPreset
+import com.onekey.core.security.SP_SECRET_KEY_ENABLED
+import com.onekey.core.security.SP_SECRET_KEY_WRAPPED
+import com.onekey.core.security.SP_SK_ACTIVE_ALIAS_VERSION
+import com.onekey.core.security.SecretKeyHolder
+import com.onekey.core.security.SecretKeyKeystoreWrapper
 import com.onekey.core.security.VaultKeyHolder
 import com.onekey.core.security.VaultVersionTracker
 import com.onekey.feature.sync.domain.SyncEngine
@@ -51,6 +56,19 @@ private const val SP_KEYSTORE_UPGRADED = "ks_upgraded"
 private const val SP_WRAPPED_KEY_CT_V2 = "wrapped_key_ct_v2"
 private const val SP_WRAPPED_KEY_IV_V2 = "wrapped_key_iv_v2"
 
+/**
+ * SharedPreferences boolean key set when the user explicitly opts out of the
+ * Secret Key feature. Read by the Settings > Secret Key screen to render the
+ * "you opted out" surface; cleared on every successful Enable.
+ *
+ * The constant lives here (next to the rest of the auth SP keys) but the
+ * Settings VM also references it via its own internal constant; both names
+ * MUST resolve to the same on-disk string ("sk_opted_out") or the read/write
+ * sides disagree. The SecretKeySettingsViewModel.SP_SK_OPTED_OUT companion
+ * pins the canonical name.
+ */
+private const val SP_SK_OPTED_OUT = "sk_opted_out"
+
 // ── Legacy DataStore keys - read-only, used only during the one-time migration ──
 
 private val DS_SETUP_COMPLETE    = booleanPreferencesKey(SP_SETUP_COMPLETE)
@@ -78,6 +96,14 @@ class AuthRepositoryImpl @Inject constructor(
     private val vaultVersionTracker: VaultVersionTracker,
     private val syncEngine: SyncEngine,
     private val kdfMigrator: KdfMigrator,
+    // Secret Key wrapper and holder. The wrapper owns the on-disk
+    // wrapped-SK blob via the existing `auth` EncryptedSharedPreferences
+    // namespace; the holder owns the in-memory plaintext that lives only
+    // while the vault is unlocked. Both are no-ops on vaults where the
+    // SK feature has never been enabled (the unlock path branches on
+    // SP_SECRET_KEY_ENABLED).
+    private val secretKeyWrapper: SecretKeyKeystoreWrapper,
+    private val secretKeyHolder: SecretKeyHolder,
     @ApplicationScope appScope: CoroutineScope,
 ) : AuthRepository {
 
@@ -231,6 +257,162 @@ class AuthRepositoryImpl @Inject constructor(
             keyHolder.setKey(vaultKey)
         }
 
+    override suspend fun setupMasterPasswordWithSecretKey(
+        password: CharArray,
+        secretKey: ByteArray,
+    ): AppResult<Unit> = runCatchingResult {
+        migrationComplete.await()
+        require(secretKey.size == SecretKeyHolder.SECRET_KEY_RAW_LENGTH) {
+            "Secret Key must be ${SecretKeyHolder.SECRET_KEY_RAW_LENGTH} bytes, was ${secretKey.size}"
+        }
+
+        // Vault key derivation is unchanged - the SK only mixes into the
+        // verifier, not the vault key wrap. The wrap path stays compatible
+        // with V4 sync backups and the legacy unwrap path.
+        val vaultSalt = crypto.generateSalt()
+        val vaultKey = crypto.deriveKeyFromPassword(password, vaultSalt)
+        val keystoreKey = crypto.getOrCreateLegacyKeystoreKey()
+        val wrapped = crypto.wrapKey(vaultKey, keystoreKey)
+
+        // Verifier IS SK-aware. K_verifier = Argon2id(MP || SK, salt, Standard
+        // params). New installs land on Argon2id Standard which uses the
+        // KDF_ARGON2ID legacy code in the version int - the SK feature gates
+        // off SP_SECRET_KEY_ENABLED rather than off a new KDF version code,
+        // so existing recovery and migration paths stay valid (the SK status
+        // is a separate dimension from the KDF version dimension).
+        val verifierSalt = crypto.generateSalt()
+        val verifierKey = crypto.deriveKeyFromPasswordWithSecretKeyArgon2id(
+            password = password,
+            secretKey = secretKey,
+            salt = verifierSalt,
+            params = KdfPreset.STANDARD.toKdfParams(),
+        )
+        val verifier = crypto.encryptString("VALID", verifierKey)
+
+        // Wrap the SK under a fresh Keystore alias (v1, this being the
+        // first SK ever installed on this device) BEFORE committing the
+        // active config. If the wrap fails (keystore error, OOM, etc.)
+        // we abort before any SP write so the user can retry.
+        val skAliasVersion = 1
+        val wrappedSkBlob = secretKeyWrapper.wrap(secretKey, skAliasVersion)
+
+        // Single edit().commit() so setup-complete, vault key wrap, verifier,
+        // and SK enabled state all land atomically. A crash between
+        // individual writes would leave the vault in an inconsistent state
+        // where (e.g.) SP_SETUP_COMPLETE is true but the verifier blob is
+        // missing - bricking the next unlock attempt.
+        authPrefs.edit().apply {
+            putBoolean(SP_SETUP_COMPLETE, true)
+            putString(SP_SALT, vaultSalt.encodeBase64())
+            putString(SP_WRAPPED_KEY_CT, wrapped.ciphertext.encodeBase64())
+            putString(SP_WRAPPED_KEY_IV, wrapped.iv.encodeBase64())
+            putString(SP_PASSWORD_VERIFIER, encodeVerifier(verifierSalt, verifier))
+            putInt(SP_KDF_VERSION, KDF_ARGON2ID)
+            putBoolean(SP_SECRET_KEY_ENABLED, true)
+            putString(SP_SECRET_KEY_WRAPPED, wrappedSkBlob)
+            putInt(SP_SK_ACTIVE_ALIAS_VERSION, skAliasVersion)
+        }.commit()
+
+        password.fill(' ')
+        keyHolder.setKey(vaultKey)
+        // Install the SK into the in-memory holder so subsequent reads
+        // (Emergency Kit PDF render, V5 backup writes) can call
+        // `holder.withBytes { sk -> ... }` for the duration of this
+        // unlocked session. The holder copies its input, so the caller's
+        // array is independent.
+        secretKeyHolder.setBytes(secretKey)
+    }
+
+    override suspend fun setupMasterPasswordOptingOutOfSecretKey(
+        password: CharArray,
+    ): AppResult<Unit> {
+        // Delegate to the regular MP-only setup. setupMasterPassword writes
+        // SETUP_COMPLETE, salt, wrapped vault key, and verifier in one commit;
+        // a separate commit stamps the opt-out flag.
+        val result = setupMasterPassword(password)
+        if (result is AppResult.Success) {
+            // We do NOT touch SP_SECRET_KEY_ENABLED (left at its default false).
+            // sk_opted_out is metadata-only - it controls the Settings screen
+            // "you opted out" surface and nothing else. A future Enable from
+            // Settings clears this flag (SecretKeySettingsViewModel.enable
+            // already does the remove() in its post-success commit).
+            authPrefs.edit().putBoolean(SP_SK_OPTED_OUT, true).commit()
+        }
+        return result
+    }
+
+    override suspend fun setupWithSecretKeyFromBackup(
+        password: CharArray,
+        secretKey: ByteArray,
+    ): AppResult<Unit> = runCatchingResult {
+        migrationComplete.await()
+        require(secretKey.size == SecretKeyHolder.SECRET_KEY_RAW_LENGTH) {
+            "Secret Key must be ${SecretKeyHolder.SECRET_KEY_RAW_LENGTH} bytes, was ${secretKey.size}"
+        }
+
+        // Vault key derivation. The vault key wrap is identical to
+        // setupMasterPasswordWithSecretKey - SK does not mix into the wrap
+        // path, only the verifier. We MUST take the wrap step here (not via
+        // setupMasterPassword) so the salt, wrapped key, and verifier are
+        // all committed in a single edit() - the regular setupMasterPassword
+        // would write its own MP-only verifier that the SK-aware unlock path
+        // would then fail to validate against.
+        val vaultSalt = crypto.generateSalt()
+        val vaultKey = crypto.deriveKeyFromPassword(password, vaultSalt)
+        val keystoreKey = crypto.getOrCreateLegacyKeystoreKey()
+        val wrapped = crypto.wrapKey(vaultKey, keystoreKey)
+
+        // SK-aware verifier derivation under Argon2id Standard, matching the
+        // shape produced by setupMasterPasswordWithSecretKey. The backup's
+        // own KDF params have already been used to DECRYPT the backup file;
+        // those params do not need to match this device's verifier params -
+        // the verifier is local to this device.
+        val verifierSalt = crypto.generateSalt()
+        val verifierKey = crypto.deriveKeyFromPasswordWithSecretKeyArgon2id(
+            password = password,
+            secretKey = secretKey,
+            salt = verifierSalt,
+            params = KdfPreset.STANDARD.toKdfParams(),
+        )
+        val verifier = crypto.encryptString("VALID", verifierKey)
+
+        // Wrap the SK under a fresh local Keystore alias (v1, this being
+        // the first SK ever installed on THIS device for THIS vault;
+        // the source kit's original alias version is irrelevant - what
+        // matters is the local generation counter). Mirrors the
+        // setupMasterPasswordWithSecretKey contract: a wrap failure
+        // aborts BEFORE any SP write so a partial state cannot survive.
+        val skAliasVersion = 1
+        val wrappedSkBlob = secretKeyWrapper.wrap(secretKey, skAliasVersion)
+
+        // Single edit().commit() so SETUP_COMPLETE, vault key wrap,
+        // verifier, KDF version, SK flag, and wrapped SK blob all land
+        // atomically. Process death between writes would otherwise brick
+        // the next unlock.
+        authPrefs.edit().apply {
+            putBoolean(SP_SETUP_COMPLETE, true)
+            putString(SP_SALT, vaultSalt.encodeBase64())
+            putString(SP_WRAPPED_KEY_CT, wrapped.ciphertext.encodeBase64())
+            putString(SP_WRAPPED_KEY_IV, wrapped.iv.encodeBase64())
+            putString(SP_PASSWORD_VERIFIER, encodeVerifier(verifierSalt, verifier))
+            putInt(SP_KDF_VERSION, KDF_ARGON2ID)
+            putBoolean(SP_SECRET_KEY_ENABLED, true)
+            putString(SP_SECRET_KEY_WRAPPED, wrappedSkBlob)
+            putInt(SP_SK_ACTIVE_ALIAS_VERSION, skAliasVersion)
+            // The user just demonstrated they have the SK from the kit; a
+            // previously-set opt-out flag (from a different vault on the
+            // same device) would now be stale.
+            remove(SP_SK_OPTED_OUT)
+        }.commit()
+
+        password.fill(' ')
+        keyHolder.setKey(vaultKey)
+        // Install the SK into the in-memory holder so the unlocked session
+        // can write fresh V5 backups and render the Emergency Kit without a
+        // re-unlock.
+        secretKeyHolder.setBytes(secretKey)
+    }
+
     // ── Unlock ────────────────────────────────────────────────────────────────
 
     override suspend fun unlockWithPassword(password: CharArray): AppResult<Unit> =
@@ -251,6 +433,14 @@ class AuthRepositoryImpl @Inject constructor(
 
             val vaultKey = unwrapStoredKey()
             keyHolder.setKey(vaultKey)
+
+            // Install the Secret Key into the in-memory holder when the
+            // feature is enabled, so the rest of the unlocked session can
+            // read it via `secretKeyHolder.withBytes { ... }` for V5
+            // backup writes / Emergency Kit renders. We do this AFTER
+            // verifyMasterPassword has already succeeded so the wrong-
+            // password path never installs the SK.
+            loadSecretKeyIntoHolderIfEnabled()
 
             if (kdfVersion == KDF_PBKDF2 && passwordForMigration != null) {
                 try {
@@ -273,14 +463,54 @@ class AuthRepositoryImpl @Inject constructor(
             // immediately and the sync runs in the background. The engine reads
             // sync preferences itself - if disabled or no location set, the
             // passwordForSync array is zeroed and the engine returns without
-            // launching work. Master-password material never crosses this boundary
-            // as raw bytes; the engine derives a one-shot backup key internally.
-            syncEngine.maybeTriggerSync(passwordForSync)
+            // launching work. Master-password material never crosses this
+            // boundary as raw bytes; the engine derives a one-shot backup key
+            // internally.
+            //
+            // When Secret Key is enabled on this device, also forward a fresh
+            // defensive copy of the unwrapped SK bytes alongside the password.
+            // The engine consumes (zeros) both buffers in its own finally; this
+            // path does NOT zero the copy here. The wrapper.unwrap() above
+            // returns a fresh array each call, so passing it through directly
+            // would mean the engine owns OUR only copy - safe but slightly
+            // surprising. The .copyOf() makes the ownership boundary explicit:
+            // the engine gets its own array to zero, and any future caller
+            // that wants to re-read the SK has to go back to the wrapper.
+            val skForSync: ByteArray? = if (authPrefs.getBoolean(SP_SECRET_KEY_ENABLED, false)) {
+                secretKeyWrapper.unwrap()
+            } else {
+                null
+            }
+            syncEngine.maybeTriggerSync(passwordForSync, skForSync)
         }
 
     override suspend fun unlockWithBiometric(): AppResult<Unit> = runCatchingResult {
         migrationComplete.await()
         keyHolder.setKey(unwrapStoredKey())
+        loadSecretKeyIntoHolderIfEnabled()
+    }
+
+    /**
+     * Reads the active Secret Key from the wrapper and installs it into the
+     * in-memory holder. No-op when the SK feature is disabled on this
+     * device. Called after a successful biometric or PIN unlock so the
+     * unlocked session can render the Emergency Kit / write V5 backups
+     * without the user having retyped their master password.
+     *
+     * The unwrapped bytes are zeroed in finally after the holder has copied
+     * them. The wrapper returns null when SP_SECRET_KEY_WRAPPED is absent
+     * (which is also the case when SP_SECRET_KEY_ENABLED is false), so the
+     * sk_enabled check below is the source of truth - we don't trust an
+     * orphan wrapped blob without the enable flag.
+     */
+    private fun loadSecretKeyIntoHolderIfEnabled() {
+        if (!authPrefs.getBoolean(SP_SECRET_KEY_ENABLED, false)) return
+        val skBytes = secretKeyWrapper.unwrap() ?: return
+        try {
+            secretKeyHolder.setBytes(skBytes)
+        } finally {
+            skBytes.fill(0)
+        }
     }
 
     // ── Change password ───────────────────────────────────────────────────────
@@ -300,19 +530,52 @@ class AuthRepositoryImpl @Inject constructor(
             }
 
             val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
-            verifyMasterPassword(oldPassword, kdfVersion)
+            // The unwrapped Secret Key (if enabled) is held only for the
+            // duration of this method and zeroed in the finally block,
+            // including the wrong-old-password path inside
+            // verifyMasterPassword, the Argon2id throw, and the SP commit
+            // throw. Without this an SK-enabled user whose verify path
+            // mixes SK into the Argon2id input would have changePassword
+            // write a verifier derived from MP alone, and the next
+            // unlock (which DOES read SK from Keystore and mixes it in)
+            // would fail to match - permanent lockout.
+            var skBytes: ByteArray? = null
+            try {
+                verifyMasterPassword(oldPassword, kdfVersion)
 
-            val newVerifierSalt = crypto.generateSalt()
-            val newVerifierKey = crypto.deriveKeyFromPasswordArgon2id(newPassword, newVerifierSalt)
-            val newVerifier = crypto.encryptString("VALID", newVerifierKey)
-            newPassword.fill(' ')
+                // Preserve the user's active KDF preset across password
+                // change. The pre-SK implementation downgraded every user
+                // to the legacy KDF_ARGON2ID version int (Standard params)
+                // regardless of their preset; that silently weakened
+                // Hardened / Maximum users. Now we keep their version int
+                // and the matching params. The only path that upgrades the
+                // version int is the legacy PBKDF2 -> Argon2id silent
+                // migration, kept here for parity with pre-SK behaviour.
+                val newKdfVersion = if (kdfVersion == KDF_PBKDF2) KDF_ARGON2ID else kdfVersion
 
-            authPrefs.edit().apply {
-                putString(SP_PASSWORD_VERIFIER, encodeVerifier(newVerifierSalt, newVerifier))
-                putInt(SP_KDF_VERSION, KDF_ARGON2ID)
-            }.commit()
+                val skEnabled = authPrefs.getBoolean(SP_SECRET_KEY_ENABLED, false)
+                skBytes = if (skEnabled) secretKeyWrapper.unwrap() else null
 
-            vaultVersionTracker.increment()
+                val newVerifierSalt = crypto.generateSalt()
+                val newVerifierKey = deriveVerifierKey(
+                    password = newPassword,
+                    salt = newVerifierSalt,
+                    kdfVersion = newKdfVersion,
+                    secretKey = skBytes,
+                )
+                val newVerifier = crypto.encryptString("VALID", newVerifierKey)
+
+                authPrefs.edit().apply {
+                    putString(SP_PASSWORD_VERIFIER, encodeVerifier(newVerifierSalt, newVerifier))
+                    putInt(SP_KDF_VERSION, newKdfVersion)
+                }.commit()
+
+                vaultVersionTracker.increment()
+            } finally {
+                skBytes?.fill(0)
+                oldPassword.fill(' ')
+                newPassword.fill(' ')
+            }
         }
 
     // ── PIN ───────────────────────────────────────────────────────────────────
@@ -352,6 +615,7 @@ class AuthRepositoryImpl @Inject constructor(
         // pin is zeroed inside verifyPinInternal.
 
         keyHolder.setKey(unwrapStoredKey())
+        loadSecretKeyIntoHolderIfEnabled()
 
         val pinKdfVersion = authPrefs.getInt(SP_PIN_KDF_VERSION, KDF_PBKDF2)
         if (pinKdfVersion == KDF_PBKDF2) {
@@ -408,7 +672,18 @@ class AuthRepositoryImpl @Inject constructor(
         val verCt   = parts[1].decodeBase64()
         val verIv   = parts[2].decodeBase64()
 
-        val verifierKey = deriveVerifierKey(password, verSalt, kdfVersion)
+        // Resolve the active Secret Key ONCE. When SP_SECRET_KEY_ENABLED is
+        // true the unwrapped 16 bytes mix into Argon2id below; the raw bytes
+        // are zeroed in a finally block immediately after the verifier key
+        // has been derived. When the SK feature is not enabled the
+        // derivation path is byte-identical to the pre-SK behaviour.
+        val skEnabled = authPrefs.getBoolean(SP_SECRET_KEY_ENABLED, false)
+        val skBytes: ByteArray? = if (skEnabled) secretKeyWrapper.unwrap() else null
+        val verifierKey = try {
+            deriveVerifierKey(password, verSalt, kdfVersion, skBytes)
+        } finally {
+            skBytes?.fill(0)
+        }
         password.fill(' ')
 
         val plainVerifier = try {
@@ -420,35 +695,55 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Derives the verifier key for the stored [kdfVersion] code. Recognises
-     * both the legacy two-value encoding (0=PBKDF2, 1=Argon2id Standard) and
-     * the v3 explicit-preset encoding (30..34). For [KDF_V3_CUSTOM] the
-     * (m, t) parameters are read from the SP_KDF_CUSTOM_M/T side-table; if
-     * those are absent we fall back to Standard params and log - this
-     * matches the silent-migration ethos of the rest of this repository.
+     * Derives the verifier key for the stored [kdfVersion] code, optionally
+     * mixing in the active Secret Key. Recognises both the legacy two-value
+     * encoding (0=PBKDF2, 1=Argon2id Standard) and the v3 explicit-preset
+     * encoding (30..34). For [KDF_V3_CUSTOM] the (m, t) parameters are read
+     * from the SP_KDF_CUSTOM_M/T side-table; if those are absent we fall
+     * back to Standard params and log - this matches the silent-migration
+     * ethos of the rest of this repository.
+     *
+     * When [secretKey] is non-null it is mixed into the Argon2id input via
+     * [CryptoManager.deriveKeyFromPasswordWithSecretKeyArgon2id]. The
+     * caller owns the array lifetime and zeros it after this returns.
+     * Passing a non-null [secretKey] with [KDF_LEGACY_PBKDF2] is rejected
+     * because the SK feature only exists on Argon2id-era verifiers.
      */
     private fun deriveVerifierKey(
         password: CharArray,
         salt: ByteArray,
         kdfVersion: Int,
-    ): javax.crypto.SecretKey = when (kdfVersion) {
-        KDF_LEGACY_PBKDF2 -> crypto.deriveKeyFromPassword(password, salt)
-        KDF_LEGACY_ARGON2ID, KDF_V3_STANDARD ->
-            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.STANDARD.toKdfParams())
-        KDF_V3_STANDARD_PLUS ->
-            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.STANDARD_PLUS.toKdfParams())
-        KDF_V3_HARDENED ->
-            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.HARDENED.toKdfParams())
-        KDF_V3_MAXIMUM ->
-            crypto.deriveKeyFromPasswordArgon2id(password, salt, KdfPreset.MAXIMUM.toKdfParams())
+        secretKey: ByteArray? = null,
+    ): javax.crypto.SecretKey {
+        if (kdfVersion == KDF_LEGACY_PBKDF2) {
+            check(secretKey == null) {
+                "Secret Key cannot mix into PBKDF2 verifier; complete the silent verifier " +
+                    "migration before enabling Secret Key."
+            }
+            return crypto.deriveKeyFromPassword(password, salt)
+        }
+        val params = paramsForKdfVersion(kdfVersion)
+        return if (secretKey != null) {
+            crypto.deriveKeyFromPasswordWithSecretKeyArgon2id(
+                password = password,
+                secretKey = secretKey,
+                salt = salt,
+                params = params,
+            )
+        } else {
+            crypto.deriveKeyFromPasswordArgon2id(password, salt, params)
+        }
+    }
+
+    private fun paramsForKdfVersion(kdfVersion: Int): KdfParams = when (kdfVersion) {
+        KDF_LEGACY_ARGON2ID, KDF_V3_STANDARD -> KdfPreset.STANDARD.toKdfParams()
+        KDF_V3_STANDARD_PLUS -> KdfPreset.STANDARD_PLUS.toKdfParams()
+        KDF_V3_HARDENED -> KdfPreset.HARDENED.toKdfParams()
+        KDF_V3_MAXIMUM -> KdfPreset.MAXIMUM.toKdfParams()
         KDF_V3_CUSTOM -> {
             val mMiB = authPrefs.getInt("kdf_custom_m", 64)
             val tCost = authPrefs.getInt("kdf_custom_t", 3)
-            crypto.deriveKeyFromPasswordArgon2id(
-                password,
-                salt,
-                KdfParams(mCostKiB = mMiB * 1024, tCost = tCost, parallelism = 1),
-            )
+            KdfParams(mCostKiB = mMiB * 1024, tCost = tCost, parallelism = 1)
         }
         else -> error("Unknown KDF version: $kdfVersion")
     }
@@ -555,13 +850,29 @@ class AuthRepositoryImpl @Inject constructor(
     }
 
     override suspend fun resetVault(): AppResult<Unit> = runCatchingResult {
+        // Secret Key cleanup BEFORE the catch-all auth-prefs clear so the
+        // wrapper's clearAll() can attempt the Keystore alias delete with
+        // the SP entries still visible (the deletion path is the same
+        // either way; this ordering just makes the runCatching no-op
+        // for the SP delete inside clearAll). `crypto.deleteAllVaultKeys`
+        // now also drops the SK Keystore alias as a safety net, so a
+        // failure in `secretKeyWrapper.clearAll()` still leaves no SK
+        // material behind.
+        runCatching { secretKeyWrapper.clearAll() }
+        secretKeyHolder.clear()
+
         crypto.deleteAllVaultKeys()
         authPrefs.edit().clear().commit()
         dataStore.edit { it.clear() }
         keyHolder.lock()
     }
 
-    override suspend fun lock(): AppResult<Unit> = runCatchingResult { keyHolder.lock() }
+    override suspend fun lock(): AppResult<Unit> = runCatchingResult {
+        // Drop the in-memory SK alongside the vault key. The on-disk wrapped
+        // blob persists - the next unlock will re-read and re-install it.
+        secretKeyHolder.clear()
+        keyHolder.lock()
+    }
 
     override fun isUnlocked(): Flow<Boolean> = keyHolder.isUnlocked
 
@@ -623,7 +934,51 @@ class AuthRepositoryImpl @Inject constructor(
         )
     }.distinctUntilChanged()
 
+    override suspend fun activeKdfParams(): KdfParams {
+        migrationComplete.await()
+        val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
+        // PBKDF2 has no Argon2id parameter shape - surface Standard so the
+        // V5 export branch always has well-formed (m, t, p). The actual
+        // unlock path stays on PBKDF2 read until the silent migration fires.
+        if (kdfVersion == KDF_LEGACY_PBKDF2) return KdfPreset.STANDARD.toKdfParams()
+        return paramsForKdfVersion(kdfVersion)
+    }
+
+    override suspend fun isSecretKeyEnabled(): Boolean {
+        migrationComplete.await()
+        return authPrefs.getBoolean(SP_SECRET_KEY_ENABLED, false)
+    }
+
+    override fun observeIsSecretKeyEnabled(): Flow<Boolean> = flow {
+        // Mirror observeActiveKdfPreset: gate cold-start emission on the
+        // one-time DataStore -> EncryptedSharedPreferences migration so the
+        // very first emit reflects the post-migrated truth rather than the
+        // pre-migrated default. The SharedPreferences listener fires for
+        // every Enable / Disable / Rotate transition because those flows
+        // commit the new value via the same authPrefs handle.
+        migrationComplete.await()
+        emitAll(authPrefs.watchBoolean(SP_SECRET_KEY_ENABLED, false))
+    }.distinctUntilChanged()
+
+    override fun observeSecretKeyOptedOut(): Flow<Boolean> = flow {
+        // Symmetric with observeIsSecretKeyEnabled. Drives the Settings row
+        // subtitle ("Off. Opted out at vault creation - tap to enable.")
+        // when the user picked opt-out during onboarding or disabled SK
+        // later. The setting is cleared by every successful Enable so
+        // observers naturally re-render on the next state transition.
+        migrationComplete.await()
+        emitAll(authPrefs.watchBoolean(SP_SK_OPTED_OUT, false))
+    }.distinctUntilChanged()
+
     override suspend fun clearAll(): AppResult<Unit> = runCatchingResult {
+        // Mirror resetVault: drop in-memory SK and wipe the wrapper's
+        // on-disk + Keystore state before clearing authPrefs. The SP-level
+        // `clear()` below would already drop the wrapped-blob row, but
+        // calling the wrapper's helper also targets the Keystore alias
+        // which the SP wipe cannot reach.
+        runCatching { secretKeyWrapper.clearAll() }
+        secretKeyHolder.clear()
+
         authPrefs.edit().clear().commit()
         dataStore.edit { it.clear() }
         keyHolder.lock()

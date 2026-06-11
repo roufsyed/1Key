@@ -38,6 +38,7 @@ fun SettingsSecurityScreen(
     onSetupPin: () -> Unit,
     onChangePassword: () -> Unit,
     onEncryptionStrength: () -> Unit,
+    onSecretKey: () -> Unit,
     settingsVm: SettingsViewModel = hiltViewModel(),
 ) {
     val isBiometricEnabled by settingsVm.isBiometricEnabled.collectAsStateWithLifecycle()
@@ -51,6 +52,9 @@ fun SettingsSecurityScreen(
     val hwIsolation by settingsVm.hardwareKeyIsolation.collectAsStateWithLifecycle()
     val activeKdfPreset by settingsVm.activeKdfPreset.collectAsStateWithLifecycle()
     val activeKdfCustomParams by settingsVm.activeKdfCustomParams.collectAsStateWithLifecycle()
+    val isSecretKeyOn by settingsVm.isSecretKeyOn.collectAsStateWithLifecycle()
+    val wasSecretKeyOptedOut by settingsVm.wasSecretKeyOptedOut.collectAsStateWithLifecycle()
+    val secretKeyGeneratedAtMs by settingsVm.secretKeyGeneratedAt.collectAsStateWithLifecycle()
 
     val canUseBiometric = rememberCanUseBiometric()
     val highlightKey by settingsVm.highlightKey.collectAsStateWithLifecycle()
@@ -65,6 +69,12 @@ fun SettingsSecurityScreen(
     var biometricPasswordVisible by remember { mutableStateOf(false) }
     var biometricPasswordError by remember { mutableStateOf(false) }
     var biometricAttemptsRemaining by remember { mutableIntStateOf(3) }
+    // True from the moment the user taps "Enable Biometric" until the
+    // ViewModel emits BiometricEnabled, BiometricConfirmFailed, or
+    // VaultLocked. Drives the in-button spinner and disables dismiss so
+    // the user cannot exit the dialog mid-verify (which would leak a
+    // pending biometric-enable through to the next composition).
+    var isVerifyingBiometric by remember { mutableStateOf(false) }
 
     var showRemovePinDialog by remember { mutableStateOf(false) }
     val removePinPasswordState = rememberSecurePasswordFieldState()
@@ -99,10 +109,12 @@ fun SettingsSecurityScreen(
                     biometricPasswordVisible = false
                     biometricPasswordError = false
                     biometricAttemptsRemaining = 3
+                    isVerifyingBiometric = false
                 }
                 is SettingsEvent.BiometricConfirmFailed -> {
                     biometricPasswordError = true
                     biometricAttemptsRemaining = event.attemptsRemaining
+                    isVerifyingBiometric = false
                 }
                 SettingsEvent.VaultLocked -> {
                     showBiometricConfirmDialog = false
@@ -110,6 +122,7 @@ fun SettingsSecurityScreen(
                     biometricPasswordVisible = false
                     biometricPasswordError = false
                     biometricAttemptsRemaining = 3
+                    isVerifyingBiometric = false
                     showRemovePinDialog = false
                     removePinPasswordState.clear()
                     removePinPasswordVisible = false
@@ -440,6 +453,45 @@ fun SettingsSecurityScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            SectionHeader("Secret Key")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                HighlightableRow(
+                    isHighlighted = highlightKey == SettingsHighlightKeys.SECRET_KEY,
+                    onHighlightConsumed = settingsVm::clearHighlight,
+                ) {
+                    ListItem(
+                        headlineContent = { Text("Secret Key") },
+                        supportingContent = {
+                            // Three locked-design subtitle shapes, decided
+                            // by (isSecretKeyOn, wasSecretKeyOptedOut,
+                            // generationDateMs). The third case "Off and
+                            // not opted out" covers users who have not yet
+                            // engaged with SK (e.g. existing vaults pre-SK).
+                            Text(
+                                when {
+                                    isSecretKeyOn -> {
+                                        val ts = secretKeyGeneratedAtMs
+                                        if (ts != null) {
+                                            "On. Generated ${formatGenerationDate(ts)}. Tap for options."
+                                        } else {
+                                            "On. Tap for options."
+                                        }
+                                    }
+                                    wasSecretKeyOptedOut ->
+                                        "Off. Opted out at vault creation - tap to enable."
+                                    else ->
+                                        "Off. Tap to enable."
+                                }
+                            )
+                        },
+                        leadingContent = { Icon(Icons.Default.VpnKey, contentDescription = null) },
+                        trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+                        modifier = Modifier.clickable(onClick = onSecretKey),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
             SectionHeader("Hardware key isolation")
             Card(modifier = Modifier.fillMaxWidth()) {
                 ListItem(
@@ -486,10 +538,15 @@ fun SettingsSecurityScreen(
     if (showBiometricConfirmDialog) {
         LockAwareDialog(
             onDismissRequest = {
-                showBiometricConfirmDialog = false
-                biometricPasswordVisible = false
-                biometricPasswordError = false
-                biometricAttemptsRemaining = 3
+                // Block dismiss while the verification call is in flight
+                // so the user cannot exit the dialog mid-Argon2id derive
+                // and end up with biometric half-enabled.
+                if (!isVerifyingBiometric) {
+                    showBiometricConfirmDialog = false
+                    biometricPasswordVisible = false
+                    biometricPasswordError = false
+                    biometricAttemptsRemaining = 3
+                }
             },
             icon = { Icon(Icons.Default.Fingerprint, contentDescription = null) },
             title = { Text("Confirm Master Password") },
@@ -507,6 +564,7 @@ fun SettingsSecurityScreen(
                     )
                     SecurePasswordTextField(
                         state = biometricPasswordState,
+                        enabled = !isVerifyingBiometric,
                         onValueChanged = { if (biometricPasswordError) biometricPasswordError = false },
                         label = { Text("Master password") },
                         isError = biometricPasswordError,
@@ -538,10 +596,28 @@ fun SettingsSecurityScreen(
             confirmButton = {
                 Button(
                     onClick = {
+                        isVerifyingBiometric = true
                         settingsVm.enableBiometricWithVerification(biometricPasswordState.consume())
                     },
-                    enabled = !biometricPasswordState.isEmpty,
-                ) { Text("Enable Biometric") }
+                    enabled = !isVerifyingBiometric && !biometricPasswordState.isEmpty,
+                    // Stable lower bound so the button does not shrink
+                    // when the "Enable Biometric" label is swapped for an
+                    // 18.dp spinner.
+                    modifier = Modifier.widthIn(min = 160.dp),
+                ) {
+                    // Spinner replaces the label while verification runs.
+                    // Argon2id derivation can take 0.3-4 s; without the
+                    // spinner the dialog looks frozen.
+                    if (isVerifyingBiometric) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Text("Enable Biometric")
+                    }
+                }
             },
             dismissButton = {
                 TextButton(
@@ -550,7 +626,8 @@ fun SettingsSecurityScreen(
                         biometricPasswordVisible = false
                         biometricPasswordError = false
                         biometricAttemptsRemaining = 3
-                    }
+                    },
+                    enabled = !isVerifyingBiometric,
                 ) { Text("Cancel") }
             },
         )
@@ -903,4 +980,21 @@ fun SettingsSecurityScreen(
             },
         )
     }
+}
+
+/**
+ * Formats a wall-clock ms-epoch timestamp as a short user-facing date for
+ * the Secret Key subtitle ("Generated <date>"). The pattern matches the
+ * locale's medium date style so the row reads naturally on every device
+ * (e.g. "11 Jun 2026" in en-GB, "Jun 11, 2026" in en-US).
+ *
+ * Wall-clock is fine here - the field is a UI hint, not a security signal;
+ * a device-time backjump can produce a future-looking date but the SK
+ * itself is unaffected. Lives at file scope (not inside the Composable)
+ * so it can be reused without recomputing the DateFormat on every
+ * recomposition.
+ */
+private fun formatGenerationDate(timestampMs: Long): String {
+    val format = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM)
+    return format.format(java.util.Date(timestampMs))
 }

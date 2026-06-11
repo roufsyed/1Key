@@ -7,6 +7,7 @@ import com.onekey.core.domain.model.Credential
 import com.onekey.core.domain.model.runCatchingResult
 import com.onekey.core.domain.usecase.ExportFormat
 import com.onekey.core.security.CryptoManager
+import com.onekey.core.security.SecretKeyHolder
 import com.onekey.feature.twofa.domain.OtpAuthUriBuilder
 import java.io.File
 import java.io.FileWriter
@@ -15,6 +16,13 @@ import javax.inject.Inject
 
 class VaultExporterImpl @Inject constructor(
     private val crypto: CryptoManager,
+    // Direct injection of the in-memory SK holder. The holder is a
+    // @Singleton with no dependency on AuthRepository, so wiring it here
+    // does NOT create a Hilt cycle (in contrast to injecting
+    // AuthRepository, which loops through SyncEngine -> VaultExporter ->
+    // AuthRepository). The active KDF params and the SK-enabled flag
+    // arrive in [EncryptedExportContext] from the use case layer.
+    private val secretKeyHolder: SecretKeyHolder,
 ) : VaultExporter {
 
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -35,6 +43,7 @@ class VaultExporterImpl @Inject constructor(
         password: CharArray,
         format: ExportFormat,
         path: String,
+        context: EncryptedExportContext,
         createdAtMs: Long,
         vaultVersion: Int,
     ): AppResult<Unit> = runCatchingResult {
@@ -42,7 +51,43 @@ class VaultExporterImpl @Inject constructor(
             ExportFormat.JSON -> buildJsonString(credentials).toByteArray(Charsets.UTF_8)
             ExportFormat.CSV -> buildCsvString(credentials).toByteArray(Charsets.UTF_8)
         }
-        File(path).writeBytes(BackupEncryption.encrypt(plaintext, password, format, crypto, createdAtMs, vaultVersion))
+        // V5 envelopes embed the active KDF params verbatim so a restore on
+        // a device whose preset has drifted (e.g. user lowered strength
+        // after the backup was taken) still re-derives the same key.
+        val bytes = if (context.secretKeyEnabled && secretKeyHolder.isPresent()) {
+            // withBytes hands back a defensive copy that is zeroed in
+            // finally, so the SK lifetime is bounded to the encrypt() call.
+            // The encrypt() function does NOT zero this array (it owns its
+            // own combined-input buffer in CryptoManager and zeros that),
+            // so the holder's finally is the only zero-out we need.
+            secretKeyHolder.withBytes { sk ->
+                BackupEncryption.encrypt(
+                    plaintext = plaintext,
+                    password = password,
+                    format = format,
+                    crypto = crypto,
+                    createdAtMs = createdAtMs,
+                    vaultVersion = vaultVersion,
+                    secretKey = sk,
+                    kdfParams = context.kdfParams,
+                )
+            }
+        } else {
+            // SK off (or the unlocked session never loaded an SK into the
+            // holder). The V5 envelope is still written, FLAGS=0x00, so
+            // on-disk format is forward-compatible.
+            BackupEncryption.encrypt(
+                plaintext = plaintext,
+                password = password,
+                format = format,
+                crypto = crypto,
+                createdAtMs = createdAtMs,
+                vaultVersion = vaultVersion,
+                secretKey = null,
+                kdfParams = context.kdfParams,
+            )
+        }
+        File(path).writeBytes(bytes)
     }
 
     override fun serializeForSync(credentials: List<Credential>, format: ExportFormat): ByteArray =

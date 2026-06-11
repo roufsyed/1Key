@@ -3,6 +3,7 @@ package com.onekey.core.domain.usecase
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.repository.AuthRepository
 import com.onekey.core.domain.repository.CredentialRepository
+import com.onekey.feature.importexport.domain.EncryptedParseResult
 import com.onekey.feature.importexport.domain.ImportResult
 import com.onekey.feature.importexport.domain.VaultImporter
 import javax.inject.Inject
@@ -44,8 +45,28 @@ class SetupFromBackupUseCase @Inject constructor(
             // (or returns early before reaching it) still leaves no residue.
             passwordForParse.fill(' ')
         }
-        if (parseResult is AppResult.Error) return parseResult
-        val (parsed, failed) = (parseResult as AppResult.Success).data
+        val parsed = when (parseResult) {
+            is EncryptedParseResult.Success -> parseResult.parsed
+            is EncryptedParseResult.Failure -> return AppResult.Error(
+                parseResult.throwable,
+                parseResult.message,
+            )
+            is EncryptedParseResult.SecretKeyRequired -> {
+                // The restore-from-backup-with-SK pivot is owned by the
+                // onboarding ViewModel (Stage 7). This use case is the
+                // legacy MP-only path: surface an error so the caller can
+                // route to the SK-aware entry point instead of silently
+                // failing. The message carries the parsed header metadata
+                // so a debugger sees the export time.
+                return AppResult.Error(
+                    IllegalStateException("Secret Key required"),
+                    "This backup needs your Secret Key. " +
+                        "Backup taken at ts=${parseResult.createdAtMs}, vault v${parseResult.vaultVersion}.",
+                )
+            }
+        }
+        val failed = parsed.failed
+        val credentials = parsed.credentials
 
         // Step 2 - password is still intact here. setupMasterPassword zeros it
         // internally before returning.
@@ -53,11 +74,11 @@ class SetupFromBackupUseCase @Inject constructor(
         if (setupResult is AppResult.Error) return setupResult
 
         // Step 3 - vault is now unlocked; import credentials.
-        if (parsed.isNotEmpty()) {
-            val importResult = credentialRepository.importCredentials(parsed)
+        if (credentials.isNotEmpty()) {
+            val importResult = credentialRepository.importCredentials(credentials)
             if (importResult is AppResult.Error) return importResult
         }
 
-        return AppResult.Success(ImportResult(imported = parsed.size, skipped = emptyList(), failed = failed))
+        return AppResult.Success(ImportResult(imported = credentials.size, skipped = emptyList(), failed = failed))
     }
 }

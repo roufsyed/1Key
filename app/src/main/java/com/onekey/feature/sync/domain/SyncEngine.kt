@@ -39,8 +39,17 @@ interface SyncEngine {
      * Fire-and-forget. Reads sync gate, derives backup key if enabled, launches the
      * sync coroutine. Consumes [password]: the CharArray is zeroed in place. The
      * unlock flow returns to UI immediately.
+     *
+     * **Consumes [secretKey] when non-null:** the engine zeros the byte array
+     * inside the launched coroutine's finally block, so the unlock path can
+     * pass a fresh defensive copy of the unwrapped SK without owning the
+     * cleanup. Null when Secret Key is disabled on this device, in which
+     * case the engine writes a V4 envelope unchanged from the pre-SK
+     * behaviour. When non-null, the engine writes a V5 envelope with
+     * `FLAGS = requires_secret_key` so a new-device restore must supply
+     * the Emergency Kit alongside the master password.
      */
-    fun maybeTriggerSync(password: CharArray)
+    fun maybeTriggerSync(password: CharArray, secretKey: ByteArray? = null)
 
     /**
      * Resets `state` to `Idle`. Idempotent. No-op if the current state is
