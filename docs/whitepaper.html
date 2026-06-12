@@ -138,8 +138,8 @@
   <h1>A local-first password manager <em>for Android.</em></h1>
   <p class="lede">A technical and strategic white paper for privacy-conscious users and security-minded reviewers. Deliberately blunt about trade-offs.</p>
   <div class="doc-meta">
-    <span class="pill">v1.0</span>
-    <span>· <b>May 2026</b></span>
+    <span class="pill">v1.1</span>
+    <span>· <b>June 2026</b></span>
     <span>· 11 sections</span>
     <span>· ~28 min read</span>
   </div>
@@ -198,7 +198,7 @@
 
     <h3 id="approach-1"><span class="num">3.1</span> The vault never leaves the device</h3>
     <p>There is no server. There is no vendor backend. There is no sync protocol. The encrypted vault lives in a Room/SQLite database in the application's private storage, and the only way data leaves the device is through an explicit user-initiated export.</p>
-    <p>Confirmed in <code>app/src/main/AndroidManifest.xml</code>: the manifest declares no <code>INTERNET</code> permission. Confirmed in <code>app/build.gradle.kts</code> (lines 127–132): the ML Kit dependencies that would otherwise pull in Google's Firelog telemetry transitively are explicitly excluded via Gradle's <code>exclude(group = "com.google.android.datatransport")</code> directive. On-device inference (OCR, barcode scanning) does not need network access.</p>
+    <p>Confirmed in <code>app/src/main/AndroidManifest.xml</code>: the manifest declares <code>&lt;uses-permission android:name="android.permission.INTERNET" tools:node="remove" /&gt;</code> and the same line for <code>ACCESS_NETWORK_STATE</code>, so the merged manifest carries neither permission. Both are pulled in transitively by ML Kit's Firelog subgraph (<code>com.google.android.datatransport</code>); Gradle-level exclusion is unsafe because <code>BarcodeScanning.getClient()</code> has a static class-init reference to <code>CCTDestination</code> (see the build comment in <code>app/build.gradle.kts</code> next to the ML Kit dependencies). The classes stay in the APK so ML Kit loads, but the OS refuses every socket attempt because the permission is gone from the merged manifest. On-device inference (OCR, barcode scanning) does not need network access.</p>
     <p class="muted">A note on temporal honesty: the no-<code>INTERNET</code> property is true of current builds. Earlier APKs inherited <code>INTERNET</code> and <code>ACCESS_NETWORK_STATE</code> transitively from the same Firelog subgraph. The runtime never actually opened a socket - there was no code path that called the transport - but the permission was declared in the merged manifest. Users who want full assurance should run a build dated May 2026 or later.</p>
 
     <h3 id="approach-2"><span class="num">3.2</span> No account exists to compromise</h3>
@@ -226,68 +226,249 @@
     </dl>
 
     <h3 id="crypto-2"><span class="num">4.2</span> Master-password key derivation</h3>
-    <p>When the user sets or enters a master password, 1Key derives a key using <b>Argon2id</b> with parameters <code>m = 65,536 KiB (64 MiB), t = 3 iterations, p = 1 lane, output = 32 bytes</code>. These values match OWASP's 2023 recommendation for interactive authentication and are confirmed in <code>CryptoManager.kt</code> lines 41–44.</p>
+    <p>When the user sets or enters a master password, 1Key derives a key using <b>Argon2id</b>, the memory-hard winner of the 2015 Password Hashing Competition. The <b>default</b> parameter set is <code>m = 65,536 KiB (64 MiB), t = 3 iterations, p = 1 lane, output = 32 bytes</code> - the OWASP 2023 recommendation for interactive authentication. The derivation entry point is <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordArgon2id</code>; the OWASP defaults are surfaced through the <code>STANDARD</code> entry of <code>KdfPreset.kt</code> :: <code>KdfPreset</code>.</p>
     <p>Argon2id is memory-hard: each guess in a brute-force attack must allocate 64 MiB of RAM, which collapses the speedup an attacker can extract from GPUs or ASICs. By contrast, a PBKDF2 attack at 600,000 iterations parallelises essentially linearly across thousands of cores. The implementation uses the open-source <code>lambdapioneer/argon2kt</code> JNI wrapper, which ships prebuilt <code>.so</code> libraries for every Android ABI.</p>
     <p>The character array carrying the password is converted to UTF-8 bytes via <code>CharBuffer.encode</code> rather than <code>String.toByteArray()</code>, so the password material is never interned in the JVM string pool. The byte buffer is zeroed after use.</p>
 
     <div class="stat-row">
-      <div class="stat"><div class="k">Memory cost</div><div class="v">64 <em>MiB</em></div></div>
-      <div class="stat"><div class="k">Iterations</div><div class="v">3 <em>passes</em></div></div>
+      <div class="stat"><div class="k">Default memory</div><div class="v">64 <em>MiB</em></div></div>
+      <div class="stat"><div class="k">Default iterations</div><div class="v">3 <em>passes</em></div></div>
       <div class="stat"><div class="k">Output size</div><div class="v">32 <em>bytes</em></div></div>
+      <div class="stat"><div class="k">Parallelism</div><div class="v">1 <em>(locked)</em></div></div>
     </div>
 
-    <h3 id="crypto-3"><span class="num">4.3</span> Vault-key wrapping</h3>
-    <p>The Argon2id-derived key is <b>not</b> the key that encrypts the database. Instead, 1Key generates a 256-bit AES vault key uniformly at random and wraps it with a key stored in the Android Keystore.</p>
-    <p>The Android Keystore keeps the wrapping key inside the device's TEE - Trusted Execution Environment - or, on devices that ship one, the StrongBox secure element. The wrapping key is non-exportable: the only way to use it is to ask the Keystore to perform an operation. On Android 9+ (API level 28), 1Key sets <code>setUnlockedDeviceRequired(true)</code> on the Keystore key (<code>CryptoManager.kt</code> line 75), so the wrapping key is unusable while the device is locked. Existing installs migrate to this stronger configuration silently after the first successful unlock following the upgrade (<code>AuthRepositoryImpl.kt</code> lines 414–426).</p>
+    <p><b>User-selectable presets.</b> The 64 MiB / t=3 / p=1 tuple is the default, not the only option. Users who want to trade unlock latency for resistance to offline brute force can pick a stronger preset, or supply their own (memory, iterations) inside guard rails. The five presets are declared in <code>KdfPreset.kt</code> :: <code>KdfPreset</code>; <code>p</code> is locked to <code>1</code> on every preset (including Custom) because on commodity Android hardware Argon2id parallelism greater than 1 reduces attacker cost more than defender cost, contradicting OWASP guidance.</p>
+
+    <table>
+      <thead><tr><th>Preset</th><th>Memory (m)</th><th>Iterations (t)</th><th>Parallelism (p)</th><th>Device RAM gate</th></tr></thead>
+      <tbody>
+        <tr><td><code>Standard</code> (default)</td><td>64 MiB</td><td>3</td><td>1</td><td>none</td></tr>
+        <tr><td><code>Standard-plus</code></td><td>64 MiB</td><td>8</td><td>1</td><td>none</td></tr>
+        <tr><td><code>Hardened</code></td><td>128 MiB</td><td>4</td><td>1</td><td>~4 GB total</td></tr>
+        <tr><td><code>Maximum</code></td><td>128 MiB</td><td>8</td><td>1</td><td>~6 GB total</td></tr>
+        <tr><td><code>Custom</code></td><td>32 MiB to device cap</td><td>2 to 16</td><td>1 (fixed)</td><td>none</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>Custom guard rails.</b> The Custom dialog enforces a memory floor of <code>CUSTOM_M_MIN = 32</code> MiB (the OWASP 2023 memory-constrained floor; below this Argon2id collapses into something easily parallelised on GPUs) and an iteration range of <code>CUSTOM_T_MIN = 2</code> to <code>CUSTOM_T_MAX = 16</code>. The upper memory bound is computed per device by <code>DeviceCapacityDetector.kt</code> :: <code>maxCustomMemoryMb</code>, so devices with less headroom cannot be configured into swap-thrashing or OOM-killer territory. Parallelism is shown as the literal label "Parallelism: 1 (fixed)" and cannot be moved. Constants live in <code>KdfCustomDialog.kt</code> :: <code>CUSTOM_M_MIN</code>, <code>CUSTOM_T_MIN</code>, <code>CUSTOM_T_MAX</code>.</p>
+
+    <p><b>Settings path.</b> The customization screen is reached from the in-app settings: <b>Settings &gt; Security &gt; Encryption strength</b>. The destination is the <code>SettingsKdfStrength</code> route (<code>NavGraph.kt</code> :: <code>Screen.SettingsKdfStrength</code>, route literal <code>settings/security/kdf_strength</code>). From there, the <b>Custom</b> card opens <code>KdfCustomDialog.kt</code> :: <code>KdfCustomDialog</code>. Once the user commits a change, <code>KdfMigrator.kt</code> :: <code>KdfMigrator</code> re-derives under the new preset and persists the integer version code under SharedPreferences key <code>kdf_version</code> (codes: <code>30</code> Standard, <code>31</code> Standard-plus, <code>32</code> Hardened, <code>33</code> Maximum, <code>34</code> Custom).</p>
+
+    <div class="callout primary">
+      <div class="callout-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 014 12.7c-.6.5-1 1.2-1 2V17H9v-.3c0-.8-.4-1.5-1-2A7 7 0 0112 2z"/></svg>
+        When the Secret Key is enabled
+      </div>
+      <p>When the Secret Key (default for new vaults) is enabled, the Argon2id input is the byte concatenation <code>MP_utf8 || SK_raw16</code> rather than the master password alone, mixed through <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>. The KDF parameters above are unchanged. Full detail in <a href="#crypto-9">section 4.9</a>.</p>
+    </div>
+
+    <h3 id="crypto-3"><span class="num">4.3</span> Vault-key wrapping and hardware isolation</h3>
+    <p>The Argon2id-derived key is <b>not</b> the key that encrypts the database. Instead, 1Key generates a 256-bit AES vault key uniformly at random and wraps it with a non-exportable key stored in the Android Keystore. The only way to use that wrapping key is to ask the Keystore to perform an operation on the application's behalf; the raw key bytes never enter the app process.</p>
+    <p>From commit <code>1def89f</code> onward, 1Key <b>actively prefers</b> the device's StrongBox secure element when one is present, and falls back to the Trusted Execution Environment (TEE) when it is not. The same StrongBox-prefer-with-TEE-fallback pattern is used by three alias families, so every long-lived wrapping key in the app is offered the strongest available isolation:</p>
+    <div class="flow">
+      <div class="step"><div><b>API gate</b> &middot; on <code>Build.VERSION.SDK_INT &gt;= P</code> (API 28+), <code>getOrCreateKeystoreKey</code> calls <code>setIsStrongBoxBacked(true)</code> on the <code>KeyGenParameterSpec</code> builder. Below API 28, the StrongBox block is skipped entirely.</div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Try StrongBox</b> &middot; <code>KeyGenerator.generateKey()</code> is invoked once with StrongBox requested. On success, the key lives inside a dedicated tamper-resistant chip, physically separate from the main CPU.</div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Catch StrongBoxUnavailableException</b> &middot; thrown by devices that do not ship a StrongBox chip. The catch block rebuilds the spec <em>without</em> <code>setIsStrongBoxBacked</code> and retries against the TEE.</div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Catch ProviderException</b> &middot; some Pixel firmware surfaces this in place of <code>StrongBoxUnavailableException</code> under load. It is treated identically: silent TEE fallback, no user-visible error.</div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Unlocked-device binding</b> &middot; on API 28+ the spec sets <code>setUnlockedDeviceRequired(true)</code>, so the wrapping key is unusable while the device is locked, regardless of which tier it lands in.</div></div>
+    </div>
+    <p>Three Keystore aliases go through this path: the legacy vault wrapping key <code>onekey_master</code> (<code>KEYSTORE_ALIAS_V1</code>), the upgraded vault wrapping key <code>onekey_master_v2</code> (<code>KEYSTORE_ALIAS_V2</code>), and each Secret Key wrapping alias under the prefix <code>1key_secret_key_v</code> (versioned generations <code>_v1</code>, <code>_v2</code>, ...). The vault aliases live in <code>CryptoManager.kt</code> (<code>getOrCreateKeystoreKey</code>); the Secret Key aliases inline the same pattern in <code>SecretKeyKeystoreWrapper.kt</code> (<code>getOrCreateWrappingKey</code>) so that alias rotation via <code>deleteAlias</code> on the Secret Key side never touches the vault key's lifecycle.</p>
+    <p>What ended up where on a given device is surfaced to the user via the <code>HardwareKeyIsolationTier</code> enum, with three values and a strict ordering of <b>STRONGBOX &gt; TEE &gt; SOFTWARE</b>:</p>
+    <table>
+      <thead><tr><th>Tier</th><th>What it means</th><th>Settings indicator</th></tr></thead>
+      <tbody>
+        <tr><td><code>STRONGBOX</code></td><td>Dedicated tamper-resistant chip, physically separate from the main CPU. Strongest isolation Android offers.</td><td>Green check</td></tr>
+        <tr><td><code>TEE</code></td><td>Trusted Execution Environment - a separate secure-only mode of the main CPU. Full-strength hardware isolation, just not on a discrete chip.</td><td>Green check</td></tr>
+        <tr><td><code>SOFTWARE</code></td><td>Wrapping key is <em>not</em> in secure hardware. Older or rooted handsets without a working Keystore.</td><td>Warning</td></tr>
+      </tbody>
+    </table>
+    <p>Both <code>STRONGBOX</code> and <code>TEE</code> are treated as success states in the UI - the green check is the same on both - because TEE is full-strength hardware isolation for everyday threat models. Only <code>SOFTWARE</code> raises a warning, because that tier collapses the offline brute-force defence described in <a href="#crypto-4">section 4.4</a> back to software-key strength.</p>
+    <p>On API 31+, the tier is read directly from <code>KeyInfo.securityLevel</code>. On API 28-30, where <code>securityLevel</code> does not exist, a process-lifetime <code>@Volatile</code> flag <code>CryptoManager.lastKeyCreatedWithStrongBox</code> records the outcome of the most recent generate call; <code>HardwareKeyIsolationProbe</code> uses it to disambiguate <code>STRONGBOX</code> from <code>TEE</code> when <code>KeyInfo.isInsideSecureHardware</code> is true. Below API 28 the flag is irrelevant - StrongBox is unreachable - and the probe maps <code>isInsideSecureHardware</code> directly to <code>TEE</code> or <code>SOFTWARE</code>.</p>
 
     <h3 id="crypto-4"><span class="num">4.4</span> The verifier, and why it lives in EncryptedSharedPreferences</h3>
-    <p>When the user types their master password, 1Key needs to check whether it is correct before unwrapping the vault key. A naive implementation would store an Argon2id hash and compare. 1Key does something stronger: it stores a small ciphertext - the bytes <code>"VALID"</code> encrypted under an Argon2id-derived key - inside <code>EncryptedSharedPreferences</code> (<code>AuthRepositoryImpl.kt</code> lines 196–204).</p>
+    <p>When the user types their master password, 1Key needs to check whether it is correct before unwrapping the vault key. A naive implementation would store an Argon2id hash and compare. 1Key does something stronger: it stores a small ciphertext, the bytes <code>"VALID"</code> encrypted under an Argon2id-derived key, inside <code>EncryptedSharedPreferences</code>. The verifier-key derivation is owned by <code>AuthRepositoryImpl.kt</code> :: <code>deriveVerifierKey</code>, which routes to the SK-aware path described below when its <code>secretKey</code> parameter is non-null.</p>
     <p><code>EncryptedSharedPreferences</code> is part of AndroidX security-crypto 1.1.0. The file on disk is itself encrypted with a master key held in the Android Keystore. Reading the verifier therefore requires live Keystore access on the device that wrote it.</p>
     <p>The consequence: <b>a leaked database file alone cannot be brute-forced offline.</b> An attacker with the SQLite database but no Keystore access has no oracle to test password guesses against. They cannot extract the verifier from the encrypted preferences file without first compromising the Keystore-backed master key, and the Keystore master key is bound to the device's hardware. This closes the offline brute-force surface that cloud vaults inherently expose by storing an authentication ciphertext alongside (or in lieu of) the vault blob.</p>
 
+    <p><b>Secret Key layered on top of the KDF.</b> The pre-SK verifier was <code>K_verifier = Argon2id(password, salt, params)</code> for every vault. When the Secret Key (SK) feature is enabled (the default for new vaults), the KDF input changes to the byte concatenation <code>MP_utf8 || SK_raw16</code>, fed into the same Argon2id parameter set. The <code>SP_SECRET_KEY_ENABLED</code> flag is read in <code>AuthRepositoryImpl.kt</code> :: <code>verifyMasterPassword</code>; when true, that method calls <code>secretKeyWrapper.unwrap()</code> for a fresh 16-byte copy of the SK and passes it as the <code>secretKey</code> parameter to <code>deriveVerifierKey</code>. <code>deriveVerifierKey</code> then delegates to <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>, which builds the combined buffer, runs Argon2id, and zeros that buffer in a <code>finally</code> block. The caller zeros its <code>skBytes</code> copy in its own <code>finally</code>. Full SK coverage (default-on policy, counter-alias scheme, Emergency Kit, memory hygiene, onboarding ceremony) lives in <a href="#crypto-9">section 4.9</a>.</p>
+
+    <table>
+      <thead><tr><th>Mode</th><th>KDF input</th><th>Symbol that builds it</th></tr></thead>
+      <tbody>
+        <tr><td>SK off (legacy vault)</td><td><code>MP_utf8</code></td><td><code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordArgon2id</code></td></tr>
+        <tr><td>SK on (default for new vaults)</td><td><code>MP_utf8 || SK_raw16</code></td><td><code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="flow">
+      <div class="step"><div><b>User types master password</b> into the unlock surface</div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Read <code>SP_SECRET_KEY_ENABLED</code> and conditionally unwrap SK</b> inside <code>AuthRepositoryImpl.kt</code> :: <code>verifyMasterPassword</code></div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Delegate to <code>deriveVerifierKey</code></b> with the SK bytes (or null)</div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>SK off</b> &middot; <code>K_verifier = Argon2id(MP_utf8, salt, params)</code> via <code>deriveKeyFromPasswordArgon2id</code></div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>SK on</b> &middot; <code>K_verifier = Argon2id(MP_utf8 || SK_raw16, salt, params)</code> via <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>; combined buffer zeroed in <code>finally</code></div></div>
+      <div class="arrow">&#9660;</div>
+      <div class="step"><div><b>Verifier ciphertext</b> stored in <code>EncryptedSharedPreferences</code>, file encrypted under Keystore master key</div></div>
+    </div>
+
+    <p><b>Why concatenation, not XOR.</b> XOR was considered and rejected. XOR would only pre-combine 16 bytes at the head of the password buffer, which on short master passwords offers an algebraic shortcut: an attacker who guesses the password can XOR the SK back out of the input. Byte concatenation forces every Argon2id memory pass to absorb the full <code>MP_utf8 || SK_raw16</code> buffer, so the SK contributes its 128 bits of entropy at every iteration of the avalanche rather than collapsing into a one-time prefix XOR. The order is MP first, then SK, and is enforced at the construction site inside <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>.</p>
+
+    <p>This is layered defence on top of <code>EncryptedSharedPreferences</code>. Even an attacker who somehow reads the verifier ciphertext still faces a 128-bit Secret Key in the KDF input, on top of the Argon2id memory cost. Mixing the SK into a legacy PBKDF2 verifier is explicitly rejected; legacy vaults must complete the silent Argon2id migration before the SK toggle is offered. See <a href="#crypto-9">section 4.9</a> for how the SK itself is generated, wrapped, rotated, and surfaced through the Emergency Kit.</p>
+
     <h3 id="crypto-5"><span class="num">4.5</span> Per-field encryption with AAD binding</h3>
     <p>Every credential field - title, username, password, URL, notes, TOTP secret, custom fields - is encrypted independently with AES-256-GCM. The IV is 12 bytes (96 bits, the AES-GCM standard) and the auth tag is 128 bits (<code>CryptoManager.kt</code> line 32).</p>
-    <p>Each encryption call passes AAD that ties the ciphertext to its row and column. The format is <code>1k:v1|&lt;credentialId&gt;|&lt;fieldName&gt;</code> for credential fields and <code>1k:v2|&lt;credentialId&gt;|title</code> for titles (<code>CredentialRepositoryImpl.kt</code> lines 505–509). If an attacker with database write access tries to swap the encrypted password from row A into the password column of row B, decryption fails - the AAD seen at decrypt time will not match the AAD baked into the auth tag at encrypt time.</p>
+    <p>Each encryption call passes AAD that ties the ciphertext to its row and column. The format is <code>1k:v1|&lt;credentialId&gt;|&lt;fieldName&gt;</code> for credential fields and <code>1k:v2|&lt;credentialId&gt;|title</code> for titles, built by <code>CredentialDecryptor.kt</code> :: <code>fieldAad</code> and <code>CredentialDecryptor.kt</code> :: <code>titleAad</code> and consumed at encrypt-time in <code>CredentialRepositoryImpl.kt</code>. If an attacker with database write access tries to swap the encrypted password from row A into the password column of row B, decryption fails - the AAD seen at decrypt time will not match the AAD baked into the auth tag at encrypt time.</p>
     <p class="muted">This is defence-in-depth, not a unique competitive feature. Cloud-vault products typically encrypt the whole credential record as a single blob, which already prevents within-record field swapping via the GCM/HMAC tag. Per-field AAD additionally blocks cross-record swap attacks against the local database - a narrow gain against an attacker who already has database write access (and therefore likely has process memory anyway). It is documented here because the implementation is open to inspection, not because it represents a category of protection competitors lack.</p>
 
     <h3 id="crypto-6"><span class="num">4.6</span> HKDF subkey separation</h3>
-    <p>Using one master key for multiple purposes is a known anti-pattern. 1Key derives purpose-specific subkeys from the vault master key using HKDF-SHA256 (<code>CryptoManager.kt</code> lines 215–226).</p>
+    <p>Using one master key for multiple purposes is a known anti-pattern. 1Key derives purpose-specific subkeys from the vault master key using HKDF-SHA256 (<code>CryptoManager.kt</code>: <code>deriveSubkey</code>).</p>
     <p>Two labels are currently in use, both versioned so a future cipher rotation can occur without label collision:</p>
-    <ul>
-      <li><code>1key-field-enc-v1</code> - encrypts non-title credential fields</li>
-      <li><code>1key-title-enc-v1</code> - encrypts titles</li>
-    </ul>
+    <table>
+      <thead><tr><th>HKDF info label</th><th>Subkey purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>1key-field-enc-v1</code></td><td>Encrypts non-title credential fields</td></tr>
+        <tr><td><code>1key-title-enc-v1</code></td><td>Encrypts titles</td></tr>
+      </tbody>
+    </table>
     <p>Because the vault key is already a uniformly random 256-bit AES key, the implementation skips the HKDF-Extract step (RFC 5869 section 3.3 explicitly permits this when the input is uniform) and emits a single 32-byte HKDF-Expand block: <code>T(1) = HMAC-SHA256(masterKey, info || 0x01)</code>.</p>
 
-    <h3 id="crypto-7"><span class="num">4.7</span> Encrypted backup envelope (V4)</h3>
-    <p>Encrypted exports use a custom binary envelope, version 4 (<code>BackupEncryption.kt</code>). The header layout is:</p>
-<pre><code>MAGIC      8 B   "1KEYBKP\n"
-VERSION    1 B   0x04
-FORMAT     1 B   0x00=JSON  0x01=CSV
-TIMESTAMP  8 B   export time, epoch milliseconds, big-endian
-VAULT_VER  4 B   vault version counter, big-endian
-SALT      32 B   Argon2id salt (random per export)
-IV        12 B   AES-GCM nonce
-BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
-    <p>The full header (MAGIC, VERSION, FORMAT, TIMESTAMP, VAULT_VER) is bound into the GCM auth tag as AAD. As a result, an attacker cannot rewrite the timestamp to make a backup look fresher, swap a backup body between envelopes, or replay an old backup against a vault whose version counter has advanced. Earlier envelope versions (V1 plain, V2 PBKDF2 + header AAD, V3 Argon2id + header AAD) are still readable for backward compatibility; new exports always write V4.</p>
+    <h3 id="crypto-7"><span class="num">4.7</span> Encrypted backup envelope (V5)</h3>
+    <p>Manual user-initiated exports write a custom binary envelope, version 5 (<code>BackupEncryption.kt</code> :: <code>encrypt</code>, version constant <code>MANUAL_EXPORT_VERSION = VERSION_V5</code>). V5 supersedes V4 as the on-disk format for new exports because it adds two things the older layout cannot represent: the Argon2id parameters that produced the wrapping key, and a <code>FLAGS</code> byte advertising whether the Secret Key (SK) is required on restore. The byte-exact header layout is:</p>
+<pre><code>MAGIC       8 B   offset  0   "1KEYBKP\n"
+VERSION     1 B   offset  8   0x05
+FORMAT      1 B   offset  9   0x00=JSON  0x01=CSV
+FLAGS       1 B   offset 10   bit 0 = FLAG_REQUIRES_SECRET_KEY (0x01)
+                              bits 1-7 reserved, MUST be 0
+KDF_M_KIB   4 B   offset 11   uint32 BE, Argon2id memory in KiB
+KDF_T       4 B   offset 15   uint32 BE, Argon2id iterations
+KDF_P       1 B   offset 19   uint8 parallelism (locked to 1 today)
+TIMESTAMP   8 B   offset 20   int64 BE, export time epoch-ms
+VAULT_VER   4 B   offset 28   int32 BE, vault version counter
+SALT       32 B   offset 32   per-export random Argon2id salt
+IV         12 B   offset 64   AES-GCM 96-bit nonce
+BODY        N B   offset 76   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
+    <p>Total fixed header is <b>76 bytes</b> before BODY (the constant <code>V5_HEADER_LEN</code> in <code>BackupEncryption.kt</code>). The 32-byte AAD bound into the GCM auth tag is <code>MAGIC || VERSION || FORMAT || FLAGS || KDF_M_KIB || KDF_T || KDF_P || TIMESTAMP || VAULT_VER</code> - every header field <em>except</em> SALT and IV, built by <code>BackupEncryption.kt</code> :: <code>buildHeaderAadV5</code>. SALT is authenticated indirectly through the derived key (any change produces the wrong key, which fails GCM verification); IV is authenticated intrinsically by GCM. Tampering with FLAGS or the KDF triple invalidates the tag, so an attacker cannot downgrade an SK-protected backup, push the victim onto cheaper Argon2id parameters, or rewrite the timestamp to make a stale backup look fresh.</p>
+    <p><b>FLAGS byte semantics.</b> Bit 0 (<code>FLAG_REQUIRES_SECRET_KEY = 0x01</code>) is set when the export was produced from a vault that has the Secret Key enabled, in which case the KDF input is the byte concatenation <code>MP_utf8 || SK_raw16</code> rather than the password alone (see section <a href="#crypto-9">4.9</a>). Bits 1-7 are reserved; <code>BackupEncryption.kt</code> :: <code>decrypt</code> rejects any envelope with reserved bits set via the mask <code>FLAGS_RESERVED_MASK = 0xFE</code> <em>before</em> any other processing, so a malformed FLAGS byte cannot leak metadata via differential error paths.</p>
+    <p><b>SecretKeyRequiredException pivot.</b> When V5 is read with bit 0 set and no Secret Key has been supplied to <code>decrypt</code>, the function throws <code>SecretKeyRequiredException(createdAtMs, vaultVersion)</code> <em>before</em> any Argon2id work, so a hostile or misconfigured restore cannot burn CPU on a doomed derivation. The throw site carries the header's timestamp and vault version so the restore UI can prompt the user with which backup needs the Secret Key. Test suite <code>BackupEncryptionV5Test</code> locks this ordering.</p>
+    <p><b>Backward compatibility.</b> V1 (plain), V2 (PBKDF2 + header AAD), V3 (Argon2id + header AAD), and V4 (Argon2id + extended header AAD) <b>continue to decrypt forever</b> on restore. <code>BackupEncryption.kt</code> :: <code>decrypt</code> accepts <code>VERSION</code> in <code>{0x01, 0x02, 0x03, 0x04, 0x05}</code> and routes each to the appropriate AAD shape and KDF. The Sync engine still writes V4 in the SK-disabled case (byte-identical to pre-SK sync output) and V5 in the SK-enabled case (see section <a href="#install-4">7.4</a>); only the manual-export path is V5-only.</p>
+
+    <p>The encrypt path is a five-step pipeline:</p>
+    <div class="flow">
+      <div class="step"><div><b>Derive K</b> via Argon2id over <code>MP_utf8 || SK_raw16</code> (or <code>MP_utf8</code> alone when SK is disabled) with caller-supplied <code>kdfParams</code> (defaults to <code>KdfPreset.STANDARD.toKdfParams()</code>); the combined input buffer is zeroed in a <code>finally</code> block</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Build AAD</b> = first 32 bytes of the header = <code>MAGIC || VERSION(0x05) || FORMAT || FLAGS || KDF_M_KIB || KDF_T || KDF_P || TIMESTAMP || VAULT_VER</code> via <code>buildHeaderAadV5</code></div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>GCM-encrypt BODY</b> = AES-256-GCM(K, IV, plaintext, AAD) producing ciphertext + 16-byte auth tag; the IV is the fresh 12-byte nonce returned by <code>CryptoManager</code> :: <code>encrypt</code></div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Concatenate</b> header (76 B: <code>MAGIC || VERSION || FORMAT || FLAGS || KDF_M_KIB || KDF_T || KDF_P || TIMESTAMP || VAULT_VER || SALT || IV</code>) <code>||</code> BODY into a single byte stream</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Hand off bytes</b> to the SAF writer; the caller picks the destination, 1Key never opens a network socket (see section <a href="#install-4">7.4</a>)</div></div>
+    </div>
+
+    <p>The decrypt-side decision tree (version dispatch, FLAGS sanity, SK guard, KDF dispatch, AAD reconstruction, GCM verify) lives in section <a href="#install-4">7.4</a> alongside the user-facing restore flow.</p>
 
     <h3 id="crypto-8"><span class="num">4.8</span> End-to-end flow</h3>
+    <p>An unlock walks the master password from a UTF-8 byte buffer to a rendered plaintext credential without ever interning the password in the JVM String pool. The exact path depends on whether the Secret Key (SK) feature is enabled on the device: with SK off the verifier KDF input is the master password alone, with SK on the input is the concatenation <code>MP_utf8 || SK_raw16</code> so Argon2id's avalanche absorbs the SK across every memory pass (XOR was considered and rejected). The vault key wrap is unchanged either way - SK only mixes into the verifier, not into the vault-key derivation.</p>
+
+    <p>The diagram below traces the SK-enabled path end to end. When SK is disabled, skip the SK-unwrap step and feed the master password directly into Argon2id (<code>deriveKeyFromPasswordArgon2id</code> in <code>CryptoManager.kt</code>); every other step is identical.</p>
+
     <div class="flow">
-      <div class="step"><div><b>User types master password</b></div></div>
+      <div class="step"><div><b>User types master password</b> into the unlock surface</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Argon2id KDF</b> · m=64 MiB, t=3, p=1 → verifier key</div></div>
+      <div class="step"><div><b>Keystore unwraps the Secret Key</b> when <code>SP_SECRET_KEY_ENABLED</code> is set - <code>SecretKeyKeystoreWrapper.unwrap</code> AES-256-GCM-decrypts the base64 blob at SharedPreferences key <code>secret_key_wrapped</code> under the active alias <code>1key_secret_key_v{N}</code>, producing a 16-byte local buffer. The wrapping key lives in StrongBox where available (API 28+) and falls back to TEE via the <code>StrongBoxUnavailableException</code> and <code>ProviderException</code> catch paths in <code>getOrCreateWrappingKey</code>.</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Decrypt 'VALID' marker</b> from <code>EncryptedSharedPreferences</code> · fail → bump attempt counter</div></div>
+      <div class="step"><div><b>Argon2id KDF</b> over <code>MP_utf8 || SK_raw16</code> with the active preset (Standard default: m=64 MiB, t=3, p=1) via <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>. The combined buffer is zeroed in a <code>finally</code> block. With SK off, the input is the password alone.</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Load wrapped vault key</b> from <code>EncryptedSharedPreferences</code></div></div>
+      <div class="step"><div><b>Verify the password verifier</b> stored at <code>SP_PASSWORD_VERIFIER</code> in <code>EncryptedSharedPreferences</code>. A failure increments the attempt counter (tiered cooldowns at 3, 5, 10 wrong attempts); a success proceeds.</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Android Keystore unwraps</b> vault key inside the TEE</div></div>
+      <div class="step"><div><b>Load wrapped vault key</b> from <code>EncryptedSharedPreferences</code> - separate from the database file so a leaked Room snapshot has no verifier to attack offline.</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>HKDF-SHA256</b> derives field subkey + title subkey</div></div>
+      <div class="step"><div><b>Android Keystore unwraps the vault key</b> inside StrongBox or TEE under alias <code>onekey_master_v2</code> (or legacy <code>onekey_master</code> on older installs), resolved by <code>CryptoManager.getOrCreateKeystoreKey</code>. The unwrapping key sets <code>setUnlockedDeviceRequired(true)</code> on API 28+ so a locked screen blocks decryption.</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Read encrypted Room row</b> · per-field AES-256-GCM decrypt with AAD <code>1k:v1|id|field</code></div></div>
+      <div class="step"><div><b>Install the SK into <code>SecretKeyHolder</code></b> via <code>loadSecretKeyIntoHolderIfEnabled</code> (calls <code>setBytes</code>, which copies the input and zeroes the previous buffer in place). The local unwrap buffer is then zeroed in <code>finally</code>. No-op when SK is disabled.</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Plaintext credential</b> rendered in UI</div></div>
+      <div class="step"><div><b>HKDF-SHA256</b> derives the field subkey and title subkey from the unwrapped vault key.</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Read encrypted Room row</b> and run per-field AES-256-GCM decrypt with AAD <code>1k:v1|id|field</code>. Tampering with a row ID or column name invalidates the auth tag.</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Plaintext credential</b> rendered in UI; <code>FLAG_SECURE</code> keeps screenshots and Recent Apps previews blank.</div></div>
+    </div>
+
+    <p>The Keystore unwrap step (both the vault-key alias and any active SK alias) resolves to StrongBox when the device exposes a discrete tamper-resistant element and falls back to TEE otherwise. Classification surfaces in Settings via <code>HardwareKeyIsolationTier</code> as STRONGBOX, TEE, or SOFTWARE; only SOFTWARE warns. On API 28-30 the classifier reads the same-process <code>CryptoManager.lastKeyCreatedWithStrongBox</code> flag to disambiguate the two hardware tiers, because <code>KeyInfo.securityLevel</code> is API 31+ only. The SK alias scheme is versioned (<code>1key_secret_key_v{N}</code>) so a Rotate mints generation <code>N+1</code> before the active <code>N</code> is destroyed; a crash mid-rotate leaves the still-existing previous alias decryptable, preventing a bricked vault.</p>
+
+    <h4 style="margin-top:24px">Where each secret lives during an unlock</h4>
+    <table>
+      <thead><tr><th>Material</th><th>At rest</th><th>In memory after unlock</th><th>Zeroing</th></tr></thead>
+      <tbody>
+        <tr><td>Master password</td><td>Never persisted</td><td>UTF-8 byte buffer inside the KDF call</td><td><code>finally</code> block in <code>deriveKeyFromPasswordArgon2id</code>; the caller-owned <code>CharArray</code> is not zeroed by the KDF</td></tr>
+        <tr><td>Secret Key (raw 16 bytes)</td><td>AES-256-GCM-wrapped blob at <code>secret_key_wrapped</code> in <code>EncryptedSharedPreferences</code>, wrapping key in StrongBox or TEE under alias <code>1key_secret_key_v{N}</code></td><td><code>SecretKeyHolder</code> (<code>AtomicReference&lt;ByteArray?&gt;</code>) - defensive copy, zeroed by <code>withBytes</code> and <code>clear()</code></td><td>Prior buffer zeroed in place on <code>setBytes</code>; cleared with <code>VaultKeyHolder.lock</code></td></tr>
+        <tr><td>Verifier key (Argon2id output)</td><td>Verifier ciphertext at <code>SP_PASSWORD_VERIFIER</code></td><td>Transient - used to AES-GCM-verify the marker, not kept</td><td>Intermediate <code>SecretKeySpec</code> buffer zeroed after wrap</td></tr>
+        <tr><td>Vault key</td><td>Wrapped blob in <code>EncryptedSharedPreferences</code>, wrapping key in StrongBox or TEE under <code>onekey_master_v2</code> (or legacy <code>onekey_master</code>)</td><td><code>VaultKeyHolder</code> until inactivity auto-lock fires</td><td>Cleared on lock alongside <code>SecretKeyHolder</code></td></tr>
+        <tr><td>Field / title subkeys</td><td>Never persisted (HKDF-derived on demand)</td><td>Transient per decryption</td><td>Out of scope when the vault key is cleared</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout primary" style="margin-top:24px">
+      <div class="callout-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 22h4M12 2a7 7 0 014 12.7c-.6.5-1 1.2-1 2V17H9v-.3c0-.8-.4-1.5-1-2A7 7 0 0112 2z"/></svg>
+        Why concatenation, not XOR
+      </div>
+      <p>With Secret Key on, the verifier is derived as <code>K_verifier = Argon2id(MP_utf8 || SK_raw16, salt, params)</code>. XOR would only pre-combine the first 16 bytes of the input and offer an algebraic shortcut on short master passwords. Concatenation lets Argon2id's memory-hard avalanche absorb the SK across every pass, so even a leaked verifier salt and ciphertext does not reduce the work factor below the Argon2id parameter set.</p>
+    </div>
+
+    <h3 id="crypto-9"><span class="num">4.9</span> Secret Key (SK)</h3>
+    <p>The Secret Key is a raw 16-byte (128-bit) value generated and held only on the user's device, mixed into the master-password KDF input to harden the verifier against offline brute force. The model mirrors 1Password's 2SKD construction: even if an attacker recovers the encrypted verifier blob, they cannot guess only a human-typable password to forge a key. The single source of truth for the byte length is <code>SECRET_KEY_RAW_LENGTH = 16</code> in <code>SecretKeyHolder.kt</code>.</p>
+    <p>The verifier KDF input is the byte concatenation <code>K_verifier = Argon2id(MP_utf8 || SK_raw16, salt, params)</code>, NOT an XOR pre-combination. Concatenation is the deliberate choice: Argon2id's avalanche absorbs the SK across every memory pass of every iteration, so an attacker cannot factor SK out algebraically. XOR would only pre-combine 16 bytes at the head of the password buffer and would offer a shortcut on short master passwords. The concatenation order and the length check are enforced in <code>CryptoManager.kt</code> by <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>, which <code>require()</code>s <code>secretKey.size == SECRET_KEY_RAW_LENGTH</code> and zeros the combined buffer in <code>finally</code>.</p>
+
+    <div class="stat-row">
+      <div class="stat"><div class="k">SK length</div><div class="v">16 <em>bytes</em></div></div>
+      <div class="stat"><div class="k">KDF mix</div><div class="v">MP <em>||</em> SK</div></div>
+      <div class="stat"><div class="k">Kit format</div><div class="v">A3-26 <em>chars</em></div></div>
+      <div class="stat"><div class="k">QR version</div><div class="v">5 <em>(V5 envelope)</em></div></div>
+    </div>
+
+    <p><b>Default-on policy.</b> The Secret Key is presented as the recommended default for every new vault during onboarding step 3 (<code>OnboardingScreen.kt</code>, function <code>SecretKeyCeremonyPage</code>). Opting out is intentionally costly: tapping "Continue without Secret Key" opens <code>SecretKeySkipOnboardingDialog</code>, a destructive second-confirm dialog that requires ticking an "I understand the risks" checkbox before the "Skip Secret Key" button enables; the cancel button is labelled "Keep Secret Key". Opt-out is persisted as a metadata-only boolean under <code>sk_opted_out</code> in <code>onekey_auth</code> EncryptedSharedPreferences via <code>AuthRepositoryImpl.setupMasterPasswordOptingOutOfSecretKey</code>; the flag drives a Settings subtitle but does not alter the verifier KDF, and any successful Enable clears it.</p>
+
+    <p><b>Generation, storage, isolation.</b> Fresh SK bytes are sourced from <code>java.security.SecureRandom().nextBytes(ByteArray(16))</code> inside <code>SecretKeyEnableUseCase</code> and <code>SecretKeyRotateUseCase</code>; the use case (not the migrator) owns generation so plaintext bytes never reach the generic crypto layer. On-device persistence is owned by <code>SecretKeyKeystoreWrapper</code>, which AES-256-GCM-wraps the 16 raw bytes under an Android Keystore key. The wrapped blob is base64 of <code>IV(12 B) || ciphertext(16 B) || GCM tag(16 B)</code> and lives under key <code>secret_key_wrapped</code> in the <code>onekey_auth</code> EncryptedSharedPreferences file. The wrapping key prefers StrongBox via <code>setIsStrongBoxBacked(true)</code>, falls back silently to TEE on <code>StrongBoxUnavailableException</code> or <code>ProviderException</code>, and pins decryption to a user-unlocked device via <code>setUnlockedDeviceRequired(true)</code> on API 28+.</p>
+
+    <p><b>Counter-alias scheme.</b> The Keystore alias prefix is the literal <code>1key_secret_key_v</code>; generation N uses alias <code>1key_secret_key_v</code> + N. Generation 0 is a sentinel meaning "no SK installed" and no <code>_v0</code> alias is ever created. The active generation is held in <code>SP_SK_ACTIVE_ALIAS_VERSION</code>. Rotation is crash-safe by construction: Phase 1e of <code>KdfMigrator.runSecretKeyTransition</code> calls <code>wrapper.wrap(skRaw, oldActiveVersion + 1)</code> to mint <code>1key_secret_key_v{N+1}</code> WITHOUT touching the active alias, Phase 2 commits the new wrapped blob plus new alias version atomically in a single <code>edit().commit()</code>, and the post-commit GC then calls <code>deleteAliasVersion(oldActiveVersion)</code>. A crash between Phase 1e and Phase 2 leaves the old alias intact and the vault decryptable; a crash between Phase 2 and the GC is recovered by the cold-start sweep <code>SecretKeyKeystoreWrapper.sweepOrphanAliases</code>, invoked from <code>KdfMigrator.resumePendingInternal</code>, which enumerates every alias under the prefix and deletes any not in the keep-set.</p>
+
+    <table>
+      <thead><tr><th>Rotate phase</th><th>Active alias</th><th>Active SP version</th><th>Crash-safe outcome</th></tr></thead>
+      <tbody>
+        <tr><td>Phase 1e: wrap to N+1</td><td>v{N} (untouched)</td><td>N</td><td>Old blob still decrypts under v{N}; orphan v{N+1} swept on next start</td></tr>
+        <tr><td>Phase 2: atomic SP commit</td><td>v{N+1}</td><td>N+1</td><td>Single <code>commit()</code> flips blob + version together; never half-applied</td></tr>
+        <tr><td>Post-commit GC: delete v{N}</td><td>v{N+1}</td><td>N+1</td><td>If process dies first, sweep deletes orphan v{N} on next start</td></tr>
+      </tbody>
+    </table>
+
+    <p><b>Emergency Kit and QR.</b> The printed form is <code>A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX</code>: a fixed prefix <code>A3-</code> followed by five dashed groups of sizes 5+5+5+5+6 totalling 26 characters from the Crockford base32 alphabet <code>0123456789ABCDEFGHJKMNPQRSTVWXYZ</code> (no <code>I, L, O, U</code>). The "A" tags the auth/alias family and the "3" is a third-generation format stamp reserved for a future bump to <code>A4</code>. 16 raw bytes is exactly 128 bits, which packs into 26 Crockford base32 characters plus 2 trailing zero padding bits that the decoder requires to be zero, rejecting bit-flipped scans. The constants live in <code>SecretKeyQrParser.kt</code> as <code>SECRET_KEY_HUMAN_PREFIX</code>, <code>SECRET_KEY_GROUP_SIZES</code>, <code>SECRET_KEY_CANONICAL_LENGTH</code>, and the formatter is <code>formatCanonicalSkForPrint</code>. The QR carries the bare 26-character canonical form under a custom URI <code>1key-emergency:?sk=&lt;26-char-canonical&gt;&amp;ver=5</code>, parsed by the strictly anchored regex <code>EMERGENCY_KIT_URI_REGEX</code>. <code>SECRET_KEY_QR_VERSION = 5</code> is pinned to the V5 backup envelope so a kit scanned on a new device matches the backup it must decrypt.</p>
+
+    <p><b>Memory hygiene.</b> The in-memory holder <code>SecretKeyHolder</code> uses an <code>AtomicReference&lt;ByteArray?&gt;</code>. <code>setBytes</code> defensively copies its input and zeros the previously held buffer in place before publishing the new reference; <code>withBytes</code> hands a defensive copy to a lambda and zeros that copy in <code>finally</code>; <code>clear()</code> zeros the held bytes in place and drops the reference. The holder is wired into the same lock pipeline as <code>VaultKeyHolder.lock</code>, so a locked vault carries no SK bytes in process memory.</p>
+
+    <p><b>Onboarding ceremony.</b> Step 3 of onboarding generates the SK, displays the Emergency Kit, demands user confirmation that it has been written down, and only then atomically commits the vault via <code>AuthRepository.setupMasterPasswordWithSecretKey</code> (a single <code>authPrefs.edit().commit()</code> that writes SETUP_COMPLETE, vault salt, wrapped vault key, password verifier, KDF version, <code>SP_SECRET_KEY_ENABLED</code>, the wrapped SK blob, and active alias version 1).</p>
+
+    <div class="flow">
+      <div class="step"><div><b>Master password set</b> (onboarding step 2)</div></div>
+      <div class="arrow">&#x25BC;</div>
+      <div class="step"><div><b>Generate SK</b> via <code>SecureRandom().nextBytes(ByteArray(16))</code> in <code>SecretKeyEnableUseCase</code></div></div>
+      <div class="arrow">&#x25BC;</div>
+      <div class="step"><div><b>Display Emergency Kit</b> <code>A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX</code> + QR <code>1key-emergency:?sk=...&amp;ver=5</code></div></div>
+      <div class="arrow">&#x25BC;</div>
+      <div class="step"><div><b>User confirms write-down</b> (or opens <code>SecretKeySkipOnboardingDialog</code> with destructive second-confirm)</div></div>
+      <div class="arrow">&#x25BC;</div>
+      <div class="step"><div><b>AES-256-GCM-wrap SK</b> under Keystore alias <code>1key_secret_key_v1</code> (StrongBox preferred, TEE fallback)</div></div>
+      <div class="arrow">&#x25BC;</div>
+      <div class="step"><div><b>Atomic commit</b> verifier + wrapped SK + <code>SP_SECRET_KEY_ENABLED</code> + <code>SP_SK_ACTIVE_ALIAS_VERSION = 1</code> in one <code>edit().commit()</code></div></div>
+      <div class="arrow">&#x25BC;</div>
+      <div class="step"><div><b>SK installed</b> in <code>SecretKeyHolder</code> via <code>setBytes</code>; vault is open</div></div>
     </div>
 
     <h2 id="threat"><span class="num">05</span>Security model and threat analysis</h2>
@@ -298,9 +479,9 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
       <tbody>
         <tr><td>Lost or stolen device, screen locked</td><td>Keystore wrap key requires <code>UNLOCKED_DEVICE</code> on API 28+. Vault is unreadable while the device is locked.</td></tr>
         <tr><td>Lost or stolen device, screen unlocked, user idle</td><td>Configurable inactivity auto-lock (default 5 min). Tiered cooldowns - 30 s, 5 min, 1 hour at 3, 5, 10 wrong attempts.</td></tr>
-        <tr><td>Database file extraction (ADB backup, root, forensic image)</td><td>Verifier sits in <code>EncryptedSharedPreferences</code>, not next to the database. Without live Keystore access, the attacker has no oracle. <b>Offline brute-force closed</b> on devices with hardware-backed Keystore.</td></tr>
+        <tr><td>Database file extraction (ADB backup, root, forensic image)</td><td>Verifier sits in <code>EncryptedSharedPreferences</code>, not next to the database. Without live Keystore access, the attacker has no oracle. The wrapping key under alias <code>onekey_master_v2</code> is classified at unlock time by <code>HardwareKeyIsolationProbe</code> into one of three tiers (<code>STRONGBOX &gt; TEE &gt; SOFTWARE</code>) exposed via <code>HardwareKeyIsolationTier</code> (see <a href="#crypto-3">section 4.3</a>); on STRONGBOX or TEE the key is non-exportable hardware-isolated, so <b>offline brute-force is closed</b>. SOFTWARE tier (older or rooted handsets without a working hardware Keystore) collapses back to software-key strength and raises a warning in Settings.</td></tr>
         <tr><td>Database tampering at the row level</td><td>Per-field AAD binds each ciphertext to its row ID and column name. Swapping ciphertexts invalidates the auth tag.</td></tr>
-        <tr><td>Backup file leaked</td><td>V4 envelope is AES-256-GCM under an Argon2id-derived key. Header AAD prevents timestamp tampering and replay.</td></tr>
+        <tr><td>Backup file leaked</td><td>Manual exports write a <b>V5 envelope</b> (AES-256-GCM under an Argon2id-derived key), authored by <code>BackupEncryption.kt</code> :: <code>encrypt</code>. The 32-byte GCM AAD binds <code>MAGIC || VERSION || FORMAT || FLAGS || KDF_M_KIB || KDF_T || KDF_P || TIMESTAMP || VAULT_VER</code>, so timestamp tampering, replay, and KDF-parameter downgrade all invalidate the tag. When Secret Key is enabled, the envelope sets <code>FLAGS</code> bit 0 (<code>FLAG_REQUIRES_SECRET_KEY = 0x01</code>) and the GCM key is derived via <code>deriveKeyFromPasswordWithSecretKeyArgon2id(MP, SK, salt, embedded params)</code> - so an attacker who steals the file must present BOTH the master password AND the 128-bit Secret Key (the value printed on the Emergency Kit, see <a href="#crypto-9">section 4.9</a>) to even run Argon2id. The full V5 layout and restore decision tree are in <a href="#install-4">section 7.4</a>.</td></tr>
         <tr><td>Screenshot / Recent Apps preview</td><td><code>FLAG_SECURE</code> set by default on the host activity, blocking screenshots and rendering the Recent Apps card blank.</td></tr>
         <tr><td>Network exfiltration</td><td>Current builds declare no <code>INTERNET</code> permission. The OS will not let the process open a socket.</td></tr>
       </tbody>
@@ -347,23 +528,27 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <p>An investigative reporter working with sources whose safety depends on his operational security. Has been advised that any cloud-resident auth blob is attack surface - a state-level adversary can subpoena a vendor or compromise a server. <b>Before:</b> paper notebook in a safe plus a cloud manager for low-sensitivity accounts; the bifurcation itself was a leak. <b>After:</b> a single vault on the hardened device, with no <code>INTERNET</code> permission so the OS itself enforces that no telemetry can reach a server, and no account for an adversary to subpoena. <b>Outcome:</b> auth metadata (which accounts exist, when they were created, which device unlocked them) never leaves the device.</p>
 
     <h3 id="use-3"><span class="num">6.3</span> The developer tired of subscriptions</h3>
-    <p>A senior engineer who has cycled through three cloud password managers in five years as pricing and acquisitions reshape the market, tired of paying £35–£60/year for autofill. <b>Before:</b> a premium subscription primarily to unlock TOTP and secure export. <b>After:</b> a self-built APK; imported the existing vault via CSV; verified the absent <code>INTERNET</code> permission and Firelog exclusion in <code>app/build.gradle.kts</code> herself. <b>Outcome:</b> zero recurring cost, auditable cryptographic stack of roughly 230 lines of Kotlin, CSV importer auto-detected the source format with no manual mapping.</p>
+    <p>A senior engineer who has cycled through three cloud password managers in five years as pricing and acquisitions reshape the market, tired of paying £35-£60/year for autofill. <b>Before:</b> a premium subscription primarily to unlock TOTP and secure export. <b>After:</b> a self-built APK; imported the existing vault via CSV; verified the absent <code>INTERNET</code> permission via <code>tools:node="remove"</code> in <code>AndroidManifest.xml</code> herself. <b>Outcome:</b> zero recurring cost, auditable cryptographic stack of roughly 230 lines of Kotlin, CSV importer auto-detected the source format with no manual mapping.</p>
 
     <h2 id="install"><span class="num">07</span>Installation and migration</h2>
     <p>This section replaces the SaaS-style "Implementation &amp; Integration" template. There are no APIs, SSO connectors, or IdP integrations to configure. There is an APK, a master password, and an importer.</p>
 
     <h3 id="install-1"><span class="num">7.1</span> Installing the APK</h3>
     <p>1Key is distributed as a free Android APK. The current channel is <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">GitHub Releases</a>; F-Droid distribution is planned but not yet active. Release builds carry the author's signing certificate. Users uncomfortable with sideloading can build from source - clone the repository, run <code>./gradlew assembleDebug</code>, install the resulting <code>app-debug.apk</code>.</p>
-    <p>Minimum supported Android version is API 26 (Android 8.0 Oreo). Compile and target SDK is 36 (<code>app/build.gradle.kts</code> lines 11, 16–18).</p>
+    <p>Minimum supported Android version is API 26 (Android 8.0 Oreo). Compile and target SDK is 36; see the <code>android { defaultConfig { ... } }</code> block in <code>app/build.gradle.kts</code>.</p>
 
     <h3 id="install-2"><span class="num">7.2</span> First-run setup</h3>
-    <p>On first launch the user is asked to choose a master password. There is no email, no recovery question, no telemetry consent screen. The password is the only secret.</p>
+    <p>On first launch the user is asked to choose a master password. There is no email, no recovery question, no telemetry consent screen. The password is the primary secret; the optional Secret Key (default-on, see <a href="#crypto-9">section 4.9</a>) is a co-secret that is co-located on this device but never leaves it except via the printed Emergency Kit or its QR.</p>
     <div class="flow">
       <div class="step"><div><b>User chooses</b> a master password</div></div>
       <div class="arrow">▼</div>
       <div class="step"><div><b>App generates</b> random 256-bit vault key + random 32-byte salts</div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Argon2id derives</b> the verifier key from password + salt</div></div>
+      <div class="step"><div><b>Secret Key ceremony</b> · 16-byte SK generated and shown on the &ldquo;Your Secret Key&rdquo; page in printed form <code>A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX</code> · user reviews and taps <code>Save &amp; Continue</code> (default-on) or opts out via <code>Continue without Secret Key</code>, which raises the destructive second-confirm dialog &ldquo;Are you sure?&rdquo; gated by the &ldquo;I understand the risks&rdquo; checkbox before <code>Skip Secret Key</code> becomes enabled</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Wrap SK</b> with Keystore alias <code>1key_secret_key_v1</code> (StrongBox preferred, TEE fallback) · skipped if the user opted out</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>Argon2id derives</b> the verifier key from password + salt (and SK mixed in when enabled)</div></div>
       <div class="arrow">▼</div>
       <div class="step"><div><b>Keystore creates</b> a non-exportable wrap key inside the TEE</div></div>
       <div class="arrow">▼</div>
@@ -371,16 +556,70 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
       <div class="arrow">▼</div>
       <div class="step"><div><b>Persist</b> wrapped vault key + verifier ciphertext + salts to <code>EncryptedSharedPreferences</code></div></div>
       <div class="arrow">▼</div>
-      <div class="step"><div><b>Zero</b> the password <code>CharArray</code></div></div>
+      <div class="step"><div><b>Zero</b> the password <code>CharArray</code> and any in-memory SK byte buffer</div></div>
     </div>
+    <p>The ceremony page itself sets expectations: &ldquo;1Key just generated a 128-bit Secret Key on this device. We will mix it into your master password to derive the vault key, so a stolen backup file cannot be brute-forced from the password alone.&rdquo; The footnote under the printed key reminds users to capture the Emergency Kit later: &ldquo;After you continue, save this value as an Emergency Kit from Settings &gt; Security &gt; Secret Key. Without it, V5 encrypted backups taken from this device cannot be restored.&rdquo; UI strings live in <code>OnboardingScreen.kt</code> :: <code>SecretKeyCeremonyPage</code> and <code>SecretKeySkipOnboardingDialog.kt</code> :: <code>SecretKeySkipOnboardingDialog</code>.</p>
 
     <h3 id="install-3"><span class="num">7.3</span> Importing from an incumbent password manager</h3>
     <p>1Key includes an import flow that auto-detects format and column headers - no manual mapping is required. Confirmed support: <b>Google Passwords, LastPass, KeePass, Safari / iCloud Keychain, 1Password, Dashlane, NordPass</b> (all CSV).</p>
     <p>Duplicate credentials are detected by exact match of title plus username and skipped. The CSV file is read once into memory, parsed, and discarded; nothing transits the network.</p>
 
     <h3 id="install-4"><span class="num">7.4</span> Encrypted backups</h3>
-    <p>The user can export the vault as a <code>.1key</code> V4-envelope encrypted file (section 4.7) or as plain CSV/JSON for inspection. The encrypted envelope requires the master password to restore. <b>There is no recovery path</b> - losing both the device and the backup password is unrecoverable.</p>
-    <p>Recommended migration discipline: export once after initial setup, store the encrypted backup off-device on physical media (USB stick, external SSD, encrypted cloud storage of the user's choice), and refresh on a personal cadence.</p>
+    <p>A manual export now writes a <code>.1key</code> <b>V5 envelope</b> (the prior V4 layout is still accepted on restore, forever). V5 binds the Argon2id parameters and a <code>FLAGS</code> byte into the GCM AAD, so a tampered header invalidates the auth tag and the restore aborts. The same envelope can also carry the Secret Key requirement, in which case the restorer must present BOTH the master password AND the Secret Key.</p>
+
+    <p><b>V5 header layout</b> (76 bytes before BODY), authored by <code>encrypt</code> in <code>BackupEncryption.kt</code>:</p>
+    <table>
+      <thead><tr><th>Offset</th><th>Bytes</th><th>Field</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>8</td><td><code>MAGIC</code></td><td>literal <code>1KEYBKP\n</code></td></tr>
+        <tr><td>8</td><td>1</td><td><code>VERSION</code></td><td><code>0x05</code> for V5</td></tr>
+        <tr><td>9</td><td>1</td><td><code>FORMAT</code></td><td><code>0x00</code> JSON, <code>0x01</code> CSV</td></tr>
+        <tr><td>10</td><td>1</td><td><code>FLAGS</code></td><td>bit 0 = <code>FLAG_REQUIRES_SECRET_KEY</code> (<code>0x01</code>); bits 1-7 reserved, MUST be 0</td></tr>
+        <tr><td>11</td><td>4</td><td><code>KDF_M_KIB</code></td><td>uint32 big-endian, Argon2id memory in KiB</td></tr>
+        <tr><td>15</td><td>4</td><td><code>KDF_T</code></td><td>uint32 big-endian, Argon2id iterations</td></tr>
+        <tr><td>19</td><td>1</td><td><code>KDF_P</code></td><td>uint8 parallelism, always 1 today</td></tr>
+        <tr><td>20</td><td>8</td><td><code>TIMESTAMP</code></td><td>int64 big-endian, export epoch-ms</td></tr>
+        <tr><td>28</td><td>4</td><td><code>VAULT_VER</code></td><td>int32 big-endian, vault version counter</td></tr>
+        <tr><td>32</td><td>32</td><td><code>SALT</code></td><td>per-export random Argon2id salt</td></tr>
+        <tr><td>64</td><td>12</td><td><code>IV</code></td><td>AES-GCM 96-bit nonce</td></tr>
+        <tr><td>76+</td><td>N</td><td><code>BODY</code></td><td>AES-256-GCM ciphertext + 16-byte auth tag</td></tr>
+      </tbody>
+    </table>
+    <p class="muted">AAD bound into the GCM tag is exactly the first 32 bytes: <code>MAGIC || VERSION || FORMAT || FLAGS || KDF_M_KIB || KDF_T || KDF_P || TIMESTAMP || VAULT_VER</code>. <code>SALT</code> and <code>IV</code> are written verbatim but not appended to the AAD (GCM authenticates the IV intrinsically, and <code>SALT</code> is authenticated indirectly through the derived key). Tampering with <code>FLAGS</code> or the KDF triple invalidates the tag, so an attacker cannot downgrade a Secret-Key-protected backup or push the victim onto cheaper Argon2id parameters.</p>
+
+    <p><b>Restore decision tree</b> in <code>decrypt</code>:</p>
+    <div class="flow">
+      <div class="step"><div><b>Parse header</b> · accept VERSION in <code>{0x01, 0x02, 0x03, 0x04, 0x05}</code>, else reject with "Unsupported backup version"</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>FLAGS sanity</b> · enforce <code>FLAGS_RESERVED_MASK = 0xFE</code>; any reserved bit set rejects BEFORE the SK guard so a malformed FLAGS byte cannot leak header metadata via <code>SecretKeyRequiredException</code></div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>SK-required guard</b> · if <code>VERSION == V5</code> AND <code>FLAGS &amp; 0x01</code> AND no Secret Key supplied, throw <code>SecretKeyRequiredException(createdAtMs, vaultVersion)</code> BEFORE any Argon2id work - this ordering is locked by the <code>BackupEncryptionV5Test</code> suite</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>KDF dispatch</b> · V5+SK → <code>deriveKeyFromPasswordWithSecretKeyArgon2id(MP, SK, salt, embedded params)</code>; V5 without SK → <code>deriveKeyFromPasswordArgon2id(MP, salt, embedded params)</code>; V3/V4 → Argon2id at Standard params; V1/V2 → PBKDF2</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>AAD reconstruction</b> · V5 rebuilds the 32-byte AAD from the header; V4 uses the shorter <code>(MAGIC || VERSION || FORMAT || TIMESTAMP || VAULT_VER)</code>; V2/V3 use 10-byte AAD; V1 has no AAD</div></div>
+      <div class="arrow">▼</div>
+      <div class="step"><div><b>AES-256-GCM decrypt</b> · any byte changed in header, ciphertext, or tag fails verification</div></div>
+    </div>
+
+    <p><b>Secret Key path.</b> When the vault has Secret Key enabled, the V5 export sets <code>FLAGS</code> bit 0 and the KDF input is the concatenation <code>MP_utf8 || SK_raw16</code> (NOT XOR - concatenation lets Argon2id's avalanche absorb the SK across every memory pass). The 16-byte SK is the same value printed on the Emergency Kit as <code>A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX</code> (Crockford base32, 26 characters excluding the <code>A3-</code> stamp), and encoded into the QR as <code>1key-emergency:?sk=&lt;26-char&gt;&amp;ver=5</code>. The QR's <code>ver=5</code> is locked to the V5 envelope so a kit scanned on a new device matches the backup it must decrypt.</p>
+
+    <div class="stat-row">
+      <div class="stat"><div class="k">SK raw length</div><div class="v">16 bytes / 128 bits</div></div>
+      <div class="stat"><div class="k">Emergency Kit groups</div><div class="v">5+5+5+5+6 chars</div></div>
+      <div class="stat"><div class="k">QR scheme version</div><div class="v">ver=5 (matches V5)</div></div>
+      <div class="stat"><div class="k">Cost of wrong/missing SK</div><div class="v">no Argon2id work</div></div>
+    </div>
+
+    <div class="callout warn">
+      <div class="callout-head">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+        No recovery path
+      </div>
+      <p>Losing the device plus the backup password is unrecoverable. With Secret Key enabled, the same is true if you lose the Secret Key: the restorer needs MP AND SK, and the SK never leaves the device except via the printed Emergency Kit or its QR. There is no vendor reset, no email recovery, no support channel.</p>
+    </div>
+
+    <p><b>Recommended migration discipline.</b> Export once after initial setup, store the encrypted <code>.1key</code> off-device on physical media (USB stick, external SSD, or encrypted cloud storage of your choice), AND keep the printed Emergency Kit physically separate from that backup. Refresh on a personal cadence. The two artefacts together let a future-you restore on a fresh device; either alone is useless.</p>
 
     <h2 id="compare"><span class="num">08</span>Comparison framework</h2>
 
@@ -399,6 +638,7 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
         <tr><td>Secure export</td><td>Sometimes premium-tier</td><td><b>Yes, free</b></td></tr>
         <tr><td>Cost</td><td>$2–$10/month typical</td><td><b>Free</b></td></tr>
         <tr><td>Offline brute-force surface</td><td>Cloud auth blob</td><td><b>None - verifier in Keystore-bound storage</b></td></tr>
+        <tr><td>Secret Key construction (off-device factor mixed into KDF)</td><td>Some (e.g. 1Password)</td><td><b>Yes (default-on, optional opt-out)</b></td></tr>
         <tr><td>Independent security audit</td><td>Yes (Cure53, Recurity Labs)</td><td>None</td></tr>
       </tbody>
     </table>
@@ -415,9 +655,20 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <h3 id="roadmap-1"><span class="num">9.1</span> Permanently closed</h3>
 
     <div class="lim-card closed">
-      <h4><span class="tag">Closed</span> Auto-backup</h4>
-      <p>Permanently decided against. Auto-backup would require persisting the master password (or a key derived from it) somewhere that runs without user interaction - a daemon, a JobScheduler task, a system listener.</p>
-      <p>Any such persistence undermines the central property that the master password exists only in memory between unlock and lock.</p>
+      <h4><span class="tag">Closed</span> Background-daemon auto-backup (still closed)</h4>
+      <p>The original objection stands for any flavour of auto-backup that runs without the user present: a daemon, a <code>JobScheduler</code> task, a system-broadcast listener, or a periodic <code>WorkManager</code> job would all need to persist the master password (or a key derived from it) somewhere the OS can reach without an unlock. Any such persistence undermines the central property that the master password exists only in memory between unlock and lock.</p>
+      <ul style="margin:8px 0 0; padding-left:20px">
+        <li><b>What is still refused.</b> No background service, no periodic worker, no boot-completed listener, no "silent" sync. The app must not be able to write a backup while the vault is locked.</li>
+        <li><b>What did ship instead.</b> An <i>opt-in, master-password-unlock-only</i> sync feature: a fresh defensive copy of the password (and, when Secret Key is enabled, the unwrapped SK) is forwarded from <code>AuthRepositoryImpl</code> :: <code>unlockWithPassword</code> into <code>SyncEngineImpl</code> :: <code>maybeTriggerSync</code>, which encrypts a backup to the user-chosen SAF location and zeroes both buffers in its own <code>finally</code>. Biometric and PIN unlocks do <b>not</b> trigger sync (see <code>AuthRepositoryImpl</code> :: <code>unlockWithBiometric</code> and <code>AuthRepositoryImpl</code> :: <code>unlockWithPin</code>). No key material is persisted; the password material exists only for the duration of that one unlock.</li>
+      </ul>
+      <div class="flow" style="margin-top:12px">
+        <div class="step"><div><b>Refused</b> &middot; background/daemon path &middot; would need a persisted key</div></div>
+        <div class="arrow">▼</div>
+        <div class="step"><div><b>Allowed</b> &middot; MP-unlock-only path &middot; key lives only across one <code>unlockWithPassword</code> call</div></div>
+        <div class="arrow">▼</div>
+        <div class="step"><div><b>Output</b> &middot; atomic write to <code>vault-backup.1key</code> via <code>.part</code> rename (see <code>SyncEngineImpl</code> :: <code>FINAL_FILENAME</code>, <code>PART_FILENAME</code>, <code>runSync</code>)</div></div>
+      </div>
+      <p style="margin-top:12px" class="muted">In short: the daemon-style auto-backup the original card refused is still refused. The narrower, unlock-gated variant that does not require key persistence is the shipped sync feature.</p>
     </div>
 
     <div class="lim-card closed">
@@ -425,18 +676,23 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
       <p>Out of scope. 1Key is local-first by design.</p>
     </div>
 
-    <h3 id="roadmap-2"><span class="num">9.2</span> Parked (designed, not built)</h3>
+    <h3 id="roadmap-2"><span class="num">9.2</span> Parked and shipped-since-v1.0</h3>
+
+    <p class="muted">Items previously listed here as "designed, not built" have split into two outcomes: one still parked, one delivered. The Secret Key feature documented in <a href="#crypto-9">section 4.9</a> shipped along the same calendar.</p>
 
     <div class="lim-card parked">
       <h4><span class="tag">Parked</span> LAN sync</h4>
       <p>A peer-to-peer protocol over local Wi-Fi using the master password and a 4-digit short authentication string (SAS) for pairing. Designed; awaiting build-or-skip decision.</p>
-      <p>A LAN sync feature would require re-introducing some form of local-network permission - confirm whether the no-<code>INTERNET</code> property survives the design before the feature ships.</p>
+      <p>A LAN sync feature would require re-introducing some form of local-network permission. Confirm whether the no-<code>INTERNET</code> property survives the design before the feature ships.</p>
     </div>
 
-    <div class="lim-card parked">
-      <h4><span class="tag">Parked</span> Autofill</h4>
-      <p>Native-app autofill via Android's <code>AutofillService</code> is offline-safe along the "fill from explicit user-picked credential" path.</p>
-      <p>Locked-vault matching has been deferred to post-unlock with a generic chip, because matching across the vault while locked would require either a plaintext index or a partial unlock - both of which weaken the threat model.</p>
+    <div class="callout primary">
+      <p style="margin:0"><b>Shipped since v1.0.</b> The following items moved out of the parked list and into the app:</p>
+      <ul style="margin:8px 0 0 0; padding-left:20px">
+        <li><b>Autofill (May 2026).</b> Native-app autofill via Android's <code>AutofillService</code> ships along the "fill from explicit user-picked credential" path. The service is registered in <code>AndroidManifest.xml</code> as <code>OneKeyAutofillService</code> and matches on exact host. Locked-vault matching is deferred to post-unlock with a generic chip, because matching across the vault while locked would require either a plaintext index or a partial unlock, both of which weaken the threat model. Inline IME suggestions and passkeys remain deferred.</li>
+        <li><b>Secret Key (June 2026).</b> The 128-bit second factor and V5 backup envelope; see <a href="#crypto-9">section 4.9</a> and <a href="#install-4">section 7.4</a>.</li>
+        <li><b>Markdown notes editing.</b> Live preview and a markdown helper bar in the notes editor, with edit-mode showing markers dimmed grey rather than hidden so the soft keyboard cannot compose over a hidden range.</li>
+      </ul>
     </div>
 
     <h3 id="roadmap-3"><span class="num">9.3</span> Open / under consideration</h3>
@@ -478,13 +734,65 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     <details class="qa" open>
       <summary>Is this stronger crypto than the leading cloud password managers?</summary>
       <div class="qa-body">
-        <p>No. The cryptographic primitives are at parity - Argon2id, AES-256-GCM, HKDF - and the largest cloud vendor's Secret Key construction in particular remains a defence against offline brute force that no KDF can match. What 1Key offers is not stronger crypto but a smaller perimeter: nothing leaves the device, so there is no off-device blob to brute-force in the first place.</p>
+        <p>The cryptographic primitives are at parity: <b>Argon2id, AES-256-GCM, HKDF</b>. The historical advantage of the largest cloud vendor was its Secret Key construction (the so-called 2SKD or two-secret key derivation model), which mixes a high-entropy device-resident value into the password KDF and so resists offline brute force in a way no KDF tuning can match alone. <b>1Key now ships the same construction.</b></p>
+        <p>The Secret Key is a raw 16-byte (128-bit) value generated on-device via <code>SecureRandom</code>, default-on for every new vault (see <code>SecretKeyEnableUseCase</code> and the onboarding ceremony in <code>OnboardingScreen.kt</code>'s <code>SecretKeyCeremonyPage</code>). The verifier KDF input is byte-concatenation rather than XOR:</p>
+        <div class="flow">
+          <div class="step"><div><b>Secret Key off</b> &middot; <code>K_verifier = Argon2id(MP_utf8, salt, params)</code></div></div>
+          <div class="arrow">vs</div>
+          <div class="step"><div><b>Secret Key on</b> &middot; <code>K_verifier = Argon2id(MP_utf8 || SK_raw16, salt, params)</code> &middot; default-on</div></div>
+        </div>
+        <p>XOR was considered and rejected: concatenation lets Argon2id's avalanche absorb the 128-bit Secret Key across every memory pass of the m=64 MiB / t=3 STANDARD preset, while XOR would only pre-combine sixteen bytes at the front of the password and offer an algebraic shortcut on short master passwords. The branch lives in <code>CryptoManager.deriveKeyFromPasswordWithSecretKeyArgon2id</code> and is gated by <code>SP_SECRET_KEY_ENABLED</code> inside both <code>AuthRepositoryImpl.deriveVerifierKey</code> and <code>KdfMigrator.deriveActiveVerifierKey</code>.</p>
+        <p>Because the Secret Key never leaves the device by network, it must leave the device as paper. At setup the user is presented an <b>Emergency Kit</b> they are expected to print or write down:</p>
+        <dl class="acro">
+          <dt>Canonical form</dt>
+          <dd><code>A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX</code> &middot; Crockford base32, 26 characters in five dashed groups (5+5+5+5+6); prefix <code>A3-</code> marks the auth/alias family at format generation 3 (see <code>SecretKeyQrParser.kt</code> &middot; <code>SECRET_KEY_HUMAN_PREFIX</code>, <code>SECRET_KEY_GROUP_SIZES</code>, <code>formatCanonicalSkForPrint</code>).</dd>
+          <dt>QR form</dt>
+          <dd><code>1key-emergency:?sk=&lt;26-char-canonical&gt;&amp;ver=5</code> &middot; custom URI scheme, anchored regex, version locked at 5 to match the V5 backup envelope (<code>SecretKeyQrParser.SECRET_KEY_QR_VERSION</code>).</dd>
+          <dt>If lost</dt>
+          <dd>Unrecoverable. There is no escrow and no reset link. The kit is the only off-device copy.</dd>
+        </dl>
+        <p>The comparison is no longer "cloud has Secret Key, 1Key has a smaller perimeter." It is both at once. An attacker who somehow obtains a 1Key backup file (the V5 envelope sets <code>FLAG_REQUIRES_SECRET_KEY = 0x01</code> in its <code>FLAGS</code> byte, bound into the GCM auth tag) still needs both the master password and the 128-bit Secret Key from the user's paper kit before they can begin Argon2id work. The SK-required guard in <code>BackupEncryption.decrypt</code> fires before any KDF is run.</p>
+        <p><b>Nothing leaves the device by network</b>; there is no off-device auth blob attached to an email address sitting on a vendor server. 1Key is now arguably the broader defence: <b>no off-device blob, plus an off-device second factor required for any backup-restore path.</b></p>
       </div>
     </details>
     <details class="qa">
       <summary>How do I sync across devices?</summary>
       <div class="qa-body">
-        <p>You do not. If you need sync, choose a cloud manager - they exist for good reasons. 1Key is for users who do not want sync.</p>
+        <p>1Key ships sync today, but it is intra-device: there is no server, no cloud account, and no network call. On every successful master-password unlock, the app writes an encrypted file named <code>vault-backup.1key</code> into a folder you pick once (Settings &gt; Sync). Moving that file to another device, by whatever offline channel you trust (USB cable, a self-hosted file share, a removable card), is your responsibility. The other device restores it from <em>Restore from backup</em> using the same master password and, if applicable, the same Secret Key.</p>
+        <div class="callout primary">
+          <strong>Triggered only by master-password unlock.</strong>
+          <p>Biometric and PIN unlocks do not run sync. The trigger lives at the tail of <code>AuthRepositoryImpl.kt</code> :: <code>unlockWithPassword</code>; <code>unlockWithBiometric</code> and <code>unlockWithPin</code> install the vault key (and Secret Key, when enabled) but never call <code>maybeTriggerSync</code>. The contract is documented in <code>SyncEngine.kt</code>'s KDoc: "Called from AuthRepositoryImpl at the moment of a successful master-password unlock."</p>
+        </div>
+        <p>The file is written atomically: bytes go to <code>vault-backup.1key.part</code> first, then an atomic rename promotes it to <code>vault-backup.1key</code>, replacing the prior copy. Stale <code>.part</code> files from a crashed run are swept at the start of the next sync. Constants live in <code>SyncEngineImpl.kt</code> :: <code>FINAL_FILENAME</code> and <code>PART_FILENAME</code>; the sweep is <code>SyncEngineImpl.kt</code> :: <code>sweepStaleParts</code>.</p>
+        <div class="flow">
+          <div class="step"><strong>Step 1.</strong> User unlocks vault with master password on device A.</div>
+          <div class="arrow">▼</div>
+          <div class="step"><strong>Step 2.</strong> <code>AuthRepositoryImpl.unlockWithPassword</code> derives the vault key and, if Secret Key is enabled, unwraps a fresh defensive copy of the SK bytes from the Android Keystore.</div>
+          <div class="arrow">▼</div>
+          <div class="step"><strong>Step 3.</strong> <code>SyncEngineImpl.maybeTriggerSync</code> is called with the password and (optional) SK; if no folder URI is configured or another sync is in flight, it exits.</div>
+          <div class="arrow">▼</div>
+          <div class="step"><strong>Step 4.</strong> <code>BackupEncryption.encryptWithKey</code> writes a V5 envelope with <code>FLAGS = 0x01</code> (<code>FLAG_REQUIRES_SECRET_KEY</code>) when SK is on, or a V4 envelope when SK is off, embedding the <code>KdfPreset.STANDARD</code> parameters in the header.</div>
+          <div class="arrow">▼</div>
+          <div class="step"><strong>Step 5.</strong> Bytes land in <code>vault-backup.1key.part</code>, then an atomic rename promotes them to <code>vault-backup.1key</code> in the user-picked folder.</div>
+          <div class="arrow">▼</div>
+          <div class="step"><strong>Step 6.</strong> User physically moves the file to device B (USB, SD card, self-hosted share). Device B restores it via <em>Restore from backup</em>.</div>
+        </div>
+        <p>Two envelope versions can come out of this pipeline. Which one depends solely on whether Secret Key is enabled on the sending device:</p>
+        <table>
+          <thead>
+            <tr><th>Secret Key on this device</th><th>Envelope written</th><th>FLAGS byte</th><th>Header layout</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Enabled (default for new vaults)</td><td>V5</td><td><code>0x01</code> (<code>FLAG_REQUIRES_SECRET_KEY</code>)</td><td>MAGIC, VERSION=<code>0x05</code>, FORMAT, FLAGS, KDF_M, KDF_T, KDF_P, TIMESTAMP, VAULT_VER, SALT, IV, ciphertext</td></tr>
+            <tr><td>Disabled (opted out)</td><td>V4</td><td>(no FLAGS field)</td><td>MAGIC, VERSION=<code>0x04</code>, FORMAT, TIMESTAMP, VAULT_VER, SALT, IV, ciphertext</td></tr>
+          </tbody>
+        </table>
+        <p>The V5 branch lives in <code>BackupEncryption.kt</code> :: <code>encryptWithKey</code> (the <code>if (requiresSecretKey)</code> branch) and the V4 branch is the else branch; the flag constant is <code>BackupEncryption.kt</code> :: <code>FLAG_REQUIRES_SECRET_KEY</code>. Sync hardcodes <code>KdfPreset.STANDARD</code> for its KDF block so the restoring device can re-derive with the same parameters regardless of its own current preset. See <a href="#crypto-7">section 4.7</a> for the envelope formats and <a href="#install-4">section 7.4</a> for the restore decision tree.</p>
+        <div class="callout warn">
+          <strong>1Key does not move the file for you.</strong>
+          <p>There is no network code in the sync engine and no <code>INTERNET</code> permission on the app. If you want the backup on another device, you copy it yourself. If you would rather not, the file is still useful on this device as a same-device restore source after an uninstall or factory reset.</p>
+        </div>
+        <p>If you want server-mediated cross-device sync with conflict resolution and push notifications, choose a cloud manager. They exist for good reasons. 1Key is for users who want the encrypted backup, on disk, on their own terms.</p>
       </div>
     </details>
     <details class="qa">
@@ -525,21 +833,59 @@ BODY       N B   AES-256-GCM ciphertext + 16-byte auth tag</code></pre>
     </details>
 
     <h2 id="editor"><span class="num">11</span>Editor's notes - verified facts</h2>
-    <p>These items have been verified against the current source tree and require no further confirmation:</p>
+    <p>Every claim below is anchored to a stable symbol (class, function, or named constant) rather than a line number, so the references survive code drift. Verified against the source tree as of June 2026.</p>
+
+    <h4 style="margin-top:18px">Cryptographic primitives</h4>
     <ul>
-      <li>License: <b>GNU General Public License v3.0</b>, plus <code>TRADEMARKS.md</code> for the name and icon.</li>
+      <li>Argon2id default parameters m=64 MiB, t=3, p=1, output 32 bytes - constants <code>ARGON2_M_COST</code>, <code>ARGON2_T_COST</code>, <code>ARGON2_PARALLELISM</code>, <code>ARGON2_HASH_LENGTH</code> in <code>CryptoManager.kt</code>; surfaced as <code>KdfPreset.STANDARD</code> in <code>KdfPreset.kt</code>. Argon2id entry points: <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordArgon2id</code> (password only) and <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code> (password concatenated with the raw 16-byte Secret Key).</li>
+      <li>AES-256-GCM cipher mode and 128-bit auth tag - constants <code>AES_GCM</code> and <code>GCM_TAG_LENGTH</code> in <code>CryptoManager.kt</code>. AES-GCM IV is 12 bytes (96 bits, the GCM standard) and is generated per-encryption.</li>
+      <li>HKDF-SHA256 subkey labels <code>1key-field-enc-v1</code> and <code>1key-title-enc-v1</code> - constants <code>HKDF_FIELD_KEY_INFO</code> and <code>HKDF_TITLE_KEY_INFO</code> in <code>CryptoManager.kt</code>. RFC 5869 Extract step is skipped because the vault key is already a uniformly random 256-bit AES key.</li>
+      <li>AAD format <code>1k:v1|&lt;id&gt;|&lt;field&gt;</code> (fields) and <code>1k:v2|&lt;id&gt;|title</code> (titles) - built by <code>CredentialDecryptor.kt</code> :: <code>fieldAad</code> and <code>CredentialDecryptor.kt</code> :: <code>titleAad</code>, consumed at encrypt-time in <code>CredentialRepositoryImpl.kt</code>.</li>
+    </ul>
+
+    <h4>Hardware-bound key storage</h4>
+    <ul>
+      <li><code>EncryptedSharedPreferences</code> for the master-password verifier (<code>SP_PASSWORD_VERIFIER</code>) and the wrapped vault key (<code>SP_WRAPPED_VAULT_KEY</code>) - prefs handle constructed in <code>EncryptedAuthPrefsModule.kt</code>, injected into <code>AuthRepositoryImpl</code> via Hilt with the qualifier <code>@Named("auth")</code>.</li>
+      <li>Vault wrapping key in the Android Keystore - aliases <code>onekey_master</code> (legacy v1, kept for reading wrapped blobs on upgraded installs) and <code>onekey_master_v2</code> (upgraded). <code>CryptoManager.kt</code> :: <code>createUpgradedKeystoreKey</code> sets <code>setUnlockedDeviceRequired(true)</code> on API 28+. Silent migration of existing installs runs in <code>AuthRepositoryImpl.kt</code> :: <code>migrateKeystoreKey</code> on the first successful unlock following the upgrade.</li>
+      <li>StrongBox preference with TEE fallback - <code>CryptoManager.kt</code> :: <code>getOrCreateKeystoreKey</code> calls <code>setIsStrongBoxBacked(true)</code> on API 28+ and catches <code>StrongBoxUnavailableException</code> and <code>ProviderException</code> to retry against the TEE without StrongBox. The same pattern is used for Secret Key wrapping aliases in <code>SecretKeyKeystoreWrapper.kt</code> :: <code>getOrCreateWrappingKey</code>. Tier classification is exposed to the UI via <code>HardwareKeyIsolationTier</code> (<code>STRONGBOX</code> / <code>TEE</code> / <code>SOFTWARE</code>); only <code>SOFTWARE</code> raises a warning. StrongBox was introduced for the SK alias in commit <code>1def89f</code> (later commits include <code>32993d5</code> and <code>199a784</code>).</li>
+    </ul>
+
+    <h4>Secret Key feature</h4>
+    <ul>
+      <li>Raw SK length is 128 bits / 16 bytes - <code>SecretKeyHolder.kt</code> :: <code>SECRET_KEY_RAW_LENGTH</code>. KDF input shape when SK is enabled is byte concatenation <code>MP_utf8 || SK_raw16</code> (NOT XOR) - see the rationale comment in <code>CryptoManager.kt</code> :: <code>deriveKeyFromPasswordWithSecretKeyArgon2id</code>.</li>
+      <li>In-memory holder is a singleton with an <code>AtomicReference&lt;ByteArray?&gt;</code> - <code>SecretKeyHolder.kt</code> :: <code>setBytes</code>, <code>withBytes</code>, <code>clear</code>. Defensive copies are made on every read; the prior buffer is zeroed in place before the new reference is installed.</li>
+      <li>On-disk wrapped SK blob in <code>EncryptedSharedPreferences</code> - keys <code>SP_SECRET_KEY_WRAPPED</code> and <code>SP_SK_ACTIVE_ALIAS_VERSION</code> in <code>SecretKeyKeystoreWrapper.kt</code>. The wrapping Keystore alias is versioned as <code>1key_secret_key_v{N}</code> (constant <code>KEYSTORE_ALIAS_SECRET_KEY_PREFIX</code>) so a rotate mints generation <code>N+1</code> before the active <code>N</code> is destroyed.</li>
+      <li>Enable / disable / rotate flow runs the same two-phase commit as KDF preset changes - <code>KdfMigrator.kt</code> :: <code>runSecretKeyTransition</code>. Default-on policy at vault setup is enforced by <code>AuthRepositoryImpl.kt</code> :: <code>setupMasterPasswordWithSecretKey</code>; opt-out runs through <code>AuthRepositoryImpl.kt</code> :: <code>setupMasterPasswordOptingOutOfSecretKey</code> and requires the destructive second-confirm in <code>SecretKeySkipOnboardingDialog.kt</code>.</li>
+      <li>Emergency Kit canonical printed form <code>A3-XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX</code> (26-char Crockford base32 with an <code>A3-</code> prefix) - encode/decode helpers in <code>SecretKeyQrParser.kt</code> :: <code>bytesToCanonicalSk</code>, <code>canonicalSkToBytes</code>, <code>formatCanonicalSkForPrint</code>. QR scheme version constant <code>SECRET_KEY_QR_VERSION = 5</code> (matches the V5 envelope).</li>
+    </ul>
+
+    <h4>Backup envelope</h4>
+    <ul>
+      <li>V5 envelope is the on-disk format for manual user-initiated exports - constant <code>MANUAL_EXPORT_VERSION = VERSION_V5</code> in <code>BackupEncryption.kt</code>. V5 binds <code>MAGIC || VERSION || FORMAT || FLAGS || KDF_M_KIB || KDF_T || KDF_P || TIMESTAMP || VAULT_VER</code> (32 bytes) into the GCM auth tag via <code>BackupEncryption.kt</code> :: <code>buildHeaderAadV5</code>; fixed header is 76 bytes (<code>V5_HEADER_LEN</code>).</li>
+      <li>FLAGS bit 0 (<code>FLAG_REQUIRES_SECRET_KEY = 0x01</code>) marks an SK-protected envelope. Bits 1-7 reserved; reader rejects nonzero reserved bits via <code>FLAGS_RESERVED_MASK = 0xFE</code> before any other processing. SK-required pivot is <code>BackupEncryption.kt</code> :: <code>SecretKeyRequiredException</code>, thrown before any Argon2id work.</li>
+      <li>V1 / V2 / V3 / V4 envelopes <b>continue to decrypt forever</b> on restore - <code>BackupEncryption.kt</code> :: <code>decrypt</code> dispatches on the version byte. Test suite <code>BackupEncryptionV5Test</code> locks the SK-required ordering.</li>
+      <li>Sync engine writes V5 with <code>FLAGS = 0x01</code> when SK is enabled and V4 when SK is disabled - <code>SyncEngineImpl.kt</code> :: <code>runSync</code> calls <code>BackupEncryption.kt</code> :: <code>encryptWithKey</code> with <code>requiresSecretKey = (secretKey != null)</code>. SK forwarding happens in <code>AuthRepositoryImpl.kt</code> :: <code>unlockWithPassword</code>. Filename is <code>vault-backup.1key</code>; atomic rename via <code>.part</code> staging.</li>
+    </ul>
+
+    <h4>KDF presets and customization</h4>
+    <ul>
+      <li>Five presets: <code>STANDARD</code>, <code>STANDARD_PLUS</code>, <code>HARDENED</code>, <code>MAXIMUM</code>, <code>CUSTOM</code> - declared in <code>KdfPreset.kt</code> :: <code>KdfPreset</code>. Integer version codes <code>KDF_V3_STANDARD</code> = 30, <code>KDF_V3_STANDARD_PLUS</code> = 31, <code>KDF_V3_HARDENED</code> = 32, <code>KDF_V3_MAXIMUM</code> = 33, <code>KDF_V3_CUSTOM</code> = 34. Parallelism is locked to 1 on every preset.</li>
+      <li>Custom preset guard rails - constants <code>CUSTOM_M_MIN</code>, <code>CUSTOM_T_MIN</code>, <code>CUSTOM_T_MAX</code> in <code>KdfCustomDialog.kt</code>; per-device upper memory bound from <code>DeviceCapacityDetector.kt</code> :: <code>maxCustomMemoryMb</code>. Settings route literal <code>settings/security/kdf_strength</code> in <code>NavGraph.kt</code> :: <code>Screen.SettingsKdfStrength</code>.</li>
+      <li>Preset switch runs a two-phase commit through <code>KdfMigrator.kt</code> :: <code>migrateTo</code>: stage a pending verifier, round-trip-verify, then atomically swap. Recovery on next launch wipes any half-finished pending state.</li>
+    </ul>
+
+    <h4>Networking and build</h4>
+    <ul>
+      <li>No <code>INTERNET</code> or <code>ACCESS_NETWORK_STATE</code> permission in merged manifests - both are stripped via <code>tools:node="remove"</code> on the <code>&lt;uses-permission&gt;</code> lines in <code>AndroidManifest.xml</code>. ML Kit's Firelog subgraph is left on the classpath because <code>BarcodeScanning.getClient()</code> has a static class-init reference to <code>CCTDestination</code>; the OS blocks every socket attempt because the permission is gone.</li>
+      <li>minSdk 26, compileSdk 36, targetSdk 36 - <code>android { defaultConfig { ... } }</code> block in <code>app/build.gradle.kts</code>.</li>
+      <li>Tiered lockouts at 3 / 5 / 10 wrong attempts produce 30 s / 5 min / 1 hour cooldowns - <code>PasswordAttemptTracker.kt</code> / <code>PinAttemptTracker.kt</code> / <code>BiometricAttemptTracker.kt</code>.</li>
+    </ul>
+
+    <h4>Project metadata</h4>
+    <ul>
+      <li>License: <b>GNU General Public License v3.0</b>, plus <code>TRADEMARKS.md</code> for the "1Key" name and icon.</li>
       <li>Repository: <a href="https://github.com/roufsyed/1Key" target="_blank" rel="noopener">github.com/roufsyed/1Key</a>.</li>
-      <li>Argon2id parameters m=64 MiB, t=3, p=1, output 32 bytes - <code>CryptoManager.kt</code> lines 41–44.</li>
-      <li>AES-256-GCM with 12-byte IV and 128-bit tag - <code>CryptoManager.kt</code> lines 31–32.</li>
-      <li>AAD format <code>1k:v1|&lt;id&gt;|&lt;field&gt;</code> (fields) and <code>1k:v2|&lt;id&gt;|title</code> (titles) - <code>CredentialRepositoryImpl.kt</code> lines 505–509.</li>
-      <li><code>EncryptedSharedPreferences</code> for verifier and wrapped vault key - <code>AuthRepositoryImpl.kt</code> lines 196–204.</li>
-      <li><code>setUnlockedDeviceRequired(true)</code> on API ≥ 28 with silent migration - <code>CryptoManager.kt</code> line 75; <code>AuthRepositoryImpl.kt</code> lines 414–426.</li>
-      <li>HKDF labels <code>1key-field-enc-v1</code> and <code>1key-title-enc-v1</code> - <code>CryptoManager.kt</code> lines 231–232.</li>
-      <li>V4 backup envelope with timestamp + vault version in AAD - <code>BackupEncryption.kt</code>.</li>
-      <li>No <code>INTERNET</code> permission in current builds - <code>AndroidManifest.xml</code> + Firelog Gradle exclusion at <code>app/build.gradle.kts</code> lines 127–132.</li>
-      <li>minSdk 26, compileSdk 36, targetSdk 36 - <code>app/build.gradle.kts</code> lines 11, 16–18.</li>
-      <li>Tiered lockouts at 3 / 5 / 10 attempts → 30 s / 5 min / 1 hour.</li>
-      <li>Free, no tiers, no in-app purchases.</li>
+      <li>Free, no tiers, no in-app purchases. Distribution: GitHub Releases; F-Droid planned, not yet submitted.</li>
     </ul>
 
     <p style="margin-top:48px; text-align:center; font-family:var(--font-serif); font-style:italic; font-size:18px; color:var(--muted);">- End of paper -</p>
