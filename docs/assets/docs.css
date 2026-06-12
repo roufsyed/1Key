@@ -122,7 +122,10 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
   display: inline-flex; align-items: center; gap: 8px;
 }
 .doc-hero .eyebrow::before {
-  content: ""; width: 18px; height: 1.5px; background: var(--primary); border-radius: 2px;
+  /* Small filled bullet dot before the eyebrow label. Matches the
+     middle-dot separator already used in .doc-meta. Previously a
+     18x1.5px horizontal bar which read visually as an em-dash. */
+  content: ""; width: 6px; height: 6px; background: var(--primary); border-radius: 50%;
 }
 .doc-hero h1 {
   font-size: clamp(36px, 5vw, 64px);
@@ -192,15 +195,40 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .toc a.active { color: var(--primary); font-weight: 500; }
 
 /* Prose */
-.prose { max-width: var(--content-w); }
+.prose {
+  max-width: var(--content-w);
+  /* As a grid item inside .doc-grid (1fr or 240px+1fr depending on
+     viewport), allow the column to shrink below its content's natural
+     min-width. Without this, wide children (<pre>, <table>, long
+     unbreakable code tokens) force the prose column wider than 1fr
+     and produce horizontal page scroll on phones. */
+  min-width: 0;
+}
 .prose > * + * { margin-top: 1.05em; }
+/* Ensure block content inside .prose obeys the column width so wide
+   children scroll INSIDE their own overflow boxes instead of pushing
+   the parent wider. */
+.prose p, .prose ul, .prose ol, .prose .callout, .prose .lim-card,
+.prose .stat-row, .prose .flow, .prose .acro {
+  min-width: 0;
+  max-width: 100%;
+}
 .prose h2 {
   font-size: clamp(26px, 3vw, 36px);
   line-height: 1.15; letter-spacing: -.02em; font-weight: 600;
   margin: 64px 0 8px; padding-top: 24px;
   scroll-margin-top: 88px;
 }
-.prose h2:first-of-type { margin-top: 0; padding-top: 0; }
+/* Zero the top margin ONLY when the h2 is literally the first thing in
+   the article. Previously :first-of-type, which matches the first h2
+   in the article even if a callout precedes it - that collapsed the
+   Privacy Policy's TL;DR callout straight into "What we don't collect". */
+.prose h2:first-child { margin-top: 0; padding-top: 0; }
+/* When an h2 immediately follows a callout (the TL;DR pattern on the
+   Privacy Policy), the heading doesn't need 64+24=88px above it - the
+   callout already provides visual separation. Tighten to 32px so the
+   two read as part of the same "intro then first section" flow. */
+.prose .callout + h2 { margin-top: 32px; padding-top: 0; }
 .prose h2 em { font-family: var(--font-serif); font-style: italic; font-weight: 400; color: var(--primary); }
 .prose h2 .num {
   display: inline-block; min-width: 1.5em;
@@ -361,6 +389,11 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 }
 .doc-foot a { color: var(--on-bg); }
 .doc-foot a:hover { color: var(--primary); }
+/* .doc-foot a above beats .btn-primary on specificity (class + tag). Reassert
+   on-primary so the Download APK button keeps white text + white arrow icon
+   (the SVG uses stroke="currentColor"). */
+.doc-foot a.btn-primary,
+.doc-foot a.btn-primary:hover { color: var(--on-primary); }
 .doc-foot-cta {
   display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;
 }
@@ -379,6 +412,22 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .btn-primary:hover { background: color-mix(in oklab, var(--primary) 88%, #000); color: var(--on-primary); }
 .btn svg { width: 14px; height: 14px; }
 
+/* Class hooks introduced for responsive control. Pre-existing markup that
+   used inline-style grids/flex (the #docs section grid in index.html, the
+   right-hand nav cluster in every docs page) now references these classes
+   so the @media rules below can target them. */
+.nav-cta { white-space: nowrap; flex-shrink: 0; }
+.nav-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.docs-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 48px; align-items: start; }
+/* docs-cards stays 3-across at EVERY viewport per user request "horizontal
+   like before, while adhering to responsiveness". minmax(0, 1fr) lets the
+   tracks shrink below their content's natural min-width so narrow phones
+   keep the row instead of stacking. */
+.docs-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.docs-cards .get-card { min-width: 0; }
+.docs-cards .get-card h3,
+.docs-cards .get-card p { overflow-wrap: anywhere; word-break: break-word; }
+
 /* Responsive */
 @media (max-width: 980px) {
   .doc-grid { grid-template-columns: 1fr; gap: 32px; }
@@ -387,6 +436,23 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
   .nav-links { display: none; }
   .doc-foot-grid { grid-template-columns: 1fr; }
   .doc-foot-cta { justify-content: flex-start; }
+  /* Bump TOC link rows to a 44px touch target for tablet+phone (was OK at
+     desktop with the borderless rail; once stacked, taps need room). */
+  .toc a { padding: 12px 0; min-height: 44px; align-items: center; }
+  /* Tighten h2 spacing when the layout collapses - the desktop 64+24=88px
+     stack above each section is excessive when the TOC and doc-hero already
+     consume the upper viewport. Drops the gap to 40+12=52px. */
+  .prose h2 { margin: 40px 0 6px; padding-top: 12px; }
+  .prose h2:first-child { margin-top: 0; padding-top: 0; }
+  .prose .callout + h2 { margin-top: 24px; padding-top: 0; }
+  /* Icon button hits 44px from this breakpoint down (was 480 only),
+     matching tap-target guidelines on tablets too. */
+  .icon-btn { width: 44px; height: 44px; }
+  /* Docs section restacks to a single column when content area drops
+     below ~880px usable width. The 3 doc cards keep their horizontal
+     layout because the collapsed outer grid now gives them the full
+     content row to share. */
+  .docs-grid { grid-template-columns: 1fr; gap: 32px; }
 }
 
 /* Wide tables: scroll horizontally instead of clipping on phones / tablets. */
@@ -396,10 +462,53 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
+  /* Allow cell text to wrap on long unbroken strings (comma-separated
+     lockout schedule rows, etc.) before falling back to nested scroll. */
+  .prose table td, .prose table th {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
 }
 
-/* Phone-specific: tighter gutters, larger touch targets. */
+/* Pinch the wrap gutter earlier than 480px so 481-640 phones (large
+   Pixels, iPhone Pro Max in landscape-portrait split) get the same
+   comfortable 16px inset rather than 28px which crowds .qa cards. */
+@media (max-width: 640px) {
+  .wrap { padding: 0 16px; }
+}
+
+/* Phone-specific (<= 480px): larger touch targets + tighter doc-hero +
+   prose reflow. Reclaims content width without sacrificing legibility. */
 @media (max-width: 480px) {
   .wrap { padding: 0 16px; }
   .icon-btn { width: 44px; height: 44px; }
+  .nav-cta { padding: 11px 14px; min-height: 44px; font-size: 13px; }
+  .btn { padding: 12px 18px; min-height: 44px; }
+  .nav-actions { gap: 8px; }
+  .doc-hero { padding: 32px 0 24px; margin-bottom: 32px; }
+  .doc-hero h1 { letter-spacing: -.02em; line-height: 1.1; }
+  .callout { padding: 18px 16px; border-radius: var(--radius); }
+  .prose h2 { margin: 40px 0 6px; padding-top: 12px; }
+  .prose h2 .num { min-width: 0; margin-right: 8px; }
+  .prose h3 { margin: 28px 0 4px; }
+  .prose ul, .prose ol { padding-left: 18px; }
+  .prose ul li, .prose ol li { font-size: 15.5px; line-height: 1.55; }
+  .prose pre { padding: 14px 16px; font-size: 12.5px; }
+  /* .docs-cards keeps its 3-col layout (defined in the base block) but
+     uses a tighter gap on phones. minmax(0, 1fr) on the tracks lets
+     each card shrink as needed; .get-card { min-width: 0 } + child
+     overflow-wrap absorb long unbreakable tokens like "Cryptographic". */
+  .docs-cards { gap: 8px; }
+  .docs-cards .get-card { padding: 16px !important; }
+  .docs-cards .get-card h3 { font-size: 15px !important; }
+  .docs-cards .get-card p { font-size: 12.5px !important; }
+}
+
+/* Narrowest phones (<= 380px): trim the nav CTA so brand + theme +
+   Download stay on one row. Drop the trailing arrow icon (visually
+   redundant on a button labeled "Download APK") and tighten padding.
+   Avoids the font-size:0 hidden-text accessibility pitfall. */
+@media (max-width: 380px) {
+  .nav-cta { font-size: 13px; padding: 10px 12px; gap: 6px; min-height: 44px; }
+  .nav-cta svg { display: none; }
 }

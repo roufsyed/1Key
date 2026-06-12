@@ -308,7 +308,8 @@
     display: inline-flex; align-items: center; gap: 8px;
   }
   .eyebrow::before {
-    content: ""; width: 18px; height: 1.5px; background: var(--primary); border-radius: 2px;
+    /* Bullet dot, not a long bar (which previously read as an em-dash). */
+    content: ""; width: 6px; height: 6px; background: var(--primary); border-radius: 50%;
   }
   .h2 {
     font-size: clamp(32px, 4vw, 52px);
@@ -586,6 +587,40 @@
   }
   .install-row a:hover { text-decoration: underline; }
 
+  /* ── Nav cluster + Docs section grid hooks ───────────
+     IMPORTANT: index.html does NOT load docs.css - it has only this
+     embedded <style> block. Every class hook used in this file must
+     have its CSS HERE, not in docs.css. The .nav-actions/.docs-grid/
+     .docs-cards classes were originally defined in docs.css only;
+     porting them here so the landing-page markup actually picks up
+     responsive grid behavior. */
+  .nav-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .docs-grid {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 48px;
+    align-items: start;
+  }
+  .docs-cards {
+    /* 3 cards always sit in a single horizontal row at every viewport.
+       minmax(0, 1fr) lets each track shrink below content min-width so
+       long unbreakable words inside cards don't blow out the grid. */
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .docs-cards .get-card { min-width: 0; }
+  .docs-cards .get-card h3,
+  .docs-cards .get-card p {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   /* ── Footer ───────────────────────────────────────── */
   footer {
     border-top: 1px solid var(--outline-soft);
@@ -638,6 +673,12 @@
   .tweaks button.active { background: var(--primary); color: var(--on-primary); }
   .tweaks button svg { width: 14px; height: 14px; }
 
+  /* Long unbreakable tokens like the APK filename '1Key_1.1.0_*_release.apk'
+     must wrap inside the flex .body of an .install-row, else they push
+     the row past .get-card and trigger horizontal overflow on phones. */
+  .install-row .body { min-width: 0; }
+  .install-row b, .install-row .body { overflow-wrap: anywhere; word-break: break-word; }
+
   /* ── Responsive ───────────────────────────────────── */
   @media (max-width: 980px) {
     .hero-grid { grid-template-columns: 1fr; gap: 56px; }
@@ -652,6 +693,13 @@
     .nav-links { display: none; }
     section { padding: 72px 0; }
     .limits { padding: 32px 24px; }
+    /* Hide .phone-back the moment the hero collapses to a single column;
+       its 280px width + left:-40px would otherwise sit visually inside
+       the 480px-capped hero-stage and overflow it at 481-980px. */
+    .phone-back { display: none; }
+    /* Docs section: heading column stacks on top of the cards row,
+       cards keep their 3-across grid taking the full content width. */
+    .docs-grid { grid-template-columns: 1fr; gap: 32px; }
   }
   @media (max-width: 600px) {
     .features { grid-template-columns: 1fr; }
@@ -660,15 +708,29 @@
     .footer-grid > *:first-child { grid-column: 1 / -1; }
     .hero { padding: 48px 0 64px; }
     .floating-chip { display: none; }
-    .phone-back { display: none; }
   }
-  /* Phone-specific: tighter gutters, smaller phone mock, scaled CTA. */
+  /* Phone-specific: tighter gutters, smaller phone mock, scaled CTA,
+     full-width primary CTAs, reduced feature card padding, optional
+     tweaks panel becomes a full-width bottom bar. */
   @media (max-width: 480px) {
     .wrap { padding: 0 16px; }
     .phone { width: min(280px, calc(100vw - 48px)); }
     .nav-cta { padding: 10px 14px; min-height: 44px; }
     .btn { padding: 12px 18px; }
     section { padding: 48px 0; }
+    .feat { padding: 24px 20px; min-height: 0; }
+    .cta-row .btn { width: 100%; justify-content: center; }
+    .cta-row .btn-link { width: auto; justify-content: center; }
+    .terminal { padding: 12px 14px; font-size: 12px; }
+    .terminal-head { margin: -12px -14px 10px; padding: 9px 12px; }
+    /* Docs cards stay 3-across at phone width; trim padding/font-sizes
+       so each ~80-100px card still reads cleanly. */
+    .docs-cards { gap: 8px; }
+    .docs-cards .get-card { padding: 14px !important; }
+    .docs-cards .get-card h3 { font-size: 14px !important; }
+    .docs-cards .get-card p { font-size: 12px !important; }
+    .docs-cards .get-card .step { font-size: 10px; }
+    .tweaks { left: 16px; right: 16px; bottom: 16px; justify-content: center; }
   }
 
   /* Fade-in on load */
@@ -700,7 +762,7 @@
       <a href="#get">Get it</a>
       <a href="#docs">Docs</a>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div class="nav-actions">
       <button class="icon-btn" id="theme-btn" aria-label="Toggle theme">
         <svg id="icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
@@ -718,14 +780,14 @@
 <header class="hero">
   <div class="wrap hero-grid">
     <div class="fade">
-      <span class="badge"><span class="badge-dot"></span> Local-first · GPL-3.0 · v1.0</span>
+      <span class="badge"><span class="badge-dot"></span> Local-first · GPL-3.0 · v1.1.0</span>
       <h1 class="h1">The password manager that <em>doesn't have a server</em> to breach.</h1>
       <p class="lede">1Key lives only on your phone. <b>No cloud. No account. No telemetry. No <code style="font-family:var(--font-mono);font-size:.85em;background:var(--surface-variant);padding:1px 6px;border-radius:5px">INTERNET</code> permission</b> in the manifest. Free, forever.</p>
 
       <div class="cta-row">
         <a class="btn btn-primary" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
-          <span>Download APK<span class="btn-meta">~8 MB · Android 8+</span></span>
+          <span>Download APK<span class="btn-meta">~16-22 MB per-ABI · Android 8+</span></span>
         </a>
         <a class="btn btn-ghost" href="whitepaper.html" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
@@ -793,17 +855,17 @@
 <section id="why">
   <div class="wrap">
     <span class="eyebrow">Why 1Key exists</span>
-    <h2 class="h2">Every password manager keeps your vault on <em>their</em> servers.</h2>
+    <h2 class="h2">Every mainstream password manager keeps your vault on <em>their</em> servers.</h2>
 
     <div class="why-grid" style="margin-top:48px">
       <div class="why-prose">
-        <p>Mainstream managers charge <b>£25–£100/year</b> for autofill, TOTP, and export - features that should be commoditised by now. The pitch is convenience: sync, recovery, sharing. The bill is an encrypted blob sitting on someone else's machine, attached to your email, waiting for the next breach disclosure.</p>
+        <p>Mainstream managers charge <b>£25-£100/year</b> for autofill, TOTP, and export - features that should be commoditised by now. The pitch is convenience: sync, recovery, sharing. The bill is an encrypted blob sitting on someone else's machine, attached to your email, waiting for the next breach disclosure.</p>
         <p class="muted">1Key takes the opposite trade. Your vault lives in one place - <b>this phone</b> - and never leaves unless you explicitly export it. You give up sync and recovery. In return: no vendor server in your threat model, no account to subpoena, no auth blob to brute-force offline, and no subscription.</p>
       </div>
       <div>
         <div class="why-stat">
           <span class="label">Mainstream cost</span>
-          <div class="num"><s>£25–£100</s><small>/ year</small></div>
+          <div class="num"><s>£25-£100</s><small>/ year</small></div>
           <p class="desc">Premium tiers for autofill, TOTP, and exports - features that ship in 1Key's free build.</p>
         </div>
         <div class="why-stat">
@@ -885,9 +947,9 @@
           <span class="feat-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
           </span>
-          <h3>Encrypted backups (V4)</h3>
+          <h3>Encrypted backups (V5)</h3>
         </div>
-        <p>AES-256-GCM under Argon2id, with timestamp and vault-version counter in the auth tag. An old backup cannot be replayed against a current vault.</p>
+        <p>AES-256-GCM under Argon2id, with timestamp, vault-version counter, KDF parameters, and a Secret Key FLAGS byte all bound into the auth tag. V1-V4 still restore; manual exports now write V5.</p>
         <span class="feat-tag">Anti-rollback</span>
       </article>
 
@@ -898,8 +960,8 @@
           </span>
           <h3>Auto-detecting importer</h3>
         </div>
-        <p>Google Passwords, LastPass, KeePass, 1Password, Bitwarden, iCloud Keychain, Dashlane, NordPass. Drop the CSV - no manual column mapping.</p>
-        <span class="feat-tag">8 formats</span>
+        <p>Google Passwords, LastPass, KeePass, 1Password, Safari / iCloud Keychain, Dashlane, NordPass. Drop the CSV - no manual column mapping.</p>
+        <span class="feat-tag">7 formats</span>
       </article>
 
       <article class="feat">
@@ -926,7 +988,7 @@
   <div class="wrap">
     <span class="eyebrow">See it</span>
     <h2 class="h2">Material 3, with the <em>cloud-account</em> bits removed.</h2>
-    <p class="section-lede">Five screens. No onboarding to a server. No "verify your email." Set the master password, the vault opens.</p>
+    <p class="section-lede">Four screens. No onboarding to a server. No "verify your email." Set the master password, the vault opens.</p>
 
     <div class="gallery">
       <div class="gallery-phone">
@@ -961,7 +1023,7 @@
         <div class="limit">
           <span class="limit-num">01</span>
           <h4>One device.</h4>
-          <p>No sync. Lose the phone without a current backup, lose the vault. Encrypted backups are your safety net - make them.</p>
+          <p>No cross-device cloud sync. Lose the phone without a current backup, lose the vault. Encrypted backups (manual export or the optional Sync-to-folder feature) are your safety net - make them.</p>
         </div>
         <div class="limit">
           <span class="limit-num">02</span>
@@ -993,7 +1055,7 @@
         </div>
         <ul>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You want a manager that <b>never talks to a server</b></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You're done paying <b>£25–£100/year</b> for autofill and TOTP</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You're done paying <b>£25-£100/year</b> for autofill and TOTP</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You can keep an <b>encrypted backup</b> somewhere safe</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg> You're comfortable reading source or trusting community review</li>
         </ul>
@@ -1030,8 +1092,8 @@
         <div class="install-row">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
           <div class="body">
-            <b>1key-v1.0.0.apk</b>
-            <span>~8 MB · Android 8.0+ · arm64-v8a, armeabi-v7a</span>
+            <b>1Key_1.1.0_*_release.apk</b>
+            <span>~16 MB (armeabi-v7a) to ~22 MB (arm64-v8a / x86_64) · Android 8.0+ · arm64-v8a, armeabi-v7a, x86_64 (universal also available)</span>
           </div>
           <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">GitHub Releases →</a>
         </div>
@@ -1070,24 +1132,24 @@
 <!-- ── DOCS ───────────────────────────────────────────── -->
 <section id="docs" style="padding-top:64px;padding-bottom:64px">
   <div class="wrap">
-    <div style="display:grid;grid-template-columns:1fr 2fr;gap:48px;align-items:start;">
+    <div class="docs-grid">
       <div>
         <span class="eyebrow">Documents</span>
         <h2 class="h2" style="font-size:clamp(28px,3.2vw,40px)">Read before you trust.</h2>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div class="docs-cards">
         <a class="get-card" style="padding:24px;text-decoration:none" href="whitepaper.html" target="_blank" rel="noopener">
           <span class="step">HTML</span>
           <h3 style="font-size:18px;margin:8px 0 6px">White paper</h3>
           <p style="margin:0;font-size:13.5px">Cryptographic architecture and threat model.</p>
         </a>
         <a class="get-card" style="padding:24px;text-decoration:none" href="PRIVACY_POLICY.html" target="_blank" rel="noopener">
-          <span class="step">Plain text</span>
+          <span class="step">HTML</span>
           <h3 style="font-size:18px;margin:8px 0 6px">Privacy policy</h3>
           <p style="margin:0;font-size:13.5px">What 1Key collects (nothing) and what it stores (locally).</p>
         </a>
         <a class="get-card" style="padding:24px;text-decoration:none" href="FAQ.html" target="_blank" rel="noopener">
-          <span class="step">Markdown</span>
+          <span class="step">HTML</span>
           <h3 style="font-size:18px;margin:8px 0 6px">FAQ</h3>
           <p style="margin:0;font-size:13.5px">Encryption, passwords, backups, sync - short answers.</p>
         </a>
@@ -1133,7 +1195,7 @@
     <div class="footer-bottom">
       <div>© 2026 1Key · Built by one developer, for users who want zero servers in their threat model.</div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span class="pill">v1.0.0</span>
+        <span class="pill">v1.1.0</span>
         <span class="pill">min API 26</span>
         <span class="pill">target API 36</span>
       </div>

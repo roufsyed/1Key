@@ -24,7 +24,7 @@
   }
   .flow .step {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 14px;
     align-items: center;
     padding: 10px 14px;
@@ -32,6 +32,7 @@
     background: var(--surface-variant);
     font-size: 14px;
   }
+  .flow .step > div { min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
   .flow .step::before {
     counter-increment: step;
     content: counter(step, decimal-leading-zero);
@@ -43,7 +44,7 @@
     min-width: 32px; text-align: center;
   }
   .flow .step b { color: var(--on-bg); margin-right: 6px; }
-  .flow .step code { background: var(--surface); }
+  .flow .step code { background: var(--surface); overflow-wrap: anywhere; word-break: break-word; }
   .flow .arrow {
     color: var(--muted); font-family: var(--font-mono); font-size: 11px;
     text-align: center; padding: 0;
@@ -109,7 +110,29 @@
   }
   .stat .v em { font-family: var(--font-serif); font-style: italic; color: var(--primary); font-weight: 400; }
 
-  @media (max-width: 980px) { .stat-row { grid-template-columns: 1fr; } .acro { grid-template-columns: 1fr; gap: 4px 0; } .acro dt { margin-top: 10px; } }
+  @media (max-width: 980px) {
+    .stat-row { grid-template-columns: repeat(2, 1fr); }
+    .acro { grid-template-columns: 1fr; gap: 4px 0; }
+    .acro dt { margin-top: 10px; }
+  }
+  @media (max-width: 600px) {
+    .stat-row { grid-template-columns: 1fr; gap: 10px; }
+    .stat { padding: 14px 16px; }
+    .stat .v { font-size: 20px; }
+    .lim-card { padding: 16px 18px; }
+    .lim-card h4 { font-size: 14.5px; flex-wrap: wrap; }
+  }
+  /* Whitepaper-only phone refinements: tighter .flow step rows and .acro
+     definition list. Reclaim ~24px of text width on 320-480px screens
+     without touching the desktop layout. */
+  @media (max-width: 480px) {
+    .flow { padding: 14px; gap: 8px; }
+    .flow .step { padding: 10px 12px; gap: 10px; font-size: 13.5px; }
+    .flow .step::before { min-width: 26px; padding: 3px 6px; font-size: 10px; }
+    .lim-card { padding: 14px 16px; }
+    .lim-card .flow { padding: 12px; }
+    .acro { padding: 14px 16px; font-size: 13.5px; }
+  }
 </style>
 </head>
 <body>
@@ -126,7 +149,7 @@
       <a href="FAQ.html">FAQ</a>
       <a href="PRIVACY_POLICY.html">Privacy</a>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div class="nav-actions">
       <button class="icon-btn" id="theme-btn" aria-label="Toggle theme"></button>
       <a class="nav-cta" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">Download APK<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg></a>
     </div>
@@ -141,7 +164,7 @@
     <span class="pill">v1.1</span>
     <span>· <b>June 2026</b></span>
     <span>· 11 sections</span>
-    <span>· ~28 min read</span>
+    <span>· ~45 min read</span>
   </div>
 </header>
 
@@ -167,7 +190,7 @@
 
     <h2 id="summary"><span class="num">01</span>Executive summary</h2>
     <p>1Key is an Android password manager that stores nothing in the cloud and requires no account. The vault lives on a single device, encrypted with modern primitives - Argon2id for password-derived keys, AES-256-GCM for authenticated encryption - and bound to that device's hardware-backed Android Keystore. There is no sign-up, no telemetry, no recovery server, and no <code>INTERNET</code> permission in the manifest.</p>
-    <p>This paper is written for two audiences: privacy-conscious individuals deciding whether 1Key fits their threat model, and security-minded reviewers who want to understand exactly how the cryptographic stack is assembled. It is deliberately blunt about trade-offs. <b>1Key does not synchronise across devices. It does not offer team sharing. It does not support recovery if the master password is forgotten.</b> These are not omissions - they are direct consequences of the design decision that the vault should never leave the device.</p>
+    <p>This paper is written for two audiences: privacy-conscious individuals deciding whether 1Key fits their threat model, and security-minded reviewers who want to understand exactly how the cryptographic stack is assembled. It is deliberately blunt about trade-offs. <b>1Key does not synchronise across devices over the network. It does not offer team sharing. It does not support recovery if the master password is forgotten.</b> These are not omissions - they are direct consequences of the design decision that the vault should never leave the device unless the user explicitly exports it. The optional Sync feature writes an encrypted backup file to a folder the user picks (local storage, USB drive, or a folder another app uploads to cloud storage); moving that file between devices is the user's responsibility.</p>
     <p>Within those constraints, 1Key matches the modern cryptographic baseline used by the leading cloud-vault products and adds local-only hardening tailored to the Android threat model: a leaked database file alone cannot be brute-forced offline, because the password verifier is held in Keystore-bound <code>EncryptedSharedPreferences</code> rather than alongside the encrypted vault. The product is free, has no premium tier, and is released as open source under the GNU General Public License v3.0. The "1Key" name and icon are reserved as trademarks of the author; forks must rebrand before redistribution.</p>
 
     <div class="callout primary" style="margin-top:32px">
@@ -189,15 +212,15 @@
       <li><b>Recovery.</b> A forgotten master password is the leading reason users abandon a password manager entirely. Cloud vendors layer recovery codes, secret keys, or social recovery on top of the encrypted blob.</li>
       <li><b>Onboarding.</b> Account creation, even when E2EE (end-to-end encrypted), gives the vendor a stable identity to attach billing, support, and feature flags to.</li>
     </ol>
-    <p>The cost of this architecture is rarely surfaced clearly. Even with E2EE, the vendor holds the encrypted vault blob and an authentication ciphertext that gates access to it. This is a real attack surface: documented incidents in the past 24 months - including the LastPass 2022 breach, in which encrypted vault backups were exfiltrated alongside customer URL data - have involved exfiltration of an encrypted vault blob followed by offline brute-forcing against weak master passwords. The cryptographic guarantees are not wrong; the threat model assumes a sufficiently strong master password, which a non-trivial fraction of users do not have.</p>
+    <p>The cost of this architecture is rarely surfaced clearly. Even with E2EE, the vendor holds the encrypted vault blob and an authentication ciphertext that gates access to it. This is a real attack surface: documented incidents in recent years - including the LastPass 2022 breach, in which encrypted vault backups were exfiltrated alongside customer URL data, and the May 2026 Dashlane device-registration brute-force that exposed encrypted vaults for fewer than 20 personal-plan accounts - have involved exfiltration of an encrypted vault blob followed by offline brute-forcing against weak master passwords. The cryptographic guarantees are not wrong; the threat model assumes a sufficiently strong master password, which a non-trivial fraction of users do not have.</p>
     <p>For users who do not need sync - who carry one phone, who would rather export a backup file once a quarter than trust a server - the cloud auth blob is attack surface they did not ask for. <b>1Key exists for this user.</b> This is a deliberately narrow audience; users who need cross-device sync, sharing, or recovery should choose a hosted product.</p>
-    <p>The secondary problem is commercial. The features that distinguish a basic password manager from a useful one - built-in TOTP generation, secure export, custom fields, biometric unlock - are paywalled by most vendors. The result is a population of users who either pay £25–£100 per year for a category of software that should be commoditised, or who keep using the browser-native manager their laptop's vendor happens to ship.</p>
+    <p>The secondary problem is commercial. The features that distinguish a basic password manager from a useful one - built-in TOTP generation, secure export, custom fields, biometric unlock - are paywalled by most vendors. The result is a population of users who either pay £25-£100 per year for a category of software that should be commoditised, or who keep using the browser-native manager their laptop's vendor happens to ship.</p>
 
     <h2 id="approach"><span class="num">03</span>The 1Key approach: <em>local-first, account-free</em></h2>
     <p>1Key takes three positions, in descending order of strength.</p>
 
     <h3 id="approach-1"><span class="num">3.1</span> The vault never leaves the device</h3>
-    <p>There is no server. There is no vendor backend. There is no sync protocol. The encrypted vault lives in a Room/SQLite database in the application's private storage, and the only way data leaves the device is through an explicit user-initiated export.</p>
+    <p>There is no server. There is no vendor backend. There is no peer-to-peer sync protocol. The encrypted vault lives in a Room/SQLite database in the application's private storage, and data leaves the device only through (a) an explicit user-initiated export, or (b) the optional Sync feature, which writes an encrypted backup file to a user-chosen folder on every master-password unlock - never over a network from the app itself.</p>
     <p>Confirmed in <code>app/src/main/AndroidManifest.xml</code>: the manifest declares <code>&lt;uses-permission android:name="android.permission.INTERNET" tools:node="remove" /&gt;</code> and the same line for <code>ACCESS_NETWORK_STATE</code>, so the merged manifest carries neither permission. Both are pulled in transitively by ML Kit's Firelog subgraph (<code>com.google.android.datatransport</code>); Gradle-level exclusion is unsafe because <code>BarcodeScanning.getClient()</code> has a static class-init reference to <code>CCTDestination</code> (see the build comment in <code>app/build.gradle.kts</code> next to the ML Kit dependencies). The classes stay in the APK so ML Kit loads, but the OS refuses every socket attempt because the permission is gone from the merged manifest. On-device inference (OCR, barcode scanning) does not need network access.</p>
     <p class="muted">A note on temporal honesty: the no-<code>INTERNET</code> property is true of current builds. Earlier APKs inherited <code>INTERNET</code> and <code>ACCESS_NETWORK_STATE</code> transitively from the same Firelog subgraph. The runtime never actually opened a socket - there was no code path that called the transport - but the permission was declared in the merged manifest. Users who want full assurance should run a build dated May 2026 or later.</p>
 
@@ -264,7 +287,7 @@
 
     <h3 id="crypto-3"><span class="num">4.3</span> Vault-key wrapping and hardware isolation</h3>
     <p>The Argon2id-derived key is <b>not</b> the key that encrypts the database. Instead, 1Key generates a 256-bit AES vault key uniformly at random and wraps it with a non-exportable key stored in the Android Keystore. The only way to use that wrapping key is to ask the Keystore to perform an operation on the application's behalf; the raw key bytes never enter the app process.</p>
-    <p>From commit <code>1def89f</code> onward, 1Key <b>actively prefers</b> the device's StrongBox secure element when one is present, and falls back to the Trusted Execution Environment (TEE) when it is not. The same StrongBox-prefer-with-TEE-fallback pattern is used by three alias families, so every long-lived wrapping key in the app is offered the strongest available isolation:</p>
+    <p>From commit <code>1def89f</code> onward, 1Key <b>actively prefers</b> the device's StrongBox secure element when one is present, and falls back to the Trusted Execution Environment (TEE) when it is not. The same StrongBox-prefer-with-TEE-fallback pattern is used by three Keystore aliases across two code paths (the legacy and upgraded vault-wrap aliases share <code>getOrCreateKeystoreKey</code>; the versioned Secret Key alias prefix uses an inline copy of the same logic), so every long-lived wrapping key in the app is offered the strongest available isolation:</p>
     <div class="flow">
       <div class="step"><div><b>API gate</b> &middot; on <code>Build.VERSION.SDK_INT &gt;= P</code> (API 28+), <code>getOrCreateKeystoreKey</code> calls <code>setIsStrongBoxBacked(true)</code> on the <code>KeyGenParameterSpec</code> builder. Below API 28, the StrongBox block is skipped entirely.</div></div>
       <div class="arrow">&#9660;</div>
@@ -636,7 +659,7 @@ BODY        N B   offset 76   AES-256-GCM ciphertext + 16-byte auth tag</code></
         <tr><td>Recovery if password forgotten</td><td>Yes</td><td>No</td></tr>
         <tr><td>Built-in TOTP</td><td>Sometimes premium-tier</td><td><b>Yes, free</b></td></tr>
         <tr><td>Secure export</td><td>Sometimes premium-tier</td><td><b>Yes, free</b></td></tr>
-        <tr><td>Cost</td><td>$2–$10/month typical</td><td><b>Free</b></td></tr>
+        <tr><td>Cost</td><td>$2-$10/month typical</td><td><b>Free</b></td></tr>
         <tr><td>Offline brute-force surface</td><td>Cloud auth blob</td><td><b>None - verifier in Keystore-bound storage</b></td></tr>
         <tr><td>Secret Key construction (off-device factor mixed into KDF)</td><td>Some (e.g. 1Password)</td><td><b>Yes (default-on, optional opt-out)</b></td></tr>
         <tr><td>Independent security audit</td><td>Yes (Cure53, Recurity Labs)</td><td>None</td></tr>
