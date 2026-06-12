@@ -2184,6 +2184,19 @@ private fun ImportSecretKeyDialog(
                     placeholder = { Text("${SECRET_KEY_HUMAN_PREFIX}XXXXX-XXXXX-XXXXX-XXXXX-XXXXXX") },
                     isError = errorText != null,
                     supportingText = errorText?.let { msg -> { Text(msg) } },
+                    trailingIcon = {
+                        // Scan-from-camera affordance lives inside the field
+                        // so the SK row stays compact. Mirrors the onboarding
+                        // RestoreSecretKeyDialog so both entry points
+                        // (Onboarding > Restore from backup AND
+                        // Settings > Backup > Import) feel identical.
+                        IconButton(onClick = onScanQr) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan QR from Emergency Kit",
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
@@ -2192,22 +2205,6 @@ private fun ImportSecretKeyDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // Scan-from-camera affordance. Mirrors the onboarding
-                // RestoreSecretKeyDialog's Scan button so both entry
-                // points (Onboarding > Restore from backup AND
-                // Settings > Backup > Import) feel identical.
-                OutlinedButton(
-                    onClick = onScanQr,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text("Scan QR from Emergency Kit")
-                }
             }
         },
         confirmButton = {

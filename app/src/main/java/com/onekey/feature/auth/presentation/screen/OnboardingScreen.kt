@@ -1214,6 +1214,18 @@ private fun RestoreSecretKeyDialog(
                     isError = effectiveError != null,
                     supportingText = effectiveError?.let { err -> { Text(err) } },
                     enabled = !isLoading,
+                    trailingIcon = {
+                        // Scan-from-camera affordance lives inside the field
+                        // so the SK row stays compact. Disabled while a
+                        // verify is in flight so a tap during the Argon2id
+                        // derive does not race the result.
+                        IconButton(onClick = onScanQr, enabled = !isLoading) {
+                            Icon(
+                                imageVector = Icons.Default.QrCodeScanner,
+                                contentDescription = "Scan QR from Emergency Kit",
+                            )
+                        }
+                    },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(
@@ -1222,22 +1234,6 @@ private fun RestoreSecretKeyDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // Scan-from-camera affordance. Disabled while a verify
-                // is in flight so a tap during the Argon2id derive does
-                // not race the result.
-                androidx.compose.material3.OutlinedButton(
-                    onClick = onScanQr,
-                    enabled = !isLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.size(8.dp))
-                    Text("Scan QR from Emergency Kit")
-                }
             }
         },
         confirmButton = {
