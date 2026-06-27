@@ -262,20 +262,21 @@ class SettingsViewModel @Inject constructor(
 
     init {
         // First-launch warmup: kick benchmarks for every enabled fixed preset
-        // (and the currently-active one) so the picker has data to show when
-        // the user opens it. Each benchmark is gated by the mutex inside
-        // KdfBenchmark, so this serialises naturally and stays bounded.
+        // so the picker has data to show when the user opens it. Each
+        // benchmark is gated by the mutex inside KdfBenchmark, so this
+        // serialises naturally and stays bounded.
         //
-        // We avoid the picker UI showing "Estimating..." for the user's
-        // own active preset by giving that one priority (first in the loop).
+        // We deliberately do NOT await observeActiveKdfPreset().first() here.
+        // That flow gates on migrationComplete; on a Clear-Data cold start
+        // the gate can resolve after the init coroutine starts, leaving the
+        // benchmark loop stranded behind the .first() call and every preset
+        // chip stuck at "Estimating unlock time...". Iterating enabledPresets
+        // matches refreshBenchmark()'s working path - we lose the
+        // "prioritise active preset first" hint but every chip still
+        // populates as each benchmark completes.
         viewModelScope.launch {
             val snapshot = deviceCapacityDetector.snapshot()
-            val current = authRepository.observeActiveKdfPreset().first()
-            val toMeasure = buildList {
-                if (current != KdfPreset.CUSTOM) add(current)
-                addAll(snapshot.enabledPresets.filter { it != current })
-            }
-            toMeasure.forEach { preset ->
+            snapshot.enabledPresets.forEach { preset ->
                 runCatching { kdfBenchmark.benchmarkIfMissing(preset.toKdfParams()) }
             }
         }

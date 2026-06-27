@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.crypto.BadPaddingException
 import javax.inject.Inject
 import javax.inject.Named
@@ -416,7 +417,8 @@ class AuthRepositoryImpl @Inject constructor(
     // ── Unlock ────────────────────────────────────────────────────────────────
 
     override suspend fun unlockWithPassword(password: CharArray): AppResult<Unit> =
-        runCatchingResult {
+        withContext(Dispatchers.Default) {
+            runCatchingResult {
             migrationComplete.await()
 
             val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
@@ -482,6 +484,7 @@ class AuthRepositoryImpl @Inject constructor(
                 null
             }
             syncEngine.maybeTriggerSync(passwordForSync, skForSync)
+            }
         }
 
     override suspend fun unlockWithBiometric(): AppResult<Unit> = runCatchingResult {
@@ -516,7 +519,8 @@ class AuthRepositoryImpl @Inject constructor(
     // ── Change password ───────────────────────────────────────────────────────
 
     override suspend fun changePassword(oldPassword: CharArray, newPassword: CharArray): AppResult<Unit> =
-        runCatchingResult {
+        withContext(Dispatchers.Default) {
+            runCatchingResult {
             migrationComplete.await()
 
             // Refuse a no-op change before doing any KDF work. The UI also blocks
@@ -576,6 +580,7 @@ class AuthRepositoryImpl @Inject constructor(
                 oldPassword.fill(' ')
                 newPassword.fill(' ')
             }
+            }
         }
 
     // ── PIN ───────────────────────────────────────────────────────────────────
@@ -600,39 +605,43 @@ class AuthRepositoryImpl @Inject constructor(
         }.commit()
     }
 
-    override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = runCatchingResult {
-        migrationComplete.await()
+    override suspend fun unlockWithPin(pin: CharArray): AppResult<Unit> = withContext(Dispatchers.Default) {
+        runCatchingResult {
+            migrationComplete.await()
 
-        val pinCopy = pin.copyOf()
-        // CRITICAL: must call the THROWING verifyPinInternal here, NOT the public
-        // verifyPin which returns AppResult<Unit>. The public overload exists for
-        // the in-vault Settings -> Change PIN flow that legitimately consumes the
-        // result. Calling it here discards the result, and runCatchingResult only
-        // catches exceptions - so any wrong PIN would silently flow through to
-        // unwrapStoredKey() and unlock the vault. Regression introduced by M4 (1aeb4cb)
-        // and fixed in b? - keep this comment to prevent the same swap recurring.
-        verifyPinInternal(pin)
-        // pin is zeroed inside verifyPinInternal.
+            val pinCopy = pin.copyOf()
+            // CRITICAL: must call the THROWING verifyPinInternal here, NOT the public
+            // verifyPin which returns AppResult<Unit>. The public overload exists for
+            // the in-vault Settings -> Change PIN flow that legitimately consumes the
+            // result. Calling it here discards the result, and runCatchingResult only
+            // catches exceptions - so any wrong PIN would silently flow through to
+            // unwrapStoredKey() and unlock the vault. Regression introduced by M4 (1aeb4cb)
+            // and fixed in b? - keep this comment to prevent the same swap recurring.
+            verifyPinInternal(pin)
+            // pin is zeroed inside verifyPinInternal.
 
-        keyHolder.setKey(unwrapStoredKey())
-        loadSecretKeyIntoHolderIfEnabled()
+            keyHolder.setKey(unwrapStoredKey())
+            loadSecretKeyIntoHolderIfEnabled()
 
-        val pinKdfVersion = authPrefs.getInt(SP_PIN_KDF_VERSION, KDF_PBKDF2)
-        if (pinKdfVersion == KDF_PBKDF2) {
-            try {
-                migratePinVerifierToArgon2id(pinCopy)
-            } catch (_: Exception) {
-            } finally {
+            val pinKdfVersion = authPrefs.getInt(SP_PIN_KDF_VERSION, KDF_PBKDF2)
+            if (pinKdfVersion == KDF_PBKDF2) {
+                try {
+                    migratePinVerifierToArgon2id(pinCopy)
+                } catch (_: Exception) {
+                } finally {
+                    pinCopy.fill(' ')
+                }
+            } else {
                 pinCopy.fill(' ')
             }
-        } else {
-            pinCopy.fill(' ')
         }
     }
 
-    override suspend fun verifyPin(pin: CharArray): AppResult<Unit> = runCatchingResult {
-        migrationComplete.await()
-        verifyPinInternal(pin)
+    override suspend fun verifyPin(pin: CharArray): AppResult<Unit> = withContext(Dispatchers.Default) {
+        runCatchingResult {
+            migrationComplete.await()
+            verifyPinInternal(pin)
+        }
     }
 
     /**
@@ -649,15 +658,17 @@ class AuthRepositoryImpl @Inject constructor(
      * has migrated to a non-Standard preset.
      */
     override suspend fun verifyMasterPassword(password: CharArray): AppResult<Unit> =
-        runCatchingResult {
-            migrationComplete.await()
-            val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
-            // Hand verifyMasterPassword a copy so the caller's array survives.
-            val copy = password.copyOf()
-            try {
-                verifyMasterPassword(copy, kdfVersion)
-            } finally {
-                copy.fill(' ')
+        withContext(Dispatchers.Default) {
+            runCatchingResult {
+                migrationComplete.await()
+                val kdfVersion = authPrefs.getInt(SP_KDF_VERSION, KDF_PBKDF2)
+                // Hand verifyMasterPassword a copy so the caller's array survives.
+                val copy = password.copyOf()
+                try {
+                    verifyMasterPassword(copy, kdfVersion)
+                } finally {
+                    copy.fill(' ')
+                }
             }
         }
 

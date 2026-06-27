@@ -217,12 +217,16 @@ fun SettingsKdfStrengthScreen(
 
     // ── Custom params dialog ───────────────────────────────────────────────
     if (showCustomDialog) {
-        // Seed the sliders from the currently-active custom params when the
-        // user is editing an already-applied custom config; otherwise use
-        // sensible defaults that pass the per-device cap.
-        val currentCustom = activeCustomParams
-        val seedM = currentCustom?.first ?: 96.coerceAtMost(capacity.maxArgon2MemoryMb)
-        val seedT = currentCustom?.second ?: 5
+        // Seed the sliders from whichever preset is currently active so the
+        // dialog opens at "tweak my current encryption strength" instead of
+        // arbitrary defaults that may be weaker than what the user already
+        // chose (e.g. a Maximum user would otherwise see 96/5 instead of
+        // their live 128/8). Falls back to 96/5 only on the cold-start path
+        // where activeCustomParams has not yet emitted while CUSTOM is
+        // already the active preset.
+        val activeMt = com.onekey.core.security.currentActiveMt(activePreset, activeCustomParams)
+        val seedM = (activeMt?.first ?: 96).coerceAtMost(capacity.maxArgon2MemoryMb)
+        val seedT = activeMt?.second ?: 5
         KdfCustomDialog(
             maxMemoryMb = capacity.maxArgon2MemoryMb,
             initialM = seedM,

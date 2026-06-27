@@ -145,9 +145,20 @@ class KdfBenchmark @Inject constructor(
      * Convenience wrapper for the picker bootstrap path: returns cached
      * timing if available, otherwise runs [benchmark] and returns the new
      * value (or null on failure).
+     *
+     * Mirrors a disk-cache hit into [_cachedTimings] before returning so the
+     * picker StateFlow reflects persisted values on a process-restart visit.
+     * Without this, the in-memory map stays empty (only [persistTiming] fills
+     * it), and every preset chip would read "Estimating unlock time..." until
+     * the user taps Refresh Benchmark - even though the timing is on disk.
      */
     suspend fun benchmarkIfMissing(params: KdfParams): Long? {
-        getCachedTiming(params)?.let { return it }
+        getCachedTiming(params)?.let { cached ->
+            if (_cachedTimings.value[params] != cached) {
+                _cachedTimings.value = _cachedTimings.value + (params to cached)
+            }
+            return cached
+        }
         return benchmark(params)
     }
 

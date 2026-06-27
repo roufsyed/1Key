@@ -288,14 +288,6 @@ fun KdfCustomDialog(
                                     color = MaterialTheme.colorScheme.error,
                                 )
                             }
-                            isUnchangedFromActive -> {
-                                Text(
-                                    "These values match your current configuration. " +
-                                        "Move a slider to apply a different setting.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
                             estimateMs == null -> {
                                 Text(
                                     "Estimate: tap below to measure on this device.",
@@ -331,6 +323,15 @@ fun KdfCustomDialog(
                             }
                         }
                     }
+                }
+
+                if (isUnchangedFromActive) {
+                    Text(
+                        "These values match your current configuration. " +
+                                "Move a slider to apply a different setting.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                 }
 
                 Spacer(Modifier.height(4.dp))
