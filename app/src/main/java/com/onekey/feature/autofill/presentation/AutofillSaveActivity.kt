@@ -42,10 +42,12 @@ import androidx.lifecycle.lifecycleScope
 import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.model.isDark
 import com.onekey.core.domain.repository.AppPreferencesRepository
+import com.onekey.core.presentation.animation.UnlockOverlay
 import com.onekey.core.presentation.lockaware.LocalUserActivityPing
 import com.onekey.core.presentation.lockaware.LockAwareTextField
 import com.onekey.core.presentation.theme.OneKeyTheme
 import com.onekey.core.presentation.util.BiometricPromptController
+import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.core.security.AutoLockManager
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
@@ -87,6 +89,7 @@ class AutofillSaveActivity : FragmentActivity() {
     @Inject lateinit var autoLockManager: AutoLockManager
 
     private val authViewModel: AuthViewModel by viewModels()
+    private val appViewModel: AppViewModel by viewModels()
     private val viewModel: AutofillSaveViewModel by viewModels()
 
     /**
@@ -161,20 +164,28 @@ class AutofillSaveActivity : FragmentActivity() {
                     { autoLockManager.onUserActivity() }
                 }
                 CompositionLocalProvider(LocalUserActivityPing provides userActivityPing) {
-                    SaveGate(
-                        viewModel = viewModel,
-                        authViewModel = authViewModel,
-                        biometricController = biometricController!!,
-                        onFinish = {
-                            setResult(RESULT_OK)
-                            finish()
-                        },
-                        onAbort = {
-                            viewModel.dismiss()
-                            setResult(RESULT_CANCELED)
-                            finish()
-                        },
-                    )
+                    // Mount UnlockOverlay alongside SaveGate so the morph
+                    // circle has a Canvas to draw on while the locked
+                    // surface slides out. Same pattern as the main app's
+                    // NavGraph.
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        SaveGate(
+                            viewModel = viewModel,
+                            authViewModel = authViewModel,
+                            appViewModel = appViewModel,
+                            biometricController = biometricController!!,
+                            onFinish = {
+                                setResult(RESULT_OK)
+                                finish()
+                            },
+                            onAbort = {
+                                viewModel.dismiss()
+                                setResult(RESULT_CANCELED)
+                                finish()
+                            },
+                        )
+                        UnlockOverlay(appViewModel = appViewModel)
+                    }
                 }
             }
         }
@@ -185,6 +196,7 @@ class AutofillSaveActivity : FragmentActivity() {
 private fun SaveGate(
     viewModel: AutofillSaveViewModel,
     authViewModel: AuthViewModel,
+    appViewModel: AppViewModel,
     biometricController: BiometricPromptController,
     onFinish: () -> Unit,
     onAbort: () -> Unit,
@@ -192,6 +204,17 @@ private fun SaveGate(
     val capture by viewModel.capture.collectAsStateWithLifecycle()
     val isUnlocked by authViewModel.isUnlocked.collectAsStateWithLifecycle()
     val outcome by viewModel.outcome.collectAsStateWithLifecycle()
+
+    // AutofillLockedSurface owns the LockScreen-style celebration + morph
+    // pipeline. It fires `onUnlocked` after LOGO_CELEBRATION_DELAY_MS +
+    // morph-Held + POST_HELD_NAV_BUFFER_MS, at which point we swap to the
+    // ConfirmSavePane. Re-locking resets the flag so the surface comes
+    // back if the vault relocks under us.
+    var lockSurfaceDone by remember { mutableStateOf(false) }
+    LaunchedEffect(isUnlocked) {
+        if (!isUnlocked) lockSurfaceDone = false
+    }
+    val showLockedSurface = !isUnlocked || !lockSurfaceDone
 
     LaunchedEffect(outcome) {
         if (outcome is AutofillSaveViewModel.SaveOutcome.Saved) onFinish()
@@ -228,13 +251,15 @@ private fun SaveGate(
             }
         }
         is AutofillSaveViewModel.SaveState.Hydrated -> {
-            if (!isUnlocked) {
+            if (showLockedSurface) {
                 AutofillLockedSurface(
                     target = state.capture.webDomain ?: state.capture.packageName,
                     headlineText = "Unlock 1Key to save",
                     submitButtonLabel = "Unlock and continue",
                     authViewModel = authViewModel,
+                    appViewModel = appViewModel,
                     biometricController = biometricController,
+                    onUnlocked = { lockSurfaceDone = true },
                     onAbort = onAbort,
                 )
             } else {

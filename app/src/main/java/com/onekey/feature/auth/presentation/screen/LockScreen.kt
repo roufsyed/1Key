@@ -6,15 +6,8 @@ import android.view.ViewTreeObserver
 import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.EaseOutBack
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -42,7 +35,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -55,12 +47,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import com.onekey.R
-import com.onekey.core.presentation.animation.AppIconBlue
 import com.onekey.core.presentation.animation.PremiumMorphEasing
 import com.onekey.core.presentation.animation.UnlockTransitionPhase
 import com.onekey.core.presentation.animation.UnlockTransitionTimings
 import com.onekey.core.presentation.lockaware.LockAwareDialog
+import com.onekey.core.presentation.lockaware.LockLogoSection
 import com.onekey.core.presentation.lockaware.PasswordUnlockSection
 import com.onekey.core.presentation.lockaware.PinUnlockSection
 import com.onekey.core.presentation.util.rememberCanUseBiometric
@@ -390,7 +381,7 @@ fun LockScreen(
                 horizontalAlignment = Alignment.Start,
             ) {
                 Spacer(Modifier.height(topSpacing))
-                LogoSection(
+                LockLogoSection(
                     state = state,
                     modifier = Modifier
                         .align(Alignment.Start)
@@ -541,99 +532,6 @@ fun LockScreen(
                 Button(onClick = { lockReasonDismissed = true }) { Text("OK") }
             },
         )
-    }
-}
-
-@Composable
-private fun LogoSection(
-    state: AuthUiState,
-    modifier: Modifier = Modifier,
-) {
-    val iconScale   = remember { Animatable(2f) }
-    val keyRotation = remember { Animatable(2f) }
-    val rippleScale = remember { Animatable(2f) }
-    val rippleAlpha = remember { Animatable(0f) }
-    val shakeOffset = remember { Animatable(0f) }
-
-    val keyColor = MaterialTheme.colorScheme.primary
-    val density = LocalDensity.current
-    val shakePx = remember(density) { with(density) { 10.dp.toPx() } }
-
-    LaunchedEffect(state) {
-        when (state) {
-            is AuthUiState.Unlocked -> {
-                coroutineScope {
-                    launch { iconScale.animateTo(1.22f, tween(150, easing = EaseOutBack)) }
-                    launch { delay(0); iconScale.animateTo(2f, tween(130, easing = FastOutSlowInEasing)) }
-                }
-                coroutineScope {
-                    launch {
-                        keyRotation.animateTo(360f, tween(260, easing = FastOutSlowInEasing))
-                    }
-                    launch {
-                        rippleAlpha.snapTo(0.20f)
-                        coroutineScope {
-                            launch {
-                                rippleScale.animateTo(2.8f, tween(340, easing = LinearOutSlowInEasing))
-                            }
-                            launch {
-                                delay(50)
-                                rippleAlpha.animateTo(0f, tween(300, easing = LinearEasing))
-                            }
-                        }
-                    }
-                }
-            }
-            is AuthUiState.Error -> {
-                shakeOffset.animateTo(
-                    targetValue = 0f,
-                    animationSpec = keyframes {
-                        durationMillis = 400
-                        0f               at 0
-                        (-shakePx)       at 55
-                        shakePx          at 110
-                        (-shakePx * .6f) at 175
-                        (shakePx * .6f)  at 235
-                        (-shakePx * .3f) at 310
-                        0f               at 400
-                    },
-                )
-            }
-            else -> Unit
-        }
-    }
-
-    Box(
-        contentAlignment = Alignment.CenterStart,
-        modifier = modifier.graphicsLayer { translationX = shakeOffset.value },
-    ) {
-        Box(
-            modifier = Modifier
-                .size(60.dp)
-                .graphicsLayer {
-                    scaleX = rippleScale.value
-                    scaleY = rippleScale.value
-                    alpha = rippleAlpha.value
-                }
-                .background(keyColor, CircleShape),
-        )
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .graphicsLayer {
-                    rotationZ = keyRotation.value
-                    scaleX = iconScale.value
-                    scaleY = iconScale.value
-                }
-                .background(AppIconBlue, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.ic_lockscreen_key_foreground),
-                contentDescription = "1Key app icon",
-                modifier = Modifier.size(28.dp),
-            )
-        }
     }
 }
 

@@ -2,9 +2,12 @@ package com.onekey.feature.autofill.presentation
 
 import android.app.Activity
 import android.view.ViewTreeObserver
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,8 +15,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,26 +44,37 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
+import com.onekey.core.presentation.animation.PremiumMorphEasing
+import com.onekey.core.presentation.animation.UnlockTransitionPhase
+import com.onekey.core.presentation.animation.UnlockTransitionTimings
+import com.onekey.core.presentation.lockaware.LockLogoSection
 import com.onekey.core.presentation.lockaware.PasswordUnlockSection
 import com.onekey.core.presentation.lockaware.PinUnlockSection
 import com.onekey.core.presentation.util.BiometricPromptController
 import com.onekey.core.presentation.util.rememberCanUseBiometric
+import com.onekey.core.presentation.viewmodel.AppViewModel
 import com.onekey.core.security.LockReason
 import com.onekey.feature.auth.presentation.viewmodel.AuthEvent
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Same-frame jitter absorber applied AFTER the auto-trigger observes window
@@ -99,8 +116,16 @@ private const val POST_FOCUS_SETTLE_MS = 50L
  * @param target friendly destination string ("github.com" / "com.acme.app")
  * @param headlineText e.g. "Unlock 1Key to fill" / "Unlock 1Key to save"
  * @param submitButtonLabel passed through to [PasswordUnlockSection]'s button
+ * @param appViewModel app-scope ViewModel that owns the global unlock-morph
+ *   phase the same way it does for [com.onekey.feature.auth.presentation.screen.LockScreen].
+ *   The hosting activity must mount [com.onekey.core.presentation.animation.UnlockOverlay]
+ *   bound to this same instance so the morph circle has a Canvas to draw on.
  * @param biometricController activity-scoped lifecycle holder for the
  *   BiometricPrompt (survives configuration change, cancels in `onDestroy`)
+ * @param onUnlocked fired after the celebration + morph reaches `Held`,
+ *   plus a [UnlockTransitionTimings.POST_HELD_NAV_BUFFER_MS] buffer. The
+ *   activity should swap to its post-unlock surface in response. Mirrors
+ *   `LockScreen`'s `onUnlocked` contract exactly.
  * @param onAbort cancel-and-finish from the activity
  */
 @Composable
@@ -109,7 +134,9 @@ fun AutofillLockedSurface(
     headlineText: String,
     submitButtonLabel: String,
     authViewModel: AuthViewModel,
+    appViewModel: AppViewModel,
     biometricController: BiometricPromptController,
+    onUnlocked: () -> Unit,
     onAbort: () -> Unit,
 ) {
     val state by authViewModel.state.collectAsStateWithLifecycle()
@@ -153,6 +180,42 @@ fun AutofillLockedSurface(
     LaunchedEffect(lockReason) {
         if (lockReason != null) {
             biometricController.cancel()
+        }
+    }
+
+    // Drives the LockScreen-style slide-up + fade as the morph overlay
+    // expands. Value goes 0 → 1 over `MORPH_EXPAND_DURATION_MS`-ish so
+    // the surface clears the way for the [UnlockOverlay] Canvas circle.
+    val lockScreenExitProgress = remember { Animatable(0f) }
+
+    // Logo celebration plays first (LockLogoSection's pulse + rotate + ripple
+    // on the `AuthUiState.Unlocked` LaunchedEffect), then we hand the morph
+    // off to the activity-mounted UnlockOverlay so its expanding-circle
+    // takes over while we slide the lock surface out. Identical pipeline
+    // to LockScreen.kt - same delay constants, same morph hooks, same
+    // Held-phase gate before invoking onUnlocked.
+    LaunchedEffect(state) {
+        if (state is AuthUiState.Unlocked) {
+            lockScreenExitProgress.snapTo(0f)
+            delay(UnlockTransitionTimings.LOGO_CELEBRATION_DELAY_MS)
+            appViewModel.beginUnlockMorph()
+            coroutineScope {
+                launch {
+                    delay(230)
+                    lockScreenExitProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(durationMillis = 860, easing = PremiumMorphEasing),
+                    )
+                }
+                launch {
+                    appViewModel.unlockPhase.first { it is UnlockTransitionPhase.Held }
+                    delay(UnlockTransitionTimings.POST_HELD_NAV_BUFFER_MS)
+                    onUnlocked()
+                }
+            }
+        } else {
+            lockScreenExitProgress.snapTo(0f)
+            appViewModel.resetUnlockMorph()
         }
     }
 
@@ -280,139 +343,207 @@ fun AutofillLockedSurface(
 
     val errorMessage = (state as? AuthUiState.Error)?.message
 
-    Box(
+    // Mirrors LockScreen exactly:
+    //   * BoxWithConstraints + vertical-gradient background for the same
+    //     atmospheric tint as the main lock screen.
+    //   * Responsive horizontal padding (24/32 dp by screen width).
+    //   * Proportional top spacing clamped to 44-120 dp, so the logo lands
+    //     in the same band on every device.
+    //   * Outer Column wears the slide-up/fade graphicsLayer driven by
+    //     `lockScreenExitProgress`, the same Animatable LockScreen uses.
+    //   * Two-section split (hero on top, form pinned bottom) so the
+    //     keyboard never hides the unlock button.
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.Center,
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    ),
+                )
+            ),
     ) {
+        val density = LocalDensity.current
+        val horizontalPadding = if (maxWidth < 400.dp) 24.dp else 32.dp
+        val topSpacing = (maxHeight * 0.13f).coerceIn(44.dp, 120.dp)
+        val exitTravelPx = remember(maxHeight, density) { with(density) { maxHeight.toPx() * 1.08f } }
+        val exitProgress = lockScreenExitProgress.value
+
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .fillMaxSize()
+                .graphicsLayer {
+                    translationY = -exitTravelPx * exitProgress
+                    alpha = 1f - (0.24f * exitProgress)
+                },
         ) {
-            Text(
-                text = headlineText,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-            Text(
-                text = "for $target",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            // Inline banners - they explain why the user is being forced to type
-            // their master password. Two reasons may compose; show the more-
-            // specific lock-reason copy when both are true.
-            when {
-                biometricBlockedByLockReason -> LockReasonBanner(lockReason!!)
-                requiresMasterPasswordRecheck -> RecheckBanner()
+            // ── Hero ────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .weight(1f, fill = true)
+                    .statusBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = horizontalPadding),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                Spacer(Modifier.height(topSpacing))
+                LockLogoSection(
+                    state = state,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .padding(start = 16.dp),
+                )
+                Spacer(Modifier.height(28.dp))
+                Text(
+                    "$headlineText.",
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    lineHeight = MaterialTheme.typography.displayMedium.lineHeight,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+                Spacer(Modifier.height(12.dp))
+                // The site/app we are filling into, on a tinted surface so
+                // it reads as a distinct identifier (not body copy). Slots
+                // into LockScreen's subtitle position with matching
+                // typography (titleMedium).
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                ) {
+                    Text(
+                        text = target,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    )
+                }
             }
 
-            Spacer(Modifier.height(4.dp))
+            // ── Form ────────────────────────────────────────────────────
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(horizontal = horizontalPadding, vertical = 16.dp),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                // Inline banners explain why the user is being forced to
+                // type their master password. Two reasons may compose; show
+                // the more-specific lock-reason copy when both are true.
+                when {
+                    biometricBlockedByLockReason -> {
+                        LockReasonBanner(lockReason!!)
+                        Spacer(Modifier.height(14.dp))
+                    }
+                    requiresMasterPasswordRecheck -> {
+                        RecheckBanner()
+                        Spacer(Modifier.height(14.dp))
+                    }
+                }
 
-            when {
-                mustUsePassword -> {
-                    PasswordUnlockSection(
-                        state = state,
-                        lockoutUntilMs = passwordLockoutUntilMs,
-                        onPasswordSubmit = { authViewModel.unlockWithPassword(it) },
-                        submitButtonLabel = submitButtonLabel,
-                    )
-                }
-                isPinSetup && !forcePasswordFallback -> {
-                    PinUnlockSection(
-                        state = state,
-                        lockoutUntilMs = pinLockoutUntilMs,
-                        onPinSubmit = { pin -> authViewModel.unlockWithPin(pin.toCharArray()) },
-                        onFallbackToPassword = {
-                            forcePasswordFallback = true
-                            authViewModel.clearError()
-                        },
-                    )
-                }
-                else -> {
-                    PasswordUnlockSection(
-                        state = state,
-                        lockoutUntilMs = passwordLockoutUntilMs,
-                        onPasswordSubmit = { authViewModel.unlockWithPassword(it) },
-                        submitButtonLabel = submitButtonLabel,
-                    )
-                    if (isPinSetup && forcePasswordFallback && !mustUsePassword) {
-                        TextButton(
-                            modifier = Modifier.align(Alignment.CenterHorizontally),
-                            onClick = {
-                                forcePasswordFallback = false
+                when {
+                    mustUsePassword -> {
+                        PasswordUnlockSection(
+                            state = state,
+                            lockoutUntilMs = passwordLockoutUntilMs,
+                            onPasswordSubmit = { authViewModel.unlockWithPassword(it) },
+                            submitButtonLabel = submitButtonLabel,
+                        )
+                    }
+                    isPinSetup && !forcePasswordFallback -> {
+                        PinUnlockSection(
+                            state = state,
+                            lockoutUntilMs = pinLockoutUntilMs,
+                            onPinSubmit = { pin -> authViewModel.unlockWithPin(pin.toCharArray()) },
+                            onFallbackToPassword = {
+                                forcePasswordFallback = true
                                 authViewModel.clearError()
                             },
-                        ) { Text("Use PIN instead") }
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 20.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (errorMessage != null) {
-                    Text(
-                        errorMessage,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-
-            // Biometric chip: visible when biometric is configured and not blocked.
-            // Tapping always re-opens the system prompt; the controller cancels any
-            // existing prompt first to avoid stacking.
-            if (isBiometricEnabled && canUseBiometric && !mustUsePassword) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(
-                        onClick = {
-                            biometricController.show(
-                                onSuccess = { authViewModel.unlockWithBiometric() },
-                                onError = { msg -> authViewModel.setBiometricError(msg) },
-                                onAuthFailed = { authViewModel.recordBiometricFailure() },
-                            )
-                        },
-                        enabled = state !is AuthUiState.Loading,
-                    ) {
-                        Icon(
-                            Icons.Default.Fingerprint,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary,
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Text("Use biometric", style = MaterialTheme.typography.titleSmall)
+                    }
+                    else -> {
+                        PasswordUnlockSection(
+                            state = state,
+                            lockoutUntilMs = passwordLockoutUntilMs,
+                            onPasswordSubmit = { authViewModel.unlockWithPassword(it) },
+                            submitButtonLabel = submitButtonLabel,
+                        )
+                        if (isPinSetup && forcePasswordFallback && !mustUsePassword) {
+                            TextButton(
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                                onClick = {
+                                    forcePasswordFallback = false
+                                    authViewModel.clearError()
+                                },
+                            ) { Text("Use PIN instead") }
+                        }
                     }
                 }
-                if (biometricAttemptsRemaining in 1 until 3) {
-                    Text(
-                        text = "$biometricAttemptsRemaining biometric ${if (biometricAttemptsRemaining == 1) "attempt" else "attempts"} remaining",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.align(Alignment.CenterHorizontally),
-                    )
-                }
-            }
 
-            Spacer(Modifier.height(4.dp))
-            TextButton(
-                onClick = onAbort,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) { Text("Cancel autofill") }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 20.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    if (errorMessage != null) {
+                        Text(
+                            errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+
+                // Biometric chip: visible when biometric is configured and
+                // not blocked. Tapping always re-opens the system prompt;
+                // the controller cancels any existing prompt first to
+                // avoid stacking.
+                if (isBiometricEnabled && canUseBiometric && !mustUsePassword) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(
+                            onClick = {
+                                biometricController.show(
+                                    onSuccess = { authViewModel.unlockWithBiometric() },
+                                    onError = { msg -> authViewModel.setBiometricError(msg) },
+                                    onAuthFailed = { authViewModel.recordBiometricFailure() },
+                                )
+                            },
+                            enabled = state !is AuthUiState.Loading,
+                        ) {
+                            Icon(
+                                Icons.Default.Fingerprint,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Use biometric", style = MaterialTheme.typography.titleSmall)
+                        }
+                    }
+                    if (biometricAttemptsRemaining in 1 until 3) {
+                        Text(
+                            text = "$biometricAttemptsRemaining biometric ${if (biometricAttemptsRemaining == 1) "attempt" else "attempts"} remaining",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        )
+                    }
+                }
+
+                TextButton(
+                    onClick = onAbort,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) { Text("Cancel autofill") }
+            }
         }
     }
 }

@@ -289,19 +289,22 @@ class AutofillUnlockViewModelTest {
         assertEquals(listOf("exact", "substring", "title-only"), ids)
     }
 
-    @Test fun empty_query_shows_recent_starter_preview_not_full_vault() = runTest(testDispatcher) {
-        // Twelve creds with descending updatedAt; verify only EMPTY_QUERY_PREVIEW (8)
-        // make it into the empty-query preview list.
+    @Test fun empty_query_with_all_filter_returns_full_vault_recency_sorted() = runTest(testDispatcher) {
+        // Twelve creds with descending updatedAt; with "All" selected and an
+        // empty query we expose the full set ordered by recency, no preview
+        // cap - the chip is labelled "All", so it must actually return all.
         val all = (1..12).map { n ->
             snap("$n", "Title$n", "u", "https://site$n.example.com", updatedAt = n.toLong())
         }
         snapshot.value = SnapshotState.Loaded(all)
         val vm = buildVm(parsed = parsed(webDomain = "site1.example.com"))
         advanceUntilIdle()
-        val preview = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded).credentials
-        assertEquals(8, preview.size)
+        val results = (vm.searchResults.value as AutofillUnlockViewModel.SearchState.Loaded).credentials
+        assertEquals(12, results.size)
         // Most-recent first.
-        assertEquals("12", preview.first().id)
+        assertEquals("12", results.first().id)
+        // Least-recent last.
+        assertEquals("1", results.last().id)
     }
 
     // ── cross-host policy ────────────────────────────────────────────────────

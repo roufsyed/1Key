@@ -387,16 +387,17 @@ class AutofillUnlockViewModel @Inject constructor(
             selectedTag == null || selectedTag in c.tags
         }
         if (q.isEmpty()) {
-            // Empty query: behaviour depends on whether the user asserted a
-            // tag filter. With "All" we show only a small recent-items
-            // starter (limits the social-engineering surface). With a tag
-            // selected the user has positively narrowed the set: show
-            // everything in it, alphabetical, no preview cap.
+            // Empty query: show every credential that passes the tag filter.
+            //   "All" (selectedTag == null) -> recency-sorted full list, so
+            //     the credential the user touched most recently surfaces
+            //     first. A hard cap here would silently hide entries from
+            //     the "All" view despite its label.
+            //   Tag selected -> alphabetical full list; the user has already
+            //     positively narrowed the set so scanning by title is the
+            //     natural read order.
             val active = snap.asSequence().filter(tagPredicate)
             return if (selectedTag == null) {
-                active.sortedByDescending { it.updatedAt }
-                    .take(EMPTY_QUERY_PREVIEW)
-                    .toList()
+                active.sortedByDescending { it.updatedAt }.toList()
             } else {
                 active.sortedBy { it.title.lowercase() }.toList()
             }
@@ -430,6 +431,5 @@ class AutofillUnlockViewModel @Inject constructor(
         const val KEY_SELECTED_TAG = "autofill_selected_tag"
         const val SEARCH_DEBOUNCE_MS = 150L
         const val SEARCH_LIMIT = 50
-        const val EMPTY_QUERY_PREVIEW = 8
     }
 }

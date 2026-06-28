@@ -14,11 +14,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -68,8 +72,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.preferredFrameRate
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,6 +99,8 @@ import com.onekey.feature.autofill.domain.DatasetBuilder
 import com.onekey.feature.autofill.domain.HostExtractor
 import com.onekey.feature.autofill.domain.ParsedFields
 import dagger.hilt.android.AndroidEntryPoint
+import com.onekey.core.presentation.animation.UnlockOverlay
+import com.onekey.core.presentation.viewmodel.AppViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -147,6 +155,7 @@ class AutofillUnlockActivity : FragmentActivity() {
     @Inject lateinit var credentialRepository: CredentialRepository
 
     private val authViewModel: AuthViewModel by viewModels()
+    private val appViewModel: AppViewModel by viewModels()
     private val viewModel: AutofillUnlockViewModel by viewModels()
 
     /**
@@ -259,19 +268,27 @@ class AutofillUnlockActivity : FragmentActivity() {
                 }
 
                 CompositionLocalProvider(LocalUserActivityPing provides userActivityPing) {
-                    UnlockGate(
-                        parsed = parsed,
-                        authViewModel = authViewModel,
-                        unlockViewModel = viewModel,
-                        biometricController = biometricController!!,
-                        startInSearch = viewModel.startInSearch,
-                        onResolveCredential = onResolveCredential,
-                        onResolveSnapshot = onResolveSnapshot,
-                        onAbort = {
-                            setResult(RESULT_CANCELED)
-                            finish()
-                        },
-                    )
+                    // Mount UnlockOverlay at the activity root so the morph
+                    // circle has a Canvas to draw on while AutofillLockedSurface
+                    // slides out beneath it. Mirrors NavGraph's mount of the
+                    // overlay for the main app.
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        UnlockGate(
+                            parsed = parsed,
+                            authViewModel = authViewModel,
+                            appViewModel = appViewModel,
+                            unlockViewModel = viewModel,
+                            biometricController = biometricController!!,
+                            startInSearch = viewModel.startInSearch,
+                            onResolveCredential = onResolveCredential,
+                            onResolveSnapshot = onResolveSnapshot,
+                            onAbort = {
+                                setResult(RESULT_CANCELED)
+                                finish()
+                            },
+                        )
+                        UnlockOverlay(appViewModel = appViewModel)
+                    }
                 }
             }
         }
@@ -333,6 +350,7 @@ class AutofillUnlockActivity : FragmentActivity() {
 private fun UnlockGate(
     parsed: ParsedFields,
     authViewModel: AuthViewModel,
+    appViewModel: AppViewModel,
     unlockViewModel: AutofillUnlockViewModel,
     biometricController: BiometricPromptController,
     startInSearch: Boolean,
@@ -345,10 +363,22 @@ private fun UnlockGate(
     val matchesState by unlockViewModel.matches.collectAsStateWithLifecycle()
     val saveUrlToggleOn by unlockViewModel.isSaveUrlOnCrossHostEnabled.collectAsStateWithLifecycle()
 
+    // AutofillLockedSurface owns the LockScreen-style celebration + morph
+    // pipeline. It fires `onUnlocked` after LOGO_CELEBRATION_DELAY_MS +
+    // morph-Held + POST_HELD_NAV_BUFFER_MS, at which point we swap to the
+    // post-unlock surface. Re-locking resets the flag so the surface comes
+    // back if the vault relocks under us.
+    var lockSurfaceDone by remember { mutableStateOf(false) }
+    LaunchedEffect(isUnlocked) {
+        if (!isUnlocked) lockSurfaceDone = false
+    }
+    val showLockedSurface = !isUnlocked || !lockSurfaceDone
+
     // Once unlocked, kick off exact-host match load. The snapshot is hot
     // already (managed by VaultSnapshotStore at app scope); we no longer
     // call a per-screen loadSnapshot(). The LaunchedEffect fires again on
-    // re-unlock and loadMatches() is idempotent.
+    // re-unlock and loadMatches() is idempotent. Runs in parallel with the
+    // celebration so MatchesSurface is hydrated by the time we swap.
     LaunchedEffect(isUnlocked) {
         if (isUnlocked) {
             unlockViewModel.loadMatches()
@@ -382,12 +412,14 @@ private fun UnlockGate(
     }
 
     when {
-        !isUnlocked -> AutofillLockedSurface(
+        showLockedSurface -> AutofillLockedSurface(
             target = parsed.webDomain ?: parsed.packageName,
             headlineText = "Unlock 1Key to fill",
             submitButtonLabel = "Unlock and fill",
             authViewModel = authViewModel,
+            appViewModel = appViewModel,
             biometricController = biometricController,
+            onUnlocked = { lockSurfaceDone = true },
             onAbort = onAbort,
         )
         crossHostFor != null -> CrossHostConfirmSurface(
@@ -441,16 +473,25 @@ private fun MatchesSurface(
     // pinned to the bottom. The LazyColumn's weight(1f) absorbs the spare
     // height so long credential lists scroll behind the action bar instead
     // of pushing it off-screen.
+    //
+    // Inset handling - elegant split:
+    //   * Outer Column reserves status-bar height so the header is never
+    //     drawn behind the system clock.
+    //   * The nav-bar inset is applied INSIDE the bottom Surface's content
+    //     padding (see below), so the Surface background bleeds all the way
+    //     to the screen edge while the button + cancel link stay clear of
+    //     the gesture-pill area.
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         // ── Sticky header ───────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 12.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
@@ -555,8 +596,10 @@ private fun MatchesSurface(
                 }
                 TextButton(
                     onClick = onAbort,
-                    modifier = Modifier.align(Alignment.End),
-                ) {
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .windowInsetsPadding(WindowInsets.navigationBars),
+                    ) {
                     Text("Cancel")
                 }
             }
@@ -580,6 +623,24 @@ private fun SearchSurface(
     val focusRequester = remember { FocusRequester() }
     val isBypassed = resultsState is AutofillUnlockViewModel.SearchState.Bypassed
 
+    // Local TextFieldValue so the cursor can be positioned at the END of
+    // the seeded brand-label query (the VM seeds "google" for accounts.google.com;
+    // the user expects the caret to sit after the e, not before the g, so
+    // backspace or further typing extends the existing token). The String
+    // overload of LockAwareTextField defaults the cursor to position 0.
+    var fieldValue by remember {
+        mutableStateOf(TextFieldValue(text = query, selection = TextRange(query.length)))
+    }
+    // Re-sync when the VM updates the query from outside this field
+    // (e.g. the trailing X clear button calls onSearchQueryChanged(""),
+    // or process-death restoration emits a new value). On sync, park the
+    // cursor at the new text's end so the field stays usable.
+    LaunchedEffect(query) {
+        if (fieldValue.text != query) {
+            fieldValue = TextFieldValue(text = query, selection = TextRange(query.length))
+        }
+    }
+
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     // If the active tag disappears from the available-tags list (deleted in
@@ -596,7 +657,8 @@ private fun SearchSurface(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(start = 24.dp, end = 24.dp, top = 34.dp, bottom = 16.dp),
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -622,15 +684,32 @@ private fun SearchSurface(
                 color = MaterialTheme.colorScheme.primary,
             )
         } else {
-            Text(
-                text = "Filling into $target",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+                Text(
+                    text = "Filling into $target",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         LockAwareTextField(
-            value = query,
-            onValueChange = { unlockViewModel.onSearchQueryChanged(it) },
+            value = fieldValue,
+            onValueChange = {
+                fieldValue = it
+                if (it.text != query) {
+                    unlockViewModel.onSearchQueryChanged(it.text)
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
@@ -726,7 +805,17 @@ private fun SearchSurface(
                 }
             }
         }
-        TextButton(onClick = onAbort, modifier = Modifier.align(Alignment.End)) {
+        // Cancel sits at the natural end of the column (after the results
+        // LazyColumn's weight(1f)). The navigationBars inset is applied
+        // here so the gesture-pill area stays clear without forcing the
+        // whole column to reserve bottom inset (which would shrink the
+        // LazyColumn even when there's no Cancel-clearance concern).
+        TextButton(
+            onClick = onAbort,
+            modifier = Modifier
+                .align(Alignment.End)
+                .windowInsetsPadding(WindowInsets.navigationBars),
+        ) {
             Text("Cancel")
         }
     }
