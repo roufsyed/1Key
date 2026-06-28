@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import com.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +23,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.onekey.feature.settings.presentation.dialog.AutofillSaveUrlEnableConfirmDialog
 import com.onekey.feature.settings.presentation.viewmodel.AutofillSettingsViewModel
 import com.onekey.feature.settings.presentation.viewmodel.SettingsHighlightKeys
 
@@ -33,7 +35,12 @@ fun SettingsAutofillScreen(
 ) {
     val isEnabled by viewModel.isAutofillEnabled.collectAsStateWithLifecycle()
     val isCategoryFilterEnabled by viewModel.isCategoryFilterEnabled.collectAsStateWithLifecycle()
+    val isSaveUrlOnCrossHostEnabled by viewModel.isSaveUrlOnCrossHostEnabled.collectAsStateWithLifecycle()
     val isSystemProvider by viewModel.isSystemAutofillProvider.collectAsStateWithLifecycle()
+    // Local state for the OFF -> ON confirmation dialog on the save-URL
+    // toggle. Survives configuration change; resets on activity destroy
+    // which is fine (the toggle itself is durable in DataStore).
+    var showSaveUrlEnableDialog by rememberSaveable { mutableStateOf(false) }
     val highlightKey by viewModel.highlightKey.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -137,6 +144,40 @@ fun SettingsAutofillScreen(
                             )
                         },
                     )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary,
+                            )
+                        },
+                        headlineContent = { Text("Save URL on cross-host fills") },
+                        supportingContent = {
+                            Text(
+                                "Adds a per-action checkbox to the cross-host confirmation pane " +
+                                    "so you can save the current site's URL to the credential being " +
+                                    "used. Off by default."
+                            )
+                        },
+                        trailingContent = {
+                            Switch(
+                                checked = isSaveUrlOnCrossHostEnabled,
+                                onCheckedChange = { wantsOn ->
+                                    if (wantsOn) {
+                                        // Defer the actual pref flip until the user
+                                        // ticks "I understand" in the confirm dialog.
+                                        showSaveUrlEnableDialog = true
+                                    } else {
+                                        // Turning OFF is unrestricted - no confirm
+                                        // dialog. Pref flips directly.
+                                        viewModel.setSaveUrlOnCrossHostEnabled(false)
+                                    }
+                                },
+                            )
+                        },
+                    )
                 }
             }
 
@@ -169,6 +210,16 @@ fun SettingsAutofillScreen(
 
             Spacer(Modifier.height(16.dp))
         }
+    }
+
+    if (showSaveUrlEnableDialog) {
+        AutofillSaveUrlEnableConfirmDialog(
+            onConfirm = {
+                showSaveUrlEnableDialog = false
+                viewModel.setSaveUrlOnCrossHostEnabled(true)
+            },
+            onDismiss = { showSaveUrlEnableDialog = false },
+        )
     }
 }
 

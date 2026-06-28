@@ -385,6 +385,8 @@ class ImportExportViewModelExportPasswordTest {
         override suspend fun setAutofillEnabled(enabled: Boolean) = error("unused")
         override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = error("unused")
         override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) = error("unused")
+        override fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean) = error("unused")
         override fun getLockReasonContext(): Flow<String?> = error("unused")
         override suspend fun getLockReasonContextDirect(): String? = error("unused")
         override suspend fun setLockReasonContext(context: String?) = error("unused")

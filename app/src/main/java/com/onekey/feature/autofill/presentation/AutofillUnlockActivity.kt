@@ -8,42 +8,76 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.preferredFrameRate
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.preferredFrameRate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.onekey.core.data.snapshot.SnapshotCredential
 import com.onekey.core.domain.model.AppResult
 import com.onekey.core.domain.model.Credential
+import com.onekey.core.domain.model.CredentialType
 import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.model.isDark
 import com.onekey.core.domain.repository.AppPreferencesRepository
@@ -170,7 +204,12 @@ class AutofillUnlockActivity : FragmentActivity() {
         // entries via search. Keep it secure regardless of the user's
         // "Allow screenshots" preference (which was scoped to the main UI).
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-
+        lifecycleScope.launch {
+            appPrefs.isScreenshotsEnabled().collect { enabled ->
+                if (enabled) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
         // Defense against overlay tap-jacking. The autofill picker can route
         // a credential into a different app via the dataset return; a fake
         // overlay covering "Cancel" or "Use master password" would let an
@@ -213,9 +252,9 @@ class AutofillUnlockActivity : FragmentActivity() {
                 val onResolveCredential: (Credential) -> Unit = { credential ->
                     deliverDataset(parsed, credential)
                 }
-                val onResolveSnapshot: (SnapshotCredential) -> Unit = { snap ->
+                val onResolveSnapshot: (SnapshotCredential, Boolean) -> Unit = { snap, saveUrl ->
                     activityScope.launch {
-                        fetchAndDeliver(activityScope, parsed, snap.id)
+                        fetchAndDeliver(activityScope, parsed, snap.id, saveUrl)
                     }
                 }
 
@@ -256,9 +295,32 @@ class AutofillUnlockActivity : FragmentActivity() {
         @Suppress("UNUSED_PARAMETER") scope: CoroutineScope,
         parsed: ParsedFields,
         id: String,
+        saveUrl: Boolean = false,
     ) {
         when (val r = credentialRepository.getCredential(id)) {
-            is AppResult.Success -> deliverDataset(parsed, r.data)
+            is AppResult.Success -> {
+                val credential = r.data
+                // When the user ticked the "save URL" checkbox in the
+                // cross-host pane (gated by the autofill_save_url_on_cross_host
+                // pref), persist the form's host as the credential URL before
+                // delivering the dataset. The dataset itself uses the in-memory
+                // credential value so the fill happens regardless of save
+                // success; we log the save failure and continue. Save failures
+                // here are silent because the user already chose to fill -
+                // surfacing a save error mid-Dataset-delivery would confuse
+                // the OS autofill flow.
+                if (saveUrl) {
+                    parsed.webDomain?.let { host ->
+                        val newUrl = if (host.contains("://")) host else "https://$host"
+                        runCatching {
+                            credentialRepository.saveCredential(
+                                credential.copy(url = newUrl)
+                            )
+                        }
+                    }
+                }
+                deliverDataset(parsed, credential)
+            }
             is AppResult.Error -> {
                 setResult(RESULT_CANCELED)
                 finish()
@@ -275,11 +337,13 @@ private fun UnlockGate(
     biometricController: BiometricPromptController,
     startInSearch: Boolean,
     onResolveCredential: (Credential) -> Unit,
-    onResolveSnapshot: (SnapshotCredential) -> Unit,
+    onResolveSnapshot: (SnapshotCredential, saveUrl: Boolean) -> Unit,
     onAbort: () -> Unit,
 ) {
     val isUnlocked by authViewModel.isUnlocked.collectAsStateWithLifecycle()
     val crossHostFor by unlockViewModel.crossHostFor.collectAsStateWithLifecycle()
+    val matchesState by unlockViewModel.matches.collectAsStateWithLifecycle()
+    val saveUrlToggleOn by unlockViewModel.isSaveUrlOnCrossHostEnabled.collectAsStateWithLifecycle()
 
     // Once unlocked, kick off exact-host match load. The snapshot is hot
     // already (managed by VaultSnapshotStore at app scope); we no longer
@@ -295,6 +359,28 @@ private fun UnlockGate(
     // trailing chip; toggleable by the user from the picker.
     var inSearchMode by rememberSaveable(startInSearch) { mutableStateOf(startInSearch) }
 
+    // Tracks whether we landed in search mode via the empty-match auto-skip
+    // (vs the trailing chip or the user's explicit "Search 1Key" tap). Drives
+    // the empty-match banner on SearchSurface. SavedStateHandle-backed so it
+    // survives process death.
+    var arrivedViaEmptyMatch by rememberSaveable { mutableStateOf(false) }
+
+    // Auto-skip the empty MatchesSurface: when matches load with no exact-host
+    // hits, route directly to SearchSurface with the seeded brand-name query.
+    // Saves the user a tap on the otherwise-useless "No saved credentials for
+    // this site" landing. Only fires once per unlock: if the user manually
+    // navigates back to matches via the SearchSurface back button, we honour
+    // their choice instead of re-skipping.
+    LaunchedEffect(matchesState) {
+        val s = matchesState
+        if (s is AutofillUnlockViewModel.MatchState.Loaded && s.credentials.isEmpty() &&
+            !inSearchMode && !arrivedViaEmptyMatch
+        ) {
+            arrivedViaEmptyMatch = true
+            inSearchMode = true
+        }
+    }
+
     when {
         !isUnlocked -> AutofillLockedSurface(
             target = parsed.webDomain ?: parsed.packageName,
@@ -307,19 +393,24 @@ private fun UnlockGate(
         crossHostFor != null -> CrossHostConfirmSurface(
             parsed = parsed,
             credential = crossHostFor!!,
-            onConfirm = {
+            saveUrlToggleOn = saveUrlToggleOn,
+            onConfirm = { saveUrl ->
                 val c = unlockViewModel.confirmCrossHost()
-                if (c != null) onResolveSnapshot(c)
+                if (c != null) onResolveSnapshot(c, saveUrl)
             },
             onCancel = { unlockViewModel.cancelCrossHost() },
         )
         inSearchMode -> SearchSurface(
             parsed = parsed,
             unlockViewModel = unlockViewModel,
-            onBackToMatches = { inSearchMode = false },
+            arrivedViaEmptyMatch = arrivedViaEmptyMatch,
+            onBackToMatches = {
+                inSearchMode = false
+                arrivedViaEmptyMatch = false
+            },
             onResolve = { snap ->
                 val fillNow = unlockViewModel.resolveSearchCandidate(snap)
-                if (fillNow) onResolveSnapshot(snap)
+                if (fillNow) onResolveSnapshot(snap, false)
                 // else: crossHostFor flipped; UnlockGate re-routes to confirm pane
             },
             onAbort = onAbort,
@@ -343,47 +434,92 @@ private fun MatchesSurface(
     onAbort: () -> Unit,
 ) {
     val matchesState by unlockViewModel.matches.collectAsStateWithLifecycle()
+    val target = parsed.webDomain ?: parsed.packageName
 
-    Box(
+    // Three-band layout: header pinned to the top, scrollable LazyColumn
+    // taking the remaining vertical space, action bar (Search 1Key + Cancel)
+    // pinned to the bottom. The LazyColumn's weight(1f) absorbs the spare
+    // height so long credential lists scroll behind the action bar instead
+    // of pushing it off-screen.
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentAlignment = Alignment.TopCenter,
     ) {
+        // ── Sticky header ───────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
                 text = "Choose a credential",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
-            val target = parsed.webDomain ?: parsed.packageName
-            Text(
-                text = "Filling into $target",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            // Primary-coloured bullet dot before the "Filling into …" line
+            // matches the mockup's decorative accent.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                )
+                Text(
+                    text = "Filling into $target",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        // ── Scrollable list (takes remaining space) ─────────────────────
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        ) {
             when (val s = matchesState) {
                 AutofillUnlockViewModel.MatchState.Idle,
                 AutofillUnlockViewModel.MatchState.Loading -> {
-                    Text(
-                        text = "Searching your vault…",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    item(key = "__loading__") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 32.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                CircularProgressIndicator()
+                                Text(
+                                    text = "Searching your vault…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                 }
                 is AutofillUnlockViewModel.MatchState.Loaded -> {
                     if (s.credentials.isEmpty()) {
-                        Text(
-                            text = "No saved credentials for this site.",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        item(key = "__empty__") {
+                            Text(
+                                text = "No saved credentials for this site.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp),
+                            )
+                        }
                     } else {
-                        s.credentials.forEach { credential ->
+                        items(s.credentials, key = { it.id }) { credential ->
                             CredentialRow(
                                 row = credential.toRow(),
                                 onClick = { onResolve(credential) },
@@ -392,16 +528,37 @@ private fun MatchesSurface(
                     }
                 }
             }
-            Button(
-                onClick = onOpenSearch,
-                modifier = Modifier.fillMaxWidth(),
+        }
+
+        // ── Sticky bottom action bar ────────────────────────────────────
+        // tonalElevation lifts the surface above the scrolling list and
+        // produces a subtle visual scrim so the user reads "more content
+        // above". shadowElevation adds the soft drop shadow visible in the
+        // mockup.
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.background,
+            tonalElevation = 4.dp,
+            shadowElevation = 8.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Icon(Icons.Default.Search, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Search 1Key for another credential")
-            }
-            TextButton(onClick = onAbort, modifier = Modifier.align(Alignment.End)) {
-                Text("Cancel")
+                Button(
+                    onClick = onOpenSearch,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search 1Key for another credential")
+                }
+                TextButton(
+                    onClick = onAbort,
+                    modifier = Modifier.align(Alignment.End),
+                ) {
+                    Text("Cancel")
+                }
             }
         }
     }
@@ -411,6 +568,7 @@ private fun MatchesSurface(
 private fun SearchSurface(
     parsed: ParsedFields,
     unlockViewModel: AutofillUnlockViewModel,
+    arrivedViaEmptyMatch: Boolean,
     onBackToMatches: () -> Unit,
     onResolve: (SnapshotCredential) -> Unit,
     onAbort: () -> Unit,
@@ -438,7 +596,7 @@ private fun SearchSurface(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 34.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -451,11 +609,25 @@ private fun SearchSurface(
             TextButton(onClick = onBackToMatches) { Text("Back") }
         }
         val target = parsed.webDomain ?: parsed.packageName
-        Text(
-            text = "Filling into $target",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // When we landed here because the exact-host match returned nothing,
+        // surface that context so the user understands why they are looking
+        // at search instead of a pre-narrowed match list. The query field is
+        // already seeded with the brand label - the banner is the orientation
+        // bit that prevents "did 1Key forget my login?" confusion.
+        if (arrivedViaEmptyMatch) {
+            Text(
+                text = "No credentials saved for $target. Search your vault for a match - " +
+                    "you'll confirm before filling.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        } else {
+            Text(
+                text = "Filling into $target",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         LockAwareTextField(
             value = query,
             onValueChange = { unlockViewModel.onSearchQueryChanged(it) },
@@ -564,17 +736,29 @@ private fun SearchSurface(
 private fun CrossHostConfirmSurface(
     parsed: ParsedFields,
     credential: SnapshotCredential,
-    onConfirm: () -> Unit,
+    saveUrlToggleOn: Boolean,
+    onConfirm: (saveUrl: Boolean) -> Unit,
     onCancel: () -> Unit,
 ) {
     val target = parsed.webDomain ?: parsed.packageName
-    val credHost = HostExtractor.hostOf(credential.url) ?: "(no URL)"
+    val credHost = HostExtractor.hostOf(credential.url) ?: "(no URL saved)"
     // Local fetching flag: once the user taps "Fill anyway" we kick off the
     // getCredential(id) coroutine in the activity. Until that completes
     // (success => finish, error => finish), keep the pane mounted with a
     // spinner on the confirm button so the user does not see a flicker
     // back to SearchSurface during the fetch.
     var fetching by remember { mutableStateOf(false) }
+
+    // Per-action checkbox. OFF every time the pane opens by design - never
+    // remembered across opens, never persisted, never inferable from any
+    // earlier action. The double-gate (Settings toggle + this checkbox) is
+    // the documented invariant; see feedback_autofill_matching memory.
+    var saveUrlChecked by remember { mutableStateOf(false) }
+
+    // The save-URL UI surfaces only when the user has BOTH opted in via
+    // Settings AND there is a host to save (native-app fills have no
+    // webDomain so the checkbox would be a no-op).
+    val saveUrlSurfaceVisible = saveUrlToggleOn && !parsed.webDomain.isNullOrBlank()
 
     Box(
         modifier = Modifier
@@ -621,11 +805,72 @@ private fun CrossHostConfirmSurface(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // Always-on informational nudge. Tells the user how to make the
+            // exact-host match work next time without offering an inline
+            // action - the user has to open 1Key on a calm context and edit
+            // the credential's URL field themselves. Cheap cognitive friction
+            // that closes the one-tap phishing-poisoning path.
+            if (!saveUrlSurfaceVisible) {
+                Text(
+                    text = "To skip this prompt next time, open 1Key and add $target to " +
+                        "this credential's URL field.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            // Disclaimer + checkbox: rendered only when the Settings toggle
+            // is on AND we have a webDomain to save. See
+            // feedback_autofill_matching memory for the double-gate rationale.
+            if (saveUrlSurfaceVisible) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = "1Key cannot verify website legitimacy. Saving this URL " +
+                                "will replace any existing URL on this credential and " +
+                                "permanently associate it with $target. " +
+                                "Verify this is the genuine website before ticking the box. " +
+                                "1Key holds no liability for credentials linked to malicious URLs.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = !fetching) {
+                                    saveUrlChecked = !saveUrlChecked
+                                },
+                        ) {
+                            Checkbox(
+                                checked = saveUrlChecked,
+                                onCheckedChange = { saveUrlChecked = it },
+                                enabled = !fetching,
+                            )
+                            Text(
+                                text = "Save $target to this credential",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
+            }
+
             Button(
                 onClick = {
                     if (!fetching) {
                         fetching = true
-                        onConfirm()
+                        onConfirm(saveUrlSurfaceVisible && saveUrlChecked)
                     }
                 },
                 enabled = !fetching,
@@ -668,10 +913,30 @@ private data class CredentialRowData(
     val title: String,
     val username: String,
     val url: String,
+    val type: CredentialType,
 )
 
-private fun Credential.toRow() = CredentialRowData(title, username, url)
-private fun SnapshotCredential.toRow() = CredentialRowData(title, username, url)
+private fun Credential.toRow() = CredentialRowData(title, username, url, type)
+private fun SnapshotCredential.toRow() = CredentialRowData(title, username, url, type)
+
+/**
+ * Icon mapping mirrors the in-vault category iconography (CredentialDetailScreen
+ * `typeIcon` and VaultScreen `tagIcon`) so the autofill picker reads as the
+ * same family as the rest of the app. Kept local to this file to keep the
+ * autofill activity self-contained; a future shared util would absorb the
+ * three duplicated copies (here, CredentialDetailScreen, BackupScreen).
+ */
+private fun autofillTypeIcon(type: CredentialType) = when (type) {
+    CredentialType.LOGIN -> Icons.Default.Lock
+    CredentialType.SECURE_NOTE -> Icons.Default.Description
+    CredentialType.CREDIT_CARD -> Icons.Default.CreditCard
+    CredentialType.PASSWORD -> Icons.Default.Key
+    CredentialType.BANK_ACCOUNT -> Icons.Default.AccountBalance
+    CredentialType.DATABASE -> Icons.Default.Storage
+    CredentialType.EMAIL -> Icons.Default.Email
+    CredentialType.SERVER -> Icons.Default.Computer
+    CredentialType.OTHER -> Icons.AutoMirrored.Filled.Label
+}
 
 @Composable
 private fun CredentialRow(
@@ -683,22 +948,38 @@ private fun CredentialRow(
         row.username.takeIf { it.isNotBlank() } ?: "(no username)",
         host,
     )
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 10.dp, horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = row.title.ifBlank { "1Key item" },
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+        // Leading type icon. Plain primary-tinted vector with NO container
+        // tile, matching the look of the in-vault credential list
+        // (CredentialCard / TagRow) so the two surfaces read as one family.
+        Icon(
+            imageVector = autofillTypeIcon(row.type),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
         )
-        Text(
-            text = subtitleParts.joinToString(" • "),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = row.title.ifBlank { "1Key item" },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitleParts.joinToString(" • "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 

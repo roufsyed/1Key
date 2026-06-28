@@ -769,6 +769,8 @@ class AuthViewModelSecretKeyTest {
         override suspend fun setAutofillEnabled(enabled: Boolean) = error("unused")
         override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = error("unused")
         override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) = error("unused")
+        override fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean> = error("unused")
+        override suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean) = error("unused")
         override fun isSyncEnabled(): Flow<Boolean> = flowOf(false)
         override suspend fun setSyncEnabled(enabled: Boolean) = error("unused")
         override fun getSyncLocationUri(): Flow<String?> = flowOf(null)

@@ -33,4 +33,44 @@ internal object HostExtractor {
             null
         }
     }
+
+    /**
+     * Returns the registrable-domain *name* (the brand label) for a URL or
+     * host. E.g. `github.com` / `login.github.com` / `github.co.uk` all return
+     * `"github"`. Used by the autofill search surface to pre-populate the
+     * query when the user lands without exact-host matches - they almost
+     * certainly want to type the brand name and we can save them the keys.
+     *
+     * NOT used as a security primitive. This is a search-prefill heuristic
+     * only; matching credentials to fill targets still goes through the
+     * strict `hostOf` exact-host check elsewhere in the autofill path.
+     *
+     * Algorithm: take the second-to-last dotted label of the host, except
+     * when the last two labels match a known multi-part eTLD (`.co.uk` etc),
+     * in which case take the third-to-last. Returns `null` if the host has
+     * too few labels to identify a brand.
+     */
+    fun registrableNameOf(rawUrl: String?): String? {
+        val host = hostOf(rawUrl) ?: return null
+        val labels = host.split(".")
+        if (labels.size < 2) return null
+        val lastTwo = labels.takeLast(2).joinToString(".")
+        return if (lastTwo in MULTI_PART_ETLDS && labels.size >= 3) {
+            labels[labels.size - 3]
+        } else {
+            labels[labels.size - 2]
+        }
+    }
+
+    /**
+     * Small list of multi-part eTLDs that need an extra hop when extracting
+     * the brand label. Not exhaustive - the search-prefill use case is
+     * forgiving (user can edit the prefilled query). Sourced from the most
+     * common second-level country code suffixes.
+     */
+    private val MULTI_PART_ETLDS = setOf(
+        "co.uk", "co.jp", "co.in", "co.kr", "co.za", "co.nz", "co.id", "co.th",
+        "com.au", "com.br", "com.cn", "com.mx", "com.tr", "com.sg", "com.tw", "com.hk",
+        "ac.uk", "gov.uk", "org.uk", "net.uk", "ne.jp", "or.jp", "ac.jp",
+    )
 }

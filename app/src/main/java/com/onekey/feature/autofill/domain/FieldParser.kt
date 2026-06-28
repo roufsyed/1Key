@@ -43,8 +43,13 @@ class FieldParser @Inject constructor() {
 
         // Pass 1: classify by explicit hints, HTML attributes, input type.
         nodes.forEachIndexed { _, node ->
-            if (webDomain == null && node.webDomain != null) {
-                webDomain = normaliseHost(node.webDomain)
+            // Some browsers / WebViews report `webDomain` as the empty string on
+            // non-form nodes instead of null. The old `!= null` check captured
+            // the empty value and then refused to look at later nodes that
+            // carried the real host. Skip blank values so the first NON-blank
+            // node wins.
+            if (webDomain.isNullOrBlank() && !node.webDomain.isNullOrBlank()) {
+                webDomain = normaliseHost(node.webDomain!!)
             }
             val type = classifyDirect(node) ?: return@forEachIndexed
             val field = AutofillField(node.autofillId, type)
@@ -87,7 +92,12 @@ class FieldParser @Inject constructor() {
             email = email,
             scenario = AutofillScenario.LOGIN,
             packageName = packageName,
-            webDomain = webDomain,
+            // Coerce blank to null so every downstream check (`isHostMatch`,
+            // `saveUrlSurfaceVisible`, the cross-host pane's "Form: $target"
+            // line) sees a consistent null-or-real-host invariant. Defence
+            // against an empty-string slipping through from upstream sources
+            // we have not yet diagnosed.
+            webDomain = webDomain?.takeIf { it.isNotBlank() },
         )
     }
 

@@ -50,6 +50,7 @@ private val KEY_RESTORE_LAST_SCREEN_ON_UNLOCK = booleanPreferencesKey("restore_l
 private val KEY_VAULT_FOOTER_VISIBLE = booleanPreferencesKey("vault_footer_visible")
 private val KEY_AUTOFILL_ENABLED = booleanPreferencesKey("autofill_enabled")
 private val KEY_AUTOFILL_CATEGORY_FILTER = booleanPreferencesKey("autofill_category_filter")
+private val KEY_AUTOFILL_SAVE_URL_ON_CROSS_HOST = booleanPreferencesKey("autofill_save_url_on_cross_host")
 private val KEY_SYNC_ENABLED = booleanPreferencesKey("sync_enabled")
 private val KEY_SYNC_LOCATION_URI = stringPreferencesKey("sync_location_uri")
 private val KEY_SYNC_COMPLETION_NOTIFICATION_ENABLED = booleanPreferencesKey("sync_completion_notification_enabled")
@@ -228,6 +229,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) {
         dataStore.edit { it[KEY_AUTOFILL_CATEGORY_FILTER] = enabled }
+    }
+
+    override fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean> =
+        prefs.map { it[KEY_AUTOFILL_SAVE_URL_ON_CROSS_HOST] ?: false }.distinctUntilChanged()
+
+    override suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_AUTOFILL_SAVE_URL_ON_CROSS_HOST] = enabled }
     }
 
     override fun isVaultFooterVisible(): Flow<Boolean> =

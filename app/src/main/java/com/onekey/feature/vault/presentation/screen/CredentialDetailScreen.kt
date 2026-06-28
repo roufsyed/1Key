@@ -1116,7 +1116,15 @@ private fun CredentialEditContent(
                             }
                         }
                     )
-                    LockAwareOutlinedTextField(value = url, onValueChange = { url = it }, label = { Text("URL") }, modifier = Modifier.fillMaxWidth())
+                    LockAwareOutlinedTextField(
+                        value = url,
+                        onValueChange = { url = it },
+                        label = { Text("URL") },
+                        supportingText = {
+                            Text("Adding a URL lets autofill suggest this credential on that site automatically.")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     if (showLiveEditor) {
                         MarkdownEditorField(
                             value = notesField,

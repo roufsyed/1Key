@@ -241,7 +241,7 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         title = "Autofill",
         subtitle = "Fill saved logins into other apps and websites",
         sectionLabel = "Autofill",
-        keywords = listOf("autofill", "fill", "input method", "service", "auto-fill", "password fill"),
+        keywords = listOf("autofill", "fill", "input method", "service", "auto-fill", "password fill", "cross host", "save url"),
         action = SettingsAction.Navigate(SettingsDestination.Autofill),
         highlightKey = SettingsHighlightKeys.AUTOFILL_ENABLED,
     ),

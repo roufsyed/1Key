@@ -590,6 +590,74 @@ fun SettingsFaqScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            FaqGroup("Autofill") {
+                FaqItem(
+                    question = "How does 1Key decide which credentials to suggest while filling a form?",
+                    answer = "When you tap into a username or password field, 1Key looks at the " +
+                        "website's address and compares it to the URL field on each of your " +
+                        "saved credentials. If the addresses match exactly, the credential " +
+                        "shows up as a chip above your keyboard. Favourites appear first.\n\n" +
+                        "We match on the exact host: accounts.google.com and google.com are " +
+                        "treated as different sites. This is on purpose. A login form on " +
+                        "g00gle.com (a typosquat) will never receive a chip for your real " +
+                        "Google credentials, even if the page looks identical.",
+                )
+                FaqItem(
+                    question = "Why isn't 1Key suggesting my credential on this site?",
+                    answer = "Three common reasons:\n\n" +
+                        "- The credential's URL field is empty. 1Key matches on URL only. Open " +
+                        "the credential in 1Key and paste the site's address into the URL field.\n\n" +
+                        "- The URL is a different host. mail.google.com and accounts.google.com " +
+                        "are different addresses; a credential saved for one will not " +
+                        "auto-suggest on the other.\n\n" +
+                        "- The vault is locked. You'll see only a single \"Unlock 1Key to fill\" " +
+                        "chip. Tap it, unlock with biometric, PIN, or password, and the " +
+                        "matching credentials appear next.\n\n" +
+                        "If you're sure you have the credential, tap the \"Search 1Key\" chip " +
+                        "in the row and find it manually.",
+                )
+                FaqItem(
+                    question = "What does the \"Search 1Key\" chip do?",
+                    answer = "It's the catch-all option. Tapping it opens 1Key's search inside " +
+                        "the autofill flow, where you can pick any credential from your vault - " +
+                        "even ones whose stored URL doesn't match the page you're on.\n\n" +
+                        "Before the credential fills, you'll see a \"Fill from a different " +
+                        "site?\" confirmation pane. That extra step is deliberate: it prevents " +
+                        "a phishing site from quietly receiving credentials that were saved for " +
+                        "the real site.",
+                )
+                FaqItem(
+                    question = "What is the \"Save URL on cross-host fills\" setting?",
+                    answer = "An opt-in convenience.\n\n" +
+                        "When off (the default), the \"Fill from a different site?\" pane just " +
+                        "fills your form once. The credential's URL is unchanged, and you'll " +
+                        "see the same prompt again on the next visit.\n\n" +
+                        "When on, the pane adds a checkbox: \"Save [site] to this credential.\" " +
+                        "Tick it before tapping Fill anyway, and 1Key writes the current site's " +
+                        "URL to the credential. Future visits will then suggest the credential " +
+                        "as a normal chip without the cross-host prompt.\n\n" +
+                        "It's off by default because 1Key cannot verify whether a site is " +
+                        "genuine. If you save the URL of a phishing site to a credential, " +
+                        "future visits to that phishing site will auto-fill without warning, " +
+                        "and the real site will no longer suggest the credential. The " +
+                        "disclaimer dialog you see when enabling the setting walks through " +
+                        "this before you turn it on.",
+                )
+                FaqItem(
+                    question = "Does my password leave my phone when autofill runs?",
+                    answer = "No. Autofill runs entirely on-device.\n\n" +
+                        "The operating system gives 1Key the form's field layout when you tap a " +
+                        "username or password box. 1Key reads its own encrypted vault, matches " +
+                        "a credential, and returns the username and password to the form. The " +
+                        "values go only to the foreground app you tapped - the browser or the " +
+                        "app showing the form - never to a server.\n\n" +
+                        "This is the same guarantee as the rest of 1Key: the app has no " +
+                        "INTERNET permission in its Android manifest, so no data can be sent " +
+                        "off the device.",
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
             FaqGroup("Clipboard") {
                 FaqItem(
                     question = "What happens when I copy a password to my clipboard?",

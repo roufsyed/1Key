@@ -38,6 +38,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.onekey.core.domain.model.ThemeMode
 import com.onekey.core.domain.model.isDark
 import com.onekey.core.domain.repository.AppPreferencesRepository
@@ -49,6 +50,7 @@ import com.onekey.core.security.AutoLockManager
 import com.onekey.feature.auth.presentation.viewmodel.AuthUiState
 import com.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -131,7 +133,12 @@ class AutofillSaveActivity : FragmentActivity() {
         // user's "Allow screenshots" preference does NOT extend to autofill
         // surfaces, which are short-lived and surface credential data.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-
+        lifecycleScope.launch {
+            appPrefs.isScreenshotsEnabled().collect { enabled ->
+                if (enabled) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                else window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
         // Defense against overlay tap-jacking on the unlock affordances.
         window.decorView.filterTouchesWhenObscured = true
 

@@ -590,6 +590,8 @@ class TaggedCredentialListViewModelTest {
         override suspend fun setAutofillEnabled(enabled: Boolean) = error("unused")
         override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = flowOf(false)
         override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) = error("unused")
+        override fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean> = flowOf(false)
+        override suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean) = error("unused")
         override fun getLockReasonContext(): Flow<String?> = error("unused")
         override suspend fun getLockReasonContextDirect(): String? = error("unused")
         override suspend fun setLockReasonContext(context: String?) = error("unused")

@@ -41,6 +41,9 @@ class AutofillSettingsViewModel @Inject constructor(
     val isCategoryFilterEnabled: StateFlow<Boolean> = appPrefs.isAutofillCategoryFilterEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val isSaveUrlOnCrossHostEnabled: StateFlow<Boolean> = appPrefs.isAutofillSaveUrlOnCrossHostEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _isSystemAutofillProvider = MutableStateFlow(querySystemProviderStatus())
     val isSystemAutofillProvider: StateFlow<Boolean> = _isSystemAutofillProvider.asStateFlow()
 
@@ -50,6 +53,10 @@ class AutofillSettingsViewModel @Inject constructor(
 
     fun setCategoryFilterEnabled(enabled: Boolean) {
         viewModelScope.launch { appPrefs.setAutofillCategoryFilterEnabled(enabled) }
+    }
+
+    fun setSaveUrlOnCrossHostEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setAutofillSaveUrlOnCrossHostEnabled(enabled) }
     }
 
     /** Re-reads the OS-level provider status. Idempotent. */

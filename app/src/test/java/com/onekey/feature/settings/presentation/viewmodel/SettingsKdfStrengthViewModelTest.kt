@@ -637,6 +637,8 @@ class SettingsKdfStrengthViewModelTest {
         override suspend fun setAutofillEnabled(enabled: Boolean) = Unit
         override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = flowOf(false)
         override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) = Unit
+        override fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean> = flowOf(false)
+        override suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean) = Unit
         override fun getLockReasonContext(): Flow<String?> = lockReasonCtx
         override suspend fun getLockReasonContextDirect(): String? = lockReasonCtx.value
         override suspend fun setLockReasonContext(context: String?) { lockReasonCtx.value = context }

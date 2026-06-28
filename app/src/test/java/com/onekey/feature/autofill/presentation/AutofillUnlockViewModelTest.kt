@@ -566,14 +566,20 @@ class AutofillUnlockViewModelTest {
 
     /**
      * Minimal preferences fake: the autofill VM only reads
-     * `isAutofillCategoryFilterEnabled()`. Everything else throws so any
+     * `isAutofillCategoryFilterEnabled()` and
+     * `isAutofillSaveUrlOnCrossHostEnabled()`. Everything else throws so any
      * accidental new dependency is loud rather than silent.
      */
     private class FakeAppPreferencesRepository : AppPreferencesRepository {
         val categoryFilterEnabled = MutableStateFlow(false)
+        val saveUrlOnCrossHostEnabled = MutableStateFlow(false)
         override fun isAutofillCategoryFilterEnabled(): Flow<Boolean> = categoryFilterEnabled
         override suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean) {
             categoryFilterEnabled.value = enabled
+        }
+        override fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean> = saveUrlOnCrossHostEnabled
+        override suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean) {
+            saveUrlOnCrossHostEnabled.value = enabled
         }
 
         override fun getThemeMode(): Flow<ThemeMode> = error("unused")

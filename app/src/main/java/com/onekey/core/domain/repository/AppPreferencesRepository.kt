@@ -72,6 +72,26 @@ interface AppPreferencesRepository {
      */
     fun isAutofillCategoryFilterEnabled(): Flow<Boolean>
     suspend fun setAutofillCategoryFilterEnabled(enabled: Boolean)
+    /**
+     * Double-gated opt-in for the "save URL to credential" checkbox that appears
+     * on the cross-host confirmation pane during autofill. Default `false`.
+     *
+     * Off: cross-host pane is informational only - the user must edit the
+     * credential manually in 1Key to add the URL for future auto-suggestions.
+     *
+     * On: cross-host pane renders a disclaimer + liability paragraph and a
+     * per-action checkbox (OFF every time the pane opens). Ticking the checkbox
+     * AND tapping Use writes `credential.url = formHost`. This is gated behind
+     * a Settings opt-in so a user who has not deliberately accepted the
+     * personal-responsibility tradeoff never sees the checkbox at all - their
+     * cross-host pane stays at the informational-only flavour.
+     *
+     * The two-gate design (Settings opt-in + per-action checkbox) is the
+     * locked invariant; never collapse to a single gate. See the
+     * `feedback-autofill-matching` memory for the rationale.
+     */
+    fun isAutofillSaveUrlOnCrossHostEnabled(): Flow<Boolean>
+    suspend fun setAutofillSaveUrlOnCrossHostEnabled(enabled: Boolean)
     /** Persistent lock-reason context - survives process restart so biometric stays paused. */
     fun getLockReasonContext(): Flow<String?>
     /**

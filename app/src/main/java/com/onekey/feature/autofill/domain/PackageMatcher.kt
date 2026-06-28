@@ -9,10 +9,10 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Matches a [ParsedFields] against the user's vault and returns the top-N
- * credentials by match strength.
+ * Matches a [ParsedFields] against the user's vault and returns every
+ * credential whose stored host equals the form's host, favourites first.
  *
- * v1 strategy (deliberately conservative - see `project_autofill.md` and the
+ * Strategy (deliberately conservative - see `project_autofill.md` and the
  * skeptic review's BLOCKER 13):
  *
  *  - **Exact host match only.** We do not collapse domains to eTLD+1. Without
@@ -27,8 +27,19 @@ import javax.inject.Singleton
  *    no safe way to map a package name to a saved URL without explicit user
  *    linking. Path-A defers explicit linking to v1.1.
  *
- *  - **Soft cap on returned matches** prevents `TransactionTooLargeException`
- *    when the framework parcels the `FillResponse` back across IPC.
+ *  - **No deduplication, no soft cap.** Every host-matching credential is
+ *    returned. A credential visible to the user inside 1Key must always be
+ *    reachable from autofill on its matching site; silently dropping rows
+ *    because they look like duplicates - or because we hit an arbitrary
+ *    `take(N)` - is worse than chip-row clutter. The `limit` parameter
+ *    survives for tests and future targeted callers, defaulted to
+ *    `Int.MAX_VALUE` so production traffic is uncapped.
+ *
+ *  - **Graceful overflow.** If returning every match overflows the IPC
+ *    binder budget at parcel time, [OneKeyAutofillService.handleFill]
+ *    catches the throw and falls back to the search-only response, so a
+ *    pathological match count degrades to "Search 1Key" rather than
+ *    crashing.
  */
 @Singleton
 class PackageMatcher @Inject constructor(
@@ -36,22 +47,30 @@ class PackageMatcher @Inject constructor(
 ) {
 
     /**
-     * @param limit upper bound on returned matches. Defaults to [DEFAULT_LIMIT].
-     *   Bitwarden caps at 20 partitions; we ship a tighter default both for
-     *   the Binder budget and for chip UX.
+     * @param limit upper bound on returned matches. Defaults to
+     *   [Int.MAX_VALUE] (uncapped). Provided for tests and future callers
+     *   that have a specific reason to cap; the autofill service path does
+     *   not pass a limit.
      */
-    suspend fun findMatches(parsed: ParsedFields, limit: Int = DEFAULT_LIMIT): List<Credential> {
+    suspend fun findMatches(parsed: ParsedFields, limit: Int = Int.MAX_VALUE): List<Credential> {
         val host = parsed.webDomain ?: return emptyList()
         if (limit <= 0) return emptyList()
         val result = withContext(Dispatchers.Default) { credentialRepository.getAllCredentials() }
         val all = (result as? AppResult.Success)?.data ?: return emptyList()
+        // Every host-matching credential surfaces - we do not dedupe by
+        // username or collapse import-duplicates. A credential the user can
+        // see in 1Key must always be reachable from autofill on its matching
+        // site; filtering it out silently because of a similar entry is
+        // worse than chip-row clutter. Favourites sort to the top.
+        //
+        // If the chip row's parcel size overflows the IPC binder budget,
+        // OneKeyAutofillService.handleFill catches the throw and falls back
+        // to the search-only response, so an over-large match list degrades
+        // gracefully rather than crashing.
         return all.asSequence()
             .filter { HostExtractor.hostOf(it.url) == host }
+            .sortedByDescending { it.isFavorite }
             .take(limit)
             .toList()
-    }
-
-    private companion object {
-        const val DEFAULT_LIMIT = 10
     }
 }

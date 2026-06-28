@@ -182,6 +182,20 @@ class AutofillUnlockViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     /**
+     * Double-gated opt-in for the "save URL to credential" checkbox in the
+     * cross-host confirm pane. When false (the default), the pane is
+     * informational-only - the user must edit the credential manually in 1Key
+     * to add the URL. When true, the pane renders a disclaimer + checkbox
+     * (OFF every open); ticking it on confirm writes `credential.url = formHost`.
+     *
+     * The toggle is read live so a Settings change picks up without restarting
+     * the autofill activity.
+     */
+    val isSaveUrlOnCrossHostEnabled: StateFlow<Boolean> = appPreferences
+        .isAutofillSaveUrlOnCrossHostEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
      * Cross-host pending candidate. Set by [resolveSearchCandidate] when the
      * user picks a search result whose stored host does not match the form.
      * Lean projection: title/username/url/tags only. The Dataset-delivery
@@ -193,12 +207,22 @@ class AutofillUnlockViewModel @Inject constructor(
     val crossHostFor: StateFlow<SnapshotCredential?> = _crossHostFor.asStateFlow()
 
     init {
-        // Seed the search field with the form's host the first time we enter
-        // search mode. Idempotent: re-creating the VM after process death
-        // sees the persisted non-empty query and skips the seed.
-        if (startInSearch && searchQuery.value.isEmpty()) {
+        // Seed the search field with the host's brand label (registrable name)
+        // the first time the VM is constructed, regardless of which path led
+        // here. The user is almost always looking for a credential by brand
+        // name; pre-filling saves them typing it. Idempotent: re-creating the
+        // VM after process death sees the persisted non-empty query and skips
+        // the seed. The text is selected on focus so backspace clears in one
+        // tap if the user wants a fresh search.
+        //
+        // Falls back to webDomain or packageName when registrableNameOf can
+        // not resolve a brand (e.g. IP-as-host, very short domains, native
+        // app fills). That keeps the field useful even when the heuristic
+        // misses.
+        if (searchQuery.value.isEmpty()) {
             (initial as? InitialState.Ready)?.parsed?.let { p ->
-                savedState[KEY_SEARCH_QUERY] = p.webDomain ?: p.packageName
+                val brand = HostExtractor.registrableNameOf(p.webDomain)
+                savedState[KEY_SEARCH_QUERY] = brand ?: p.webDomain ?: p.packageName
             }
         }
 
