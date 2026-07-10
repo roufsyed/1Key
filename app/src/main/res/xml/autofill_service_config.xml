@@ -16,4 +16,4 @@
 <autofill-service
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:supportsInlineSuggestions="false"
-    android:settingsActivity="com.onekey.MainActivity" />
+    android:settingsActivity="com.roufsyed.onekey.MainActivity" />

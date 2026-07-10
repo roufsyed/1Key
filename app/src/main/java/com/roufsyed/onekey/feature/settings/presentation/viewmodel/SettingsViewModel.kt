@@ -1,0 +1,679 @@
+package com.roufsyed.onekey.feature.settings.presentation.viewmodel
+
+import android.content.SharedPreferences
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.roufsyed.onekey.core.domain.model.AppResult
+import com.roufsyed.onekey.core.domain.model.BackgroundLockTimeout
+import com.roufsyed.onekey.core.domain.model.InactivityLockTimeout
+import com.roufsyed.onekey.core.domain.model.MasterPasswordInterval
+import com.roufsyed.onekey.core.domain.model.RecycleBinRetention
+import com.roufsyed.onekey.core.domain.model.Tag
+import com.roufsyed.onekey.core.domain.model.ThemeMode
+import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
+import com.roufsyed.onekey.core.domain.repository.AuthRepository
+import com.roufsyed.onekey.core.domain.repository.TagRepository
+import com.roufsyed.onekey.core.domain.usecase.DeleteTagUseCase
+import com.roufsyed.onekey.core.domain.usecase.ResetVaultUseCase
+import com.roufsyed.onekey.core.domain.usecase.SeedDataUseCase
+import com.roufsyed.onekey.core.security.AuthAttemptsStore
+import com.roufsyed.onekey.core.security.CapacitySnapshot
+import com.roufsyed.onekey.core.security.DeviceCapacityDetector
+import com.roufsyed.onekey.core.security.HardwareKeyIsolationProbe
+import com.roufsyed.onekey.core.security.HardwareKeyIsolationStatus
+import com.roufsyed.onekey.core.security.KdfBenchmark
+import com.roufsyed.onekey.core.security.KdfMigrator
+import com.roufsyed.onekey.core.security.KdfParams
+import com.roufsyed.onekey.core.security.KdfPreset
+import com.roufsyed.onekey.core.security.LockReason
+import com.roufsyed.onekey.core.security.LockReasonStore
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+import javax.inject.Named
+
+// SP keys exposed read-only here so the Security row's subtitle can show
+// "Generated <date>" without re-deriving from the SecretKey-Settings VM.
+// The single source of truth for these names lives in
+// SecretKeySettingsViewModel; this constant pair mirrors it.
+private const val SP_SK_GENERATED_AT = "sk_generated_at"
+private const val SP_SK_LAST_KIT_DOWNLOAD_AT = "sk_last_kit_download_at"
+
+sealed class SettingsEvent {
+    data object PinRemoved : SettingsEvent()
+    data class PinRemoveConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
+    data object VaultContentsDeleted : SettingsEvent()
+    data class SeedComplete(val count: Int) : SettingsEvent()
+    data class TwoFaSeedComplete(val count: Int) : SettingsEvent()
+    data class Error(val message: String) : SettingsEvent()
+    data object BiometricEnabled : SettingsEvent()
+    data class BiometricConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
+    data class DeleteVaultConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
+    data object VaultLocked : SettingsEvent()
+
+    /**
+     * Emitted after [SettingsViewModel.selectPreset] / [SettingsViewModel.applyCustom]
+     * successfully completes a KDF migration. The new active preset is carried
+     * so the snackbar can render "Encryption strength updated to <displayName>".
+     */
+    data class KdfPresetApplied(val preset: KdfPreset) : SettingsEvent()
+
+    /**
+     * Emitted on a wrong master-password attempt during a KDF preset change.
+     * Mirrors [BiometricConfirmFailed] / [PinRemoveConfirmFailed] - the dialog
+     * stays open and surfaces the remaining attempts to the user.
+     */
+    data class KdfPresetConfirmFailed(val attemptsRemaining: Int) : SettingsEvent()
+}
+
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    private val tagRepository: TagRepository,
+    private val appPrefs: AppPreferencesRepository,
+    private val authRepository: AuthRepository,
+    private val deleteTagUseCase: DeleteTagUseCase,
+    private val resetVaultUseCase: ResetVaultUseCase,
+    private val seedDataUseCase: SeedDataUseCase,
+    private val lockReasonStore: LockReasonStore,
+    private val authAttemptsStore: AuthAttemptsStore,
+    private val highlightStore: SettingsHighlightStore,
+    private val hardwareKeyIsolationProbe: HardwareKeyIsolationProbe,
+    private val deviceCapacityDetector: DeviceCapacityDetector,
+    private val kdfBenchmark: KdfBenchmark,
+    private val kdfMigrator: KdfMigrator,
+    @Named("auth") private val authPrefs: SharedPreferences,
+) : ViewModel() {
+
+    init {
+        // Idempotent: subsequent reads of [hardwareKeyIsolation] off Security
+        // do not re-probe. First entry into Settings -> Security kicks the
+        // background probe; the StateFlow below holds the result for the
+        // lifetime of the process.
+        hardwareKeyIsolationProbe.start()
+    }
+
+    val highlightKey: StateFlow<String?> = highlightStore.pendingKey
+    fun clearHighlight() = highlightStore.clear()
+
+    /**
+     * Resolved hardware-isolation tier for the vault wrapping key, or `null`
+     * while the background probe is still running. Started [SharingStarted.Eagerly]
+     * so that by the time Security composes, the StateFlow already holds the
+     * latest value the probe has emitted (which is the cached value on every
+     * subsequent visit to Security in the same process).
+     */
+    val hardwareKeyIsolation: StateFlow<HardwareKeyIsolationStatus?> =
+        hardwareKeyIsolationProbe.status
+            .stateIn(viewModelScope, SharingStarted.Eagerly, hardwareKeyIsolationProbe.status.value)
+
+    private val _isSeedingData = MutableStateFlow(false)
+    val isSeedingData: StateFlow<Boolean> = _isSeedingData.asStateFlow()
+
+    private val _event = MutableSharedFlow<SettingsEvent>(extraBufferCapacity = 1)
+    val event: SharedFlow<SettingsEvent> = _event.asSharedFlow()
+
+    val tags: StateFlow<List<Tag>> = tagRepository.observeTags()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val themeMode: StateFlow<ThemeMode> = appPrefs.getThemeMode()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ThemeMode.SYSTEM)
+
+    val isBiometricEnabled: StateFlow<Boolean> = appPrefs.isBiometricEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val isPinSetup: StateFlow<Boolean> = authRepository.isPinSetup()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val isScreenshotsEnabled: StateFlow<Boolean> = appPrefs.isScreenshotsEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val backgroundLockTimeout: StateFlow<BackgroundLockTimeout> = appPrefs.getBackgroundLockTimeout()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, BackgroundLockTimeout.IMMEDIATE)
+
+    val inactivityLockTimeout: StateFlow<InactivityLockTimeout> = appPrefs.getInactivityLockTimeout()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, InactivityLockTimeout.THIRTY_SECONDS)
+
+    val isMasterPasswordRecheckEnabled: StateFlow<Boolean> = appPrefs.isMasterPasswordRecheckEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val masterPasswordRecheckInterval: StateFlow<MasterPasswordInterval> =
+        appPrefs.getMasterPasswordRecheckInterval()
+            .stateIn(viewModelScope, SharingStarted.Eagerly, MasterPasswordInterval.HOURS_48)
+
+    val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val isHideTopBarOnScroll: StateFlow<Boolean> = appPrefs.isHideTopBarOnScroll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val isNotesRenderMarkdownEnabled: StateFlow<Boolean> = appPrefs.isNotesRenderMarkdownEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val recycleBinRetention: StateFlow<RecycleBinRetention> = appPrefs.getRecycleBinRetention()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, RecycleBinRetention.DAYS_30)
+
+    val isRecycleBinEnabled: StateFlow<Boolean> = appPrefs.isRecycleBinEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val isVaultFooterVisible: StateFlow<Boolean> = appPrefs.isVaultFooterVisible()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    val isRestoreLastScreenOnUnlock: StateFlow<Boolean> = appPrefs.isRestoreLastScreenOnUnlock()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    // ── KDF (encryption strength) state ────────────────────────────────────
+    //
+    // The KDF picker reads four flows:
+    //  - [activeKdfPreset]:        which preset is currently bound to the verifier
+    //  - [activeKdfCustomParams]:  (m, t) iff activePreset == CUSTOM, else null
+    //  - [deviceCapacity]:         RAM-derived rules table for picker gating
+    //  - [kdfBenchmarks]:          per-preset measured unlock time in ms
+    //
+    // The picker also calls [refreshBenchmark] / [selectPreset] / [applyCustom];
+    // [isKdfMigrating] disables the picker while a Phase-1-then-Phase-2
+    // migration is in flight on the background dispatcher.
+
+    /** Currently-active Argon2id preset, resolved from the stored KDF version int. */
+    val activeKdfPreset: StateFlow<KdfPreset> = authRepository.observeActiveKdfPreset()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, KdfPreset.STANDARD)
+
+    /**
+     * Custom (m, t) pair when [activeKdfPreset] is [KdfPreset.CUSTOM]; null
+     * for any of the four fixed presets. Subscribed to by the Settings UI to
+     * render the secondary subtitle line under the Encryption strength row.
+     */
+    val activeKdfCustomParams: StateFlow<Pair<Int, Int>?> = authRepository.observeActiveKdfCustomParams()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    // ── Secret Key state (read-only, for the Security row subtitle) ────────
+    //
+    // The Settings > Security > Secret Key row needs three signals to render
+    // the subtitle locked-design states ("On. Generated <date>. Tap for
+    // options.", "Off. Opted out at vault creation - tap to enable.", and
+    // "Off. Tap to enable."). The full SK lifecycle - reauth, enable,
+    // rotate, disable, kit save - lives on SecretKeySettingsViewModel.
+    // These flows are observe-only so the Security row composes correctly
+    // even before the SK Settings screen has been opened.
+
+    /**
+     * `true` when SP_SECRET_KEY_ENABLED is set. Mirrors
+     * [AuthRepository.isSecretKeyEnabled] as a hot StateFlow so the
+     * Security row's subtitle re-renders on every Enable / Disable /
+     * Rotate transition.
+     */
+    val isSecretKeyOn: StateFlow<Boolean> = authRepository.observeIsSecretKeyEnabled()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * `true` when the user explicitly opted out of Secret Key (either at
+     * onboarding or by disabling SK later). Cleared on every Enable.
+     * Combined with [isSecretKeyOn] this drives the row's three subtitle
+     * shapes; the search index points users at the same row regardless.
+     */
+    val wasSecretKeyOptedOut: StateFlow<Boolean> = authRepository.observeSecretKeyOptedOut()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    /**
+     * Wall-clock ms epoch when this SK was last generated (Enable or
+     * Rotate). `null` when the feature has never been enabled on this
+     * install. The Security row's "Generated <date>" suffix consults this
+     * directly so it stays in sync with [isSecretKeyOn].
+     */
+    val secretKeyGeneratedAt: StateFlow<Long?> = authPrefs.watchLongOrNull(SP_SK_GENERATED_AT)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Wall-clock ms epoch of the most recent Emergency Kit save. `null`
+     * when no save has occurred yet. Read by the Security row when SK is
+     * present so it can highlight "kit not yet saved" inline before the
+     * user navigates into the SK screen.
+     */
+    val secretKeyLastKitDownloadAt: StateFlow<Long?> = authPrefs.watchLongOrNull(SP_SK_LAST_KIT_DOWNLOAD_AT)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Device capacity snapshot. We hold the value in a StateFlow (rather than
+     * a plain val) so test fakes that flip the snapshot mid-test can drive UI
+     * recomposition predictably. The DeviceCapacityDetector itself memoises so
+     * repeated reads here are free.
+     */
+    val deviceCapacity: StateFlow<CapacitySnapshot> = MutableStateFlow(deviceCapacityDetector.snapshot())
+        .asStateFlow()
+
+    /**
+     * Per-preset measured unlock time. The picker uses this to render the
+     * "Estimated unlock: ~Xms" subtitle on each preset row. Backed by the
+     * shared singleton [KdfBenchmark] so refresh-from-anywhere updates are
+     * visible everywhere.
+     */
+    val kdfBenchmarks: StateFlow<Map<KdfParams, Long>> = kdfBenchmark.cachedTimings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    private val _isKdfMigrating = MutableStateFlow(false)
+    /** True while a `kdfMigrator.migrateTo` call is in flight. */
+    val isKdfMigrating: StateFlow<Boolean> = _isKdfMigrating.asStateFlow()
+
+    private val _isKdfBenchmarking = MutableStateFlow(false)
+    /** True while a `KdfBenchmark.benchmark` or `refreshBenchmark()` is in flight. */
+    val isKdfBenchmarking: StateFlow<Boolean> = _isKdfBenchmarking.asStateFlow()
+
+    init {
+        // First-launch warmup: kick benchmarks for every enabled fixed preset
+        // so the picker has data to show when the user opens it. Each
+        // benchmark is gated by the mutex inside KdfBenchmark, so this
+        // serialises naturally and stays bounded.
+        //
+        // We deliberately do NOT await observeActiveKdfPreset().first() here.
+        // That flow gates on migrationComplete; on a Clear-Data cold start
+        // the gate can resolve after the init coroutine starts, leaving the
+        // benchmark loop stranded behind the .first() call and every preset
+        // chip stuck at "Estimating unlock time...". Iterating enabledPresets
+        // matches refreshBenchmark()'s working path - we lose the
+        // "prioritise active preset first" hint but every chip still
+        // populates as each benchmark completes.
+        viewModelScope.launch {
+            val snapshot = deviceCapacityDetector.snapshot()
+            snapshot.enabledPresets.forEach { preset ->
+                runCatching { kdfBenchmark.benchmarkIfMissing(preset.toKdfParams()) }
+            }
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        if (mode == themeMode.value) return
+        viewModelScope.launch { appPrefs.setThemeMode(mode) }
+    }
+
+    fun setBiometricEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setBiometricEnabled(enabled) }
+    }
+
+    fun enableBiometricWithVerification(password: CharArray) {
+        viewModelScope.launch {
+            try {
+                when (authRepository.unlockWithPassword(password)) {
+                    is AppResult.Success -> {
+                        authAttemptsStore.resetBiometricEnable()
+                        appPrefs.setBiometricEnabled(true)
+                        _event.emit(SettingsEvent.BiometricEnabled)
+                    }
+                    is AppResult.Error -> {
+                        // Singleton-scoped so navigating Security ↔ top-level Settings can't
+                        // reset the count and bypass the lockout.
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("biometric setup"))
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.BiometricConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - attempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                password.fill(' ')
+            }
+        }
+    }
+
+    fun setScreenshotsEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setScreenshotsEnabled(enabled) }
+    }
+
+    fun setBackgroundLockTimeout(timeout: BackgroundLockTimeout) {
+        viewModelScope.launch { appPrefs.setBackgroundLockTimeout(timeout) }
+    }
+
+    fun setInactivityLockTimeout(timeout: InactivityLockTimeout) {
+        viewModelScope.launch { appPrefs.setInactivityLockTimeout(timeout) }
+    }
+
+    fun setMasterPasswordRecheckEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setMasterPasswordRecheckEnabled(enabled) }
+    }
+
+    fun setMasterPasswordRecheckInterval(interval: MasterPasswordInterval) {
+        viewModelScope.launch { appPrefs.setMasterPasswordRecheckInterval(interval) }
+    }
+
+    fun setShowFavourites(show: Boolean) {
+        viewModelScope.launch { appPrefs.setShowFavourites(show) }
+    }
+
+    fun setHideTopBarOnScroll(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setHideTopBarOnScroll(enabled) }
+    }
+
+    fun setNotesRenderMarkdownEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setNotesRenderMarkdownEnabled(enabled) }
+    }
+
+    fun setRecycleBinRetention(retention: RecycleBinRetention) {
+        viewModelScope.launch { appPrefs.setRecycleBinRetention(retention) }
+    }
+
+    fun setRecycleBinEnabled(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setRecycleBinEnabled(enabled) }
+    }
+
+    fun setVaultFooterVisible(visible: Boolean) {
+        viewModelScope.launch { appPrefs.setVaultFooterVisible(visible) }
+    }
+
+    fun setRestoreLastScreenOnUnlock(enabled: Boolean) {
+        viewModelScope.launch { appPrefs.setRestoreLastScreenOnUnlock(enabled) }
+    }
+
+    fun addTag(name: String) {
+        viewModelScope.launch {
+            tagRepository.addTag(Tag(name = name, color = 0xFF6200EE.toInt(), icon = ""))
+        }
+    }
+
+    fun deleteTag(name: String) {
+        viewModelScope.launch {
+            val tag = tags.value.find { it.name == name }
+            if (tag != null && !tag.isDefault) {
+                val result = deleteTagUseCase(name)
+                if (result is AppResult.Error) {
+                    _event.emit(SettingsEvent.Error(result.message ?: "Failed to delete category"))
+                }
+            }
+        }
+    }
+
+    /**
+     * Verifies the user's master password before removing the saved PIN. Mirrors the
+     * shape of [enableBiometricWithVerification]: shared singleton attempts counter so
+     * navigating Security ↔ top-level Settings can't reset the lockout, three wrong
+     * attempts persist a lock reason and lock the vault.
+     */
+    fun removePinWithVerification(password: CharArray) {
+        viewModelScope.launch {
+            try {
+                when (authRepository.unlockWithPassword(password)) {
+                    is AppResult.Success -> {
+                        authAttemptsStore.resetBiometricEnable()
+                        when (val result = authRepository.resetPin()) {
+                            is AppResult.Success -> _event.emit(SettingsEvent.PinRemoved)
+                            is AppResult.Error -> _event.emit(
+                                SettingsEvent.Error(result.message ?: "Failed to remove PIN")
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("PIN removal"))
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.PinRemoveConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - attempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                password.fill(' ')
+            }
+        }
+    }
+
+    private var deleteVaultAttempts = 0
+    private val _isVerifyingDeleteVault = MutableStateFlow(false)
+    val isVerifyingDeleteVault: StateFlow<Boolean> = _isVerifyingDeleteVault.asStateFlow()
+
+    /**
+     * Wipes the vault only after the user re-enters their master password. Three wrong
+     * attempts lock the vault - same policy as the biometric-enable flow.
+     */
+    fun deleteVaultContentsWithVerification(password: CharArray) {
+        viewModelScope.launch {
+            try {
+                _isVerifyingDeleteVault.value = true
+                when (authRepository.unlockWithPassword(password)) {
+                    is AppResult.Success -> {
+                        deleteVaultAttempts = 0
+                        when (val result = resetVaultUseCase()) {
+                            is AppResult.Success -> _event.emit(SettingsEvent.VaultContentsDeleted)
+                            is AppResult.Error -> _event.emit(
+                                SettingsEvent.Error(result.message ?: "Failed to delete vault")
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        deleteVaultAttempts++
+                        if (deleteVaultAttempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            deleteVaultAttempts = 0
+                            lockReasonStore.set(LockReason.TooManyFailedAttempts("vault deletion"))
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.DeleteVaultConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - deleteVaultAttempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                password.fill(' ')
+                _isVerifyingDeleteVault.value = false
+            }
+        }
+    }
+
+    fun seedData() {
+        if (_isSeedingData.value) return
+        viewModelScope.launch {
+            _isSeedingData.value = true
+            val result = seedDataUseCase()
+            _isSeedingData.value = false
+            when (result) {
+                is AppResult.Success -> _event.emit(SettingsEvent.SeedComplete(result.data))
+                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to seed data"))
+            }
+        }
+    }
+
+    fun seedTwoFaData() {
+        if (_isSeedingData.value) return
+        viewModelScope.launch {
+            _isSeedingData.value = true
+            val result = seedDataUseCase.seedTwoFa()
+            _isSeedingData.value = false
+            when (result) {
+                is AppResult.Success -> _event.emit(SettingsEvent.TwoFaSeedComplete(result.data))
+                is AppResult.Error -> _event.emit(SettingsEvent.Error(result.message ?: "Failed to seed 2FA data"))
+            }
+        }
+    }
+
+    // ── KDF preset actions ─────────────────────────────────────────────────
+    //
+    // Reauth + migrate flow. The Settings UI:
+    //  1. Shows the picker, user selects preset P.
+    //  2. Picker opens [MasterPasswordReauthDialog].
+    //  3. On confirm, the dialog hands a CharArray to one of [selectPreset]
+    //     or [applyCustom]. The caller passes ownership to the VM; we zero
+    //     it in `finally` after [KdfMigrator] is done with it (the migrator
+    //     also defensively zeroes its own copy on the way out).
+    //
+    // The 3-strike lockout shares the same counter as biometric-enable and
+    // PIN-removal flows (the `authAttemptsStore.incrementBiometricEnable()`
+    // singleton-scoped counter). Three wrong attempts across any reauth-gated
+    // Settings flow trips the lockout - this is intentional: the threat is
+    // someone shoulder-surfing the Settings reauth UI, regardless of which
+    // specific action they were trying to hijack.
+
+    /**
+     * Re-derive the verifier under one of the four fixed presets. The picker
+     * already confirmed [preset] is enabled on this device; this method does
+     * NOT re-check (KdfMigrator does as defence in depth) but does refuse
+     * [KdfPreset.CUSTOM] - that lives on [applyCustom].
+     *
+     * @param password Caller-supplied CharArray. We take ownership and zero
+     *                 it in a finally block.
+     */
+    fun selectPreset(preset: KdfPreset, password: CharArray) {
+        require(preset != KdfPreset.CUSTOM) { "Use applyCustom for CUSTOM preset" }
+        applyKdfMigration(preset = preset, params = preset.toKdfParams(), password = password)
+    }
+
+    /**
+     * Re-derive the verifier under user-chosen custom (m, t) params. The
+     * Custom dialog already validated that `m` is within the per-device
+     * `maxCustomMemoryMb` cap and `t` is in `2..16`; KdfMigrator does not
+     * re-check those numeric bounds because the only callers are this method
+     * (UI-gated) and tests (which set explicit values).
+     *
+     * @param params  KdfParams holding the chosen mCostKiB / tCost / p=1.
+     * @param password Caller-supplied CharArray. We take ownership and zero
+     *                 it in a finally block.
+     */
+    fun applyCustom(params: KdfParams, password: CharArray) {
+        applyKdfMigration(preset = KdfPreset.CUSTOM, params = params, password = password)
+    }
+
+    private fun applyKdfMigration(
+        preset: KdfPreset,
+        params: KdfParams,
+        password: CharArray,
+    ) {
+        viewModelScope.launch {
+            // Bind the verify-copy to a named local so the `finally` below can
+            // zero it deterministically. `authRepository.verifyMasterPassword`
+            // makes its own internal copy and zeros THAT, but the array we hand
+            // it stays in the heap until GC unless we zero it ourselves.
+            val verifyCopy = password.copyOf()
+            try {
+                _isKdfMigrating.value = true
+                // Reauth: the migrator does its own verifier check as part of
+                // Phase 1a, but a verifyMasterPassword() round before the slow
+                // Argon2id derivation lets us short-circuit wrong-password
+                // attempts cleanly through the attempt counter / lockout path
+                // without burning an Argon2id derivation under the new params.
+                when (authRepository.verifyMasterPassword(verifyCopy)) {
+                    is AppResult.Success -> {
+                        authAttemptsStore.resetBiometricEnable()
+                        when (val res = kdfMigrator.migrateTo(params, preset, password)) {
+                            is AppResult.Success -> {
+                                // Eagerly schedule a fresh benchmark of the new
+                                // active params so the picker subtitle updates
+                                // ("Estimated unlock: ~X ms") without waiting
+                                // for the next time the user opens the screen.
+                                viewModelScope.launch {
+                                    runCatching { kdfBenchmark.benchmark(params) }
+                                }
+                                _event.emit(SettingsEvent.KdfPresetApplied(preset))
+                            }
+                            is AppResult.Error -> _event.emit(
+                                SettingsEvent.Error(
+                                    res.message ?: "Could not change encryption strength"
+                                )
+                            )
+                        }
+                    }
+                    is AppResult.Error -> {
+                        val attempts = authAttemptsStore.incrementBiometricEnable()
+                        if (attempts >= MAX_BIOMETRIC_ATTEMPTS) {
+                            authAttemptsStore.resetBiometricEnable()
+                            lockReasonStore.set(
+                                LockReason.TooManyFailedAttempts("encryption strength change")
+                            )
+                            authRepository.lock()
+                            _event.emit(SettingsEvent.VaultLocked)
+                        } else {
+                            _event.emit(
+                                SettingsEvent.KdfPresetConfirmFailed(
+                                    attemptsRemaining = MAX_BIOMETRIC_ATTEMPTS - attempts,
+                                )
+                            )
+                        }
+                    }
+                }
+            } finally {
+                // KdfMigrator zeroes its own internal copy; this zeroes both
+                // the VM's view of the caller's array AND the throwaway copy
+                // we handed to verifyMasterPassword. Idempotent if the inner
+                // callees already overwrote them.
+                password.fill(' ')
+                verifyCopy.fill(' ')
+                _isKdfMigrating.value = false
+            }
+        }
+    }
+
+    /**
+     * Re-runs benchmarks for every preset enabled on this device. Single
+     * shared mutex inside [KdfBenchmark] serialises the work, so this is safe
+     * to spam-tap.
+     */
+    fun refreshBenchmark() {
+        if (_isKdfBenchmarking.value) return
+        viewModelScope.launch {
+            try {
+                _isKdfBenchmarking.value = true
+                val snapshot = deviceCapacityDetector.snapshot()
+                snapshot.enabledPresets.forEach { preset ->
+                    runCatching { kdfBenchmark.benchmark(preset.toKdfParams()) }
+                }
+            } finally {
+                _isKdfBenchmarking.value = false
+            }
+        }
+    }
+
+    /**
+     * One-shot benchmark for a user-chosen Custom (m, t) pair. Used by the
+     * Custom dialog's "Estimate" button before the user can press "Apply".
+     * Returns null on failure (OOM, timeout, native crash); the dialog maps
+     * null to "Could not measure on this device" inline error.
+     */
+    suspend fun benchmarkCustom(params: KdfParams): Long? {
+        return try {
+            _isKdfBenchmarking.value = true
+            kdfBenchmark.benchmark(params)
+        } finally {
+            _isKdfBenchmarking.value = false
+        }
+    }
+
+    companion object {
+        private const val MAX_BIOMETRIC_ATTEMPTS = 3
+    }
+}
+
+/**
+ * Cold Flow over a SharedPreferences long key that emits `null` for the
+ * "not set" state instead of a sentinel default. Mirrors the shape of the
+ * existing `watchBoolean` / `watchString` / `watchInt` helpers on
+ * AuthRepositoryImpl but lives here so SettingsViewModel can observe SK
+ * metadata keys without needing to widen [AuthRepository] further.
+ *
+ * "Not set" is a real state (SK never enabled => no generation timestamp,
+ * SK enabled but kit never saved => no last-download timestamp), so the
+ * null-vs-value distinction matters. The Security row reads both and
+ * renders accordingly.
+ */
+private fun SharedPreferences.watchLongOrNull(key: String): Flow<Long?> =
+    callbackFlow {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+            if (k == key) trySend(if (contains(key)) getLong(key, 0L) else null)
+        }
+        registerOnSharedPreferenceChangeListener(listener)
+        trySend(if (contains(key)) getLong(key, 0L) else null)
+        awaitClose { unregisterOnSharedPreferenceChangeListener(listener) }
+    }

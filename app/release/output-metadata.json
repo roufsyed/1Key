@@ -1,0 +1,82 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "APK",
+    "kind": "Directory"
+  },
+  "applicationId": "com.onekey",
+  "variantName": "release",
+  "elements": [
+    {
+      "type": "UNIVERSAL",
+      "filters": [],
+      "attributes": [],
+      "versionCode": 2,
+      "versionName": "1.1.0",
+      "outputFile": "1Key_1.1.0_2_universal_release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "armeabi-v7a"
+        }
+      ],
+      "attributes": [],
+      "versionCode": 2,
+      "versionName": "1.1.0",
+      "outputFile": "1Key_1.1.0_2_armeabi-v7a_release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "arm64-v8a"
+        }
+      ],
+      "attributes": [],
+      "versionCode": 2,
+      "versionName": "1.1.0",
+      "outputFile": "1Key_1.1.0_2_arm64-v8a_release.apk"
+    },
+    {
+      "type": "ONE_OF_MANY",
+      "filters": [
+        {
+          "filterType": "ABI",
+          "value": "x86_64"
+        }
+      ],
+      "attributes": [],
+      "versionCode": 2,
+      "versionName": "1.1.0",
+      "outputFile": "1Key_1.1.0_2_x86_64_release.apk"
+    }
+  ],
+  "elementType": "File",
+  "baselineProfiles": [
+    {
+      "minApi": 28,
+      "maxApi": 30,
+      "baselineProfiles": [
+        "baselineProfiles/1/1Key_1.1.0_2_universal_release.dm",
+        "baselineProfiles/1/1Key_1.1.0_2_armeabi-v7a_release.dm",
+        "baselineProfiles/1/1Key_1.1.0_2_arm64-v8a_release.dm",
+        "baselineProfiles/1/1Key_1.1.0_2_x86_64_release.dm"
+      ]
+    },
+    {
+      "minApi": 31,
+      "maxApi": 2147483647,
+      "baselineProfiles": [
+        "baselineProfiles/0/1Key_1.1.0_2_universal_release.dm",
+        "baselineProfiles/0/1Key_1.1.0_2_armeabi-v7a_release.dm",
+        "baselineProfiles/0/1Key_1.1.0_2_arm64-v8a_release.dm",
+        "baselineProfiles/0/1Key_1.1.0_2_x86_64_release.dm"
+      ]
+    }
+  ],
+  "minSdkVersionForDexing": 26
+}

@@ -9,24 +9,17 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
-// Release signing config shared by local builds and F-Droid's build server.
-// When keystore.properties is present (developer machine cutting a signed
-// direct-download / Play APK) the release APK is signed with the developer
-// key. When absent (fresh clone, CI, F-Droid buildserver, GitHub Actions
-// without the secret) the release APK is left unsigned and downstream
-// distributors sign it with their own key. Keeps the pipeline from failing
-// when the keystore is not on disk.
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
     if (keystorePropertiesFile.exists()) load(keystorePropertiesFile.inputStream())
 }
 
 android {
-    namespace = "com.onekey"
+    namespace = "com.roufsyed.onekey"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.onekey"
+        applicationId = "com.roufsyed.onekey"
         minSdk = 26
         targetSdk = 36
         versionCode = 2

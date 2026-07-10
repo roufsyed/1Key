@@ -36,6 +36,6 @@ tasks.withType<Jar>().configureEach {
     // attribute the lint module loads but no issues register, so the rule
     // would silently do nothing in CI.
     manifest {
-        attributes["Lint-Registry-v2"] = "com.onekey.lint.LockAwareIssueRegistry"
+        attributes["Lint-Registry-v2"] = "com.roufsyed.onekey.lint.LockAwareIssueRegistry"
     }
 }
