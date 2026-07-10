@@ -1,0 +1,3 @@
+Initial F-Droid release.
+
+Offline password manager with Argon2id KDF, AES-256-GCM per-field encryption, Keystore-wrapped keys, biometric unlock, System Autofill, built-in TOTP, and encrypted backups. No account, no network, no telemetry.

@@ -22,8 +22,8 @@ android {
         applicationId = "com.roufsyed.onekey"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.1.1"
         // Required for Room MigrationTestHelper / AndroidX ext-junit in
         // src/androidTest. The runner picks up @RunWith(AndroidJUnit4::class)
         // tests and drives them through an actual Android instrumentation harness.
@@ -31,8 +31,14 @@ android {
     }
 
     signingConfigs {
-        create("release") {
-            if (keystorePropertiesFile.exists()) {
+        // Only create the "release" config when keystore.properties exists.
+        // On F-Droid's buildserver this whole block is stripped by their
+        // `remove_signing_keys` step anyway; the `if` here makes the local
+        // no-keystore case (fresh clone, CI without the secret) equivalent
+        // to F-Droid's stripped state: no "release" config, so
+        // signingConfigs.findByName("release") below returns null.
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
                 storeFile = file(keystoreProperties.getProperty("storeFile"))
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
@@ -43,12 +49,19 @@ android {
 
     buildTypes {
         release {
-            // Null signingConfig when keystore.properties is absent - AGP then
+            // Single-line assignment so F-Droid's regex-based
+            // `remove_signing_keys` removes the entire line cleanly. Previously
+            // this was multi-line with chained `.findByName(...)?.takeIf(...)`,
+            // and F-Droid's regex `(?m)^\s*signingConfig\s*=?\s*[^\n]*` only
+            // stripped the first line, leaving the continuations orphaned and
+            // failing script compilation on their buildserver.
+            //
+            // Behaviour: findByName returns null when no "release" config
+            // exists (either because F-Droid stripped it or because
+            // keystore.properties is absent locally). Null signingConfig -> AGP
             // produces an unsigned release APK, which is what F-Droid's build
             // server expects (they re-sign with their own key).
-            signingConfig = signingConfigs
-                .findByName("release")
-                ?.takeIf { keystorePropertiesFile.exists() }
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -65,7 +78,12 @@ android {
 
     splits {
         abi {
-            isEnable = true
+            // Disable ABI splits when F-Droid's buildserver invokes with
+            // `-PfdroidBuild=true` (set via `gradleprops` in the app's yml).
+            // `fdroid build` errors on multiple APK outputs; disabling splits
+            // produces a single universal APK containing all ABIs. Direct
+            // downloads (no property set) still get per-ABI APKs + universal.
+            isEnable = !project.hasProperty("fdroidBuild")
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
@@ -129,14 +147,38 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/DEPENDENCIES"
-            // AGP 8.x writes the current git commit hash + dirty state to
-            // this proto in the APK. Same source at two different commits
-            // produces different bytes, so the file has to be stripped for
-            // reproducible builds. F-Droid's scanner also flags it as a
-            // non-reproducibility signal even when the commit matches.
+            // Belt-and-suspenders: exclude the version-control-info file at
+            // the java-resource filter stage too. The primary defence is the
+            // extract*VersionControlInfo task disable below - AGP adds this
+            // file via a dedicated task that runs after the packaging.resources
+            // filter, so this line alone doesn't remove it.
             excludes += "META-INF/version-control-info.textproto"
         }
+        jniLibs {
+            // Prevent AGP from stripping .so files. F-Droid's buildserver has
+            // no NDK strip binary available and logs "Unable to strip the
+            // following libraries, packaging them as they are" - so their
+            // build ships the AAR-bundled .so unmodified. If we strip locally,
+            // our APK's .so bytes diverge from F-Droid's, breaking reproducible
+            // build verification. Not stripping keeps both builds shipping the
+            // exact AAR-bundled binary bytes (libargon2jni.so,
+            // libdatastore_shared_counter.so, libbarhopper_v3.so, etc.).
+            keepDebugSymbols.add("**/*.so")
+        }
     }
+}
+
+// Disable AGP's version-control-info task. It writes the current git commit
+// SHA and dirty state into META-INF/version-control-info.textproto inside the
+// APK. Even with an identical source tree, checking out at a different tag or
+// having any local modification produces different bytes and breaks F-Droid's
+// reproducible-build verification. `packaging.resources.excludes` above runs
+// at a different pipeline stage and doesn't catch the file.
+tasks.matching {
+    it.name == "extractReleaseVersionControlInfo" ||
+        it.name == "extractDebugVersionControlInfo"
+}.configureEach {
+    enabled = false
 }
 
 dependencies {
@@ -283,6 +325,17 @@ android {
     }
 
     lint {
+        // Release lint pulls `:lint-rules:compileKotlin` into the task graph
+        // via `generateReleaseLintVitalReportModel`. That module fails to
+        // compile because AGP 8.7's bundled Kotlin analyzer expects 2.0.0
+        // metadata but lint-tests transitively pulls kotlin-stdlib 2.2.0,
+        // and there's no clean way to force-align them without either
+        // downgrading lint or upgrading the project's Kotlin to 2.2. Skip
+        // lint on release so `assembleRelease` (both locally and on F-Droid's
+        // buildserver) succeeds. The custom lint rules from `:lint-rules`
+        // still fire on debug builds where they catch bugs during dev.
+        checkReleaseBuilds = false
+
         // AGP 8.7.2 + Kotlin 2.0 + Compose 1.7 trips two bundled detectors that
         // throw IncompatibleClassChangeError because they were compiled against
         // an older Kotlin Analysis API. Disabling them is the documented

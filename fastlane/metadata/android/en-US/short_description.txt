@@ -1,1 +1,1 @@
-Offline password manager. Encrypted vault. No account. No network.
+Offline password manager. 2FA + notes. No account, no network, no telemetry.
