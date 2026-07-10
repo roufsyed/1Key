@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,18 @@ plugins {
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
+}
+
+// Release signing config shared by local builds and F-Droid's build server.
+// When keystore.properties is present (developer machine cutting a signed
+// direct-download / Play APK) the release APK is signed with the developer
+// key. When absent (fresh clone, CI, F-Droid buildserver, GitHub Actions
+// without the secret) the release APK is left unsigned and downstream
+// distributors sign it with their own key. Keeps the pipeline from failing
+// when the keystore is not on disk.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) load(keystorePropertiesFile.inputStream())
 }
 
 android {
@@ -23,8 +37,25 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Null signingConfig when keystore.properties is absent - AGP then
+            // produces an unsigned release APK, which is what F-Droid's build
+            // server expects (they re-sign with their own key).
+            signingConfig = signingConfigs
+                .findByName("release")
+                ?.takeIf { keystorePropertiesFile.exists() }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -91,10 +122,26 @@ android {
         getByName("androidTest").assets.srcDirs("$projectDir/schemas")
     }
 
+    // AGP 8.x embeds a Google-signed block listing dependency versions/hashes
+    // into every release APK + AAB. The block includes a signature by a Google
+    // key that F-Droid's build server cannot reproduce, breaking byte-for-byte
+    // reproducible-build verification against a locally-signed APK. Turn it
+    // off for both APK and Bundle outputs.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/DEPENDENCIES"
+            // AGP 8.x writes the current git commit hash + dirty state to
+            // this proto in the APK. Same source at two different commits
+            // produces different bytes, so the file has to be stripped for
+            // reproducible builds. F-Droid's scanner also flags it as a
+            // non-reproducibility signal even when the commit matches.
+            excludes += "META-INF/version-control-info.textproto"
         }
     }
 }

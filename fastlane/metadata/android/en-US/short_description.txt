@@ -1,0 +1,1 @@
+Offline password manager. Encrypted vault. No account. No network.

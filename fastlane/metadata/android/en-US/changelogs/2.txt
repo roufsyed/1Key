@@ -1,0 +1,10 @@
+First F-Droid release.
+
+• Offline password manager — no network, no accounts, no telemetry
+• Argon2id KDF, AES-256-GCM per-field encryption, Keystore-wrapped keys
+• Master password, 6-digit PIN, biometric unlock
+• System Autofill Service with URL-only matching
+• Built-in TOTP / 2FA codes alongside credentials
+• Import from Google, LastPass, KeePass, 1Password, Dashlane, NordPass, Safari
+• Encrypted .1key backup + plain CSV / JSON export
+• Reproducible builds under GPL-3.0-or-later
