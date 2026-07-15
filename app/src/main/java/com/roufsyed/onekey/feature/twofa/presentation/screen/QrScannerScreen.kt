@@ -1,6 +1,5 @@
 package com.roufsyed.onekey.feature.twofa.presentation.screen
 
-import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,12 +27,9 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDialog
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
+import com.roufsyed.onekey.core.scan.ZxingQrAnalyzer
 import com.roufsyed.onekey.feature.twofa.domain.ParsedOtpAuthUri
 import com.roufsyed.onekey.feature.twofa.presentation.viewmodel.QrScannerViewModel
 import com.roufsyed.onekey.feature.twofa.presentation.viewmodel.ScanEvent
@@ -165,17 +161,14 @@ private fun CameraPreviewWithOverlay(
     val onDetectedState = rememberUpdatedState(newValue = onBarcodeDetected)
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-    val barcodeScanner = remember {
-        BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .build()
-        )
-    }
+    // ZXing (pure-Java, FOSS) replaces ML Kit BarcodeScanning. It decodes QR on
+    // the analysis executor and delivers the raw string on the main thread, so
+    // the ViewModel callback path below is unchanged.
+    val analyzer = remember { ZxingQrAnalyzer(onQrDecoded = { onDetectedState.value(it) }) }
 
     DisposableEffect(Unit) {
         onDispose {
-            barcodeScanner.close()
+            analyzer.cancel()
             analysisExecutor.shutdown()
         }
     }
@@ -191,32 +184,7 @@ private fun CameraPreviewWithOverlay(
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { analysis ->
-                        analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                            // CameraX's ExperimentalGetImage uses androidx RequiresOptIn,
-                            // so a Kotlin @OptIn is a no-op. AGP lint still flags
-                            // imageProxy.image inside this nested lambda - suppress here.
-                            @SuppressLint("UnsafeOptInUsageError")
-                            val mediaImage = imageProxy.image
-                            if (mediaImage != null) {
-                                val input = InputImage.fromMediaImage(
-                                    mediaImage,
-                                    imageProxy.imageInfo.rotationDegrees,
-                                )
-                                barcodeScanner.process(input)
-                                    .addOnSuccessListener { barcodes ->
-                                        // Pass every QR through to the VM - it parses and
-                                        // decides between a valid otpauth URI and an
-                                        // InvalidQr event.
-                                        barcodes.firstOrNull()?.rawValue
-                                            ?.let { onDetectedState.value(it) }
-                                    }
-                                    .addOnCompleteListener { imageProxy.close() }
-                            } else {
-                                imageProxy.close()
-                            }
-                        }
-                    }
+                    .also { it.setAnalyzer(analysisExecutor, analyzer) }
 
                 val preview = Preview.Builder().build()
                     .also { it.setSurfaceProvider(previewView.surfaceProvider) }

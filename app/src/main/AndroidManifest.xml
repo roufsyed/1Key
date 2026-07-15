@@ -19,13 +19,10 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
-    <!-- ML Kit's transitive Firelog transport injects INTERNET + ACCESS_NETWORK_STATE
-         into the merged manifest. We keep the transport classes in the APK (otherwise
-         BarcodeScanning.getClient() crashes with NoClassDefFoundError on CCTDestination)
-         but strip the permissions so the OS blocks any actual network call. -->
-    <!-- This is done to stay true to our claim of 0 network calls -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- The INTERNET / ACCESS_NETWORK_STATE strip lives in src/full/AndroidManifest.xml:
+         only the full flavor pulls ML Kit (whose Firelog transport injects those
+         permissions). The fdroid flavor has no ML Kit, so its merged manifest never
+         contains INTERNET in the first place. -->
 
     <application
         android:name=".OneKeyApp"

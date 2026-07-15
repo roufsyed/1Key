@@ -1,6 +1,5 @@
 package com.roufsyed.onekey.feature.secretkey.scan
 
-import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -46,11 +45,8 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
 import com.roufsyed.onekey.core.presentation.util.oneKeyTopBarColors
+import com.roufsyed.onekey.core.scan.ZxingQrAnalyzer
 import java.util.concurrent.Executors
 
 /**
@@ -86,9 +82,9 @@ import java.util.concurrent.Executors
  * # Camera lifecycle
  *
  * CameraX is bound to [LocalLifecycleOwner.current] and unbound by the
- * DisposableEffect on dispose. The ML Kit barcode scanner client is
- * closed and the analyzer executor is shut down on the same dispose so
- * no camera-frame work outlives the screen.
+ * DisposableEffect on dispose. The ZXing analyzer is cancelled and the
+ * analyzer executor is shut down on the same dispose so no camera-frame
+ * work outlives the screen.
  *
  * @param onScanned receives the validated canonical SK string (26 chars,
  *   no dashes, no "A3-" prefix - matches [parseEmergencyKitQr] Ok
@@ -209,7 +205,7 @@ private fun PermissionDeniedSurface() {
 }
 
 /**
- * CameraX + ML Kit barcode preview with a centred viewfinder overlay.
+ * CameraX + ZXing QR preview with a centred viewfinder overlay.
  * Mirrors the shape of the 2FA scanner's preview composable but takes
  * a generic onBarcodeDetected(rawPayload) callback instead of routing
  * through a 2FA-specific ViewModel.
@@ -226,17 +222,13 @@ private fun CameraPreviewWithOverlay(
     val onDetectedState = rememberUpdatedState(newValue = onBarcodeDetected)
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-    val barcodeScanner = remember {
-        BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .build(),
-        )
-    }
+    // ZXing (pure-Java, FOSS) replaces ML Kit BarcodeScanning. Decodes QR on the
+    // analysis executor and delivers the raw payload on the main thread.
+    val analyzer = remember { ZxingQrAnalyzer(onQrDecoded = { onDetectedState.value(it) }) }
 
     DisposableEffect(Unit) {
         onDispose {
-            barcodeScanner.close()
+            analyzer.cancel()
             analysisExecutor.shutdown()
         }
     }
@@ -251,26 +243,7 @@ private fun CameraPreviewWithOverlay(
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { analysis ->
-                        analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                            @SuppressLint("UnsafeOptInUsageError")
-                            val mediaImage = imageProxy.image
-                            if (mediaImage != null) {
-                                val input = InputImage.fromMediaImage(
-                                    mediaImage,
-                                    imageProxy.imageInfo.rotationDegrees,
-                                )
-                                barcodeScanner.process(input)
-                                    .addOnSuccessListener { barcodes ->
-                                        barcodes.firstOrNull()?.rawValue
-                                            ?.let { onDetectedState.value(it) }
-                                    }
-                                    .addOnCompleteListener { imageProxy.close() }
-                            } else {
-                                imageProxy.close()
-                            }
-                        }
-                    }
+                    .also { it.setAnalyzer(analysisExecutor, analyzer) }
                 val preview = Preview.Builder().build().also {
                     it.setSurfaceProvider(previewView.surfaceProvider)
                 }

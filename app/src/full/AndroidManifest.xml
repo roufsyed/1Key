@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- FULL FLAVOR ONLY. ML Kit's transitive Firelog transport injects INTERNET +
+         ACCESS_NETWORK_STATE into the merged manifest. We keep the transport classes
+         in the APK (otherwise TextRecognition.getClient() crashes with a
+         NoClassDefFoundError on CCTDestination) but strip the permissions so the OS
+         blocks any actual network call - staying true to our "0 network calls" claim.
+
+         This lives in the full source set, not src/main, because the fdroid flavor
+         ships no ML Kit and therefore never gains these permissions - putting the
+         strip in main would make the merger warn about removing an absent permission
+         for the fdroid variant. -->
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+</manifest>

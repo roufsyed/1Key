@@ -76,6 +76,32 @@ android {
         }
     }
 
+    // Distribution flavors.
+    //  - full   : Play Store / direct-download build. Keeps Google ML Kit
+    //             (text-recognition) for the editor's "Scan from photo" OCR.
+    //  - fdroid : F-Droid build. Fully FOSS - zero ML Kit. QR decoding runs on
+    //             the bundled ZXing core (the same artifact that already encodes
+    //             the emergency-kit QR); OCR is replaced by an explanatory dialog.
+    // A flavor literally named "main" is illegal - it collides with the reserved
+    // src/main source set and fails configuration ("Multiple entries with same
+    // key: main=[]").
+    flavorDimensions += "dist"
+    productFlavors {
+        create("full") {
+            dimension = "dist"
+            isDefault = true
+            // OCR ("Scan from photo") works only here (it needs ML Kit). This flag
+            // gates the privacy-policy wording. The editor's OCR icon still shows
+            // in BOTH flavors - the fdroid flavor renders an explanatory dialog
+            // instead of the scanner - so the icon itself is not gated by this.
+            buildConfigField("boolean", "HAS_OCR", "true")
+        }
+        create("fdroid") {
+            dimension = "dist"
+            buildConfigField("boolean", "HAS_OCR", "false")
+        }
+    }
+
     splits {
         abi {
             // Disable ABI splits when F-Droid's buildserver invokes with
@@ -96,7 +122,7 @@ android {
             val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
             val abi = output.getFilter(com.android.build.OutputFile.ABI) ?: "universal"
             output.outputFileName =
-                "1Key_${variant.versionName}_${variant.versionCode}_${abi}_${variant.buildType.name}.apk"
+                "1Key_${variant.flavorName}_${variant.versionName}_${variant.versionCode}_${abi}_${variant.buildType.name}.apk"
         }
     }
 
@@ -232,18 +258,20 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
 
-    // ML Kit Barcode Scanning + Text Recognition (on-device, Latin script).
-    // These transitively pull in com.google.android.datatransport (Firelog), which
-    // injects INTERNET + ACCESS_NETWORK_STATE permissions. We CANNOT exclude the
-    // transport subgraph at the Gradle level: BarcodeScanning.getClient() has a
-    // static class-init reference to com.google.android.datatransport.cct.CCTDestination,
-    // and excluding it causes a NoClassDefFoundError at runtime when the QR scanner
-    // opens. Instead, we keep the classes in the APK so ML Kit loads, and strip the
-    // INTERNET / ACCESS_NETWORK_STATE permissions from the merged manifest via
-    // tools:node="remove" in AndroidManifest.xml. The Firelog Uploader still runs
-    // but the OS blocks every socket attempt - telemetry cannot exfiltrate.
-    implementation(libs.mlkit.barcode)
-    implementation(libs.mlkit.text.recognition)
+    // ML Kit Text Recognition (on-device, Latin script) powers the editor's
+    // "Scan from photo" OCR - FULL FLAVOR ONLY. QR/barcode decoding has moved
+    // off ML Kit onto the bundled ZXing core (core/scan/ZxingQrAnalyzer), so the
+    // fdroid flavor ships ZERO ML Kit (its OcrScannerSheet is an explanatory
+    // dialog in src/fdroid). ML Kit transitively pulls in
+    // com.google.android.datatransport (Firelog), which injects INTERNET +
+    // ACCESS_NETWORK_STATE. We cannot Gradle-exclude the transport subgraph:
+    // TextRecognition.getClient() has a static class-init reference to
+    // com.google.android.datatransport.cct.CCTDestination, and excluding it
+    // causes a NoClassDefFoundError when OCR opens. Instead we keep the classes
+    // and strip the permissions from the FULL flavor's merged manifest
+    // (src/full/AndroidManifest.xml) via tools:node="remove". The fdroid flavor
+    // never gets those permissions because it has no ML Kit at all.
+    "fullImplementation"(libs.mlkit.text.recognition)
 
     // Argon2id - Kotlin-native JNI wrapper, ships prebuilt .so for all Android ABIs.
     implementation(libs.argon2kt)

@@ -5,7 +5,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -46,10 +45,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
-import com.google.mlkit.vision.common.InputImage
+import com.roufsyed.onekey.core.scan.ZxingQrAnalyzer
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
 import com.roufsyed.onekey.core.domain.model.CredentialType
@@ -1391,7 +1387,6 @@ private fun CredentialEditContent(
     }
 }
 
-@androidx.annotation.OptIn(ExperimentalGetImage::class)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TotpQrScannerSheet(
@@ -1473,7 +1468,6 @@ private fun TotpQrScannerSheet(
     }
 }
 
-@ExperimentalGetImage
 @Composable
 private fun TotpCameraPreview(
     modifier: Modifier = Modifier,
@@ -1496,17 +1490,33 @@ private fun TotpCameraPreview(
     }
 
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
-    val barcodeScanner = remember {
-        BarcodeScanning.getClient(
-            BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
-                .build()
-        )
+    // ZXing (pure-Java, FOSS) replaces ML Kit BarcodeScanning. It decodes QR on
+    // the analysis executor and delivers the raw payload on the main thread,
+    // where the same parse-and-throttle logic (previously in ML Kit's success
+    // listener) now runs.
+    val analyzer = remember {
+        ZxingQrAnalyzer(onQrDecoded = onQrDecoded@{ raw ->
+            if (detected.get()) return@onQrDecoded
+            val parsed = OtpAuthUriParser.parse(raw)
+            if (parsed == null) {
+                val now = android.os.SystemClock.elapsedRealtime()
+                if (now - lastInvalidAtMs >= 2_500L) {
+                    lastInvalidAtMs = now
+                    onInvalidQrDetected.value()
+                }
+            } else if (detected.compareAndSet(false, true)) {
+                // The in-editor scanner only carries the secret string back to
+                // the form field - algorithm/digits/period/counter come through
+                // the dedicated 2FA manual-entry sheet or a fresh QrScannerScreen
+                // scan, both of which preserve full params end-to-end.
+                onDetectedState.value(parsed.params.secret)
+            }
+        })
     }
 
     DisposableEffect(Unit) {
         onDispose {
-            barcodeScanner.close()
+            analyzer.cancel()
             analysisExecutor.shutdown()
         }
     }
@@ -1522,42 +1532,7 @@ private fun TotpCameraPreview(
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { analysis ->
-                        analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                            val mediaImage = imageProxy.image
-                            if (mediaImage != null && !detected.get()) {
-                                val input = InputImage.fromMediaImage(
-                                    mediaImage,
-                                    imageProxy.imageInfo.rotationDegrees,
-                                )
-                                barcodeScanner.process(input)
-                                    .addOnSuccessListener { barcodes ->
-                                        val raw = barcodes.firstOrNull()?.rawValue
-                                            ?: return@addOnSuccessListener
-                                        val parsed = OtpAuthUriParser.parse(raw)
-                                        if (parsed == null) {
-                                            val now = android.os.SystemClock.elapsedRealtime()
-                                            if (now - lastInvalidAtMs >= 2_500L) {
-                                                lastInvalidAtMs = now
-                                                onInvalidQrDetected.value()
-                                            }
-                                            return@addOnSuccessListener
-                                        }
-                                        if (detected.compareAndSet(false, true)) {
-                                            // The in-editor scanner only carries the secret string back
-                                            // to the form field - algorithm/digits/period/counter come
-                                            // through the dedicated 2FA list manual-entry sheet (C7) or
-                                            // a fresh credential created via QrScannerScreen, both of
-                                            // which preserve full params end-to-end.
-                                            onDetectedState.value(parsed.params.secret)
-                                        }
-                                    }
-                                    .addOnCompleteListener { imageProxy.close() }
-                            } else {
-                                imageProxy.close()
-                            }
-                        }
-                    }
+                    .also { it.setAnalyzer(analysisExecutor, analyzer) }
 
                 val preview = Preview.Builder().build()
                     .also { it.setSurfaceProvider(previewView.surfaceProvider) }

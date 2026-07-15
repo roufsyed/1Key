@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.settings.presentation.screen
 
+import com.roufsyed.onekey.BuildConfig
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -62,7 +63,11 @@ fun SettingsPrivacyPolicyScreen(
 
             PolicySection("Permissions we use") {
                 PrivacyLine("Biometric - to verify your fingerprint or face for app unlock. The biometric data itself never reaches the app; we only receive a yes/no result from Android.")
-                PrivacyLine("Camera - for QR-code scanning when you add a new 2FA secret, and OCR credential capture. No photos are taken or stored; frames are processed on-device and discarded.")
+                PrivacyLine(
+                    "Camera - for QR-code scanning when you add a new 2FA secret" +
+                        (if (BuildConfig.HAS_OCR) ", and OCR credential capture." else ".") +
+                        " No photos are taken or stored; frames are processed on-device and discarded.",
+                )
                 PrivacyLine("Storage - used only on Android 12 and below for reading and writing backup files. Modern Android uses the system file picker, which doesn't require this permission.")
             }
 
