@@ -594,6 +594,8 @@ class TaggedCredentialListViewModelTest {
         override fun getLockReasonContext(): Flow<String?> = error("unused")
         override suspend fun getLockReasonContextDirect(): String? = error("unused")
         override suspend fun setLockReasonContext(context: String?) = error("unused")
+        override fun getAcknowledgedAttestationReason(): Flow<String?> = error("unused")
+        override suspend fun setAcknowledgedAttestationReason(reason: String) = error("unused")
         override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> = error("unused")
         override fun isSyncEnabled(): Flow<Boolean> = flowOf(false)
         override suspend fun setSyncEnabled(enabled: Boolean) = Unit

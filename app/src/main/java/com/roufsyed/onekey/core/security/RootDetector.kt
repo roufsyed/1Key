@@ -17,8 +17,6 @@ class RootDetector @Inject constructor(private val context: Context) {
         if (hasSuBinary()) reasons += "su binary detected"
         if (hasKnownRootApps()) reasons += "root management app installed"
         if (hasWritableSystemPath()) reasons += "system path is writable"
-        if (hasDangerousProps()) reasons += "dangerous build props found"
-        if (hasTestKeys()) reasons += "device uses test-release keys"
 
         return if (reasons.isEmpty()) {
             RootCheckResult(false, null)
@@ -73,30 +71,5 @@ class RootDetector @Inject constructor(private val context: Context) {
                 false
             }
         }
-    }
-
-    private fun hasDangerousProps(): Boolean {
-        val dangerousProps = mapOf(
-            "ro.debuggable" to "1",
-            "ro.secure" to "0",
-        )
-        return dangerousProps.any { (key, value) ->
-            try {
-                val process = Runtime.getRuntime().exec(arrayOf("getprop", key))
-                try {
-                    process.inputStream.bufferedReader().use { it.readLine()?.trim() == value }
-                } finally {
-                    // Without destroy() each call leaks a subprocess + file descriptor.
-                    process.destroy()
-                }
-            } catch (_: Exception) {
-                false
-            }
-        }
-    }
-
-    private fun hasTestKeys(): Boolean {
-        val tags = android.os.Build.TAGS
-        return tags != null && tags.contains("test-keys")
     }
 }

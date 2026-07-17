@@ -26,6 +26,8 @@ import com.roufsyed.onekey.core.presentation.navigation.Screen
 import com.roufsyed.onekey.core.presentation.theme.OneKeyTheme
 import com.roufsyed.onekey.core.security.AutoLockManager
 import com.roufsyed.onekey.core.security.RootDetector
+import com.roufsyed.onekey.core.security.attestation.AttestationChecker
+import com.roufsyed.onekey.core.security.attestation.AttestationResult
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +43,7 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var authRepository: AuthRepository
     @Inject lateinit var appPrefs: AppPreferencesRepository
     @Inject lateinit var rootDetector: RootDetector
+    @Inject lateinit var attestationChecker: AttestationChecker
     @Inject lateinit var autoLockManager: AutoLockManager
 
     override fun onUserInteraction() {
@@ -128,6 +131,23 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(Unit) {
                 rootCheck = withContext(Dispatchers.IO) { rootDetector.check() }
             }
+
+            // Advisory (Path A) device boot-state attestation. Runs off the main
+            // thread and, unlike the root check above, NEVER blocks the app - it
+            // only raises a one-time, dismissible notice when hardware attestation
+            // reports a weak boot state (unlocked bootloader / broken verified
+            // boot) the user has not already acknowledged. Trusted / Unavailable
+            // stay silent. AttestationChecker.check() is fully self-contained (its
+            // own IO dispatch + total catch-all), so it can never crash cold start.
+            var attestationAdvisory by remember { mutableStateOf<String?>(null) }
+            var attestationAdvisoryDismissed by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                val result = attestationChecker.check()
+                if (result is AttestationResult.Advisory) {
+                    val acknowledged = appPrefs.getAcknowledgedAttestationReason().first()
+                    if (acknowledged != result.reason) attestationAdvisory = result.reason
+                }
+            }
             val themeMode by appPrefs.getThemeMode()
                 .collectAsStateWithLifecycle(initialValue = initialThemeMode)
             // Compose-side resolver recomposes when the OS flips dark/light so
@@ -159,10 +179,26 @@ class MainActivity : FragmentActivity() {
                                 .fillMaxSize()
                                 .background(MaterialTheme.colorScheme.background),
                         )
-                        else -> OneKeyNavGraph(
-                            startDestination = if (initialSetupComplete == true) Screen.Lock.route
-                            else Screen.Onboarding.route,
-                        )
+                        else -> {
+                            OneKeyNavGraph(
+                                startDestination = if (initialSetupComplete == true) Screen.Lock.route
+                                else Screen.Onboarding.route,
+                            )
+                            // Advisory boot-state notice floats over the running
+                            // app (lock / onboarding) and never gates it.
+                            val advisoryReason = attestationAdvisory
+                            if (advisoryReason != null && !attestationAdvisoryDismissed) {
+                                AttestationAdvisoryDialog(
+                                    reason = advisoryReason,
+                                    onDismiss = {
+                                        attestationAdvisoryDismissed = true
+                                        lifecycleScope.launch {
+                                            appPrefs.setAcknowledgedAttestationReason(advisoryReason)
+                                        }
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -182,5 +218,29 @@ private fun RootWarningScreen(reason: String) {
         },
         confirmButton = {},
         dismissButton = {},
+    )
+}
+
+@Composable
+private fun AttestationAdvisoryDialog(reason: String, onDismiss: () -> Unit) {
+    com.roufsyed.onekey.core.presentation.lockaware.LockAwareDialog(
+        onDismissRequest = onDismiss,
+        title = { androidx.compose.material3.Text("Device security notice") },
+        text = {
+            androidx.compose.material3.Text(
+                "1Key detected that $reason.\n\n" +
+                    "Your vault is still protected by your master password and " +
+                    "encryption. But on a device with an unlocked bootloader or " +
+                    "modified boot, other software on the device can gain more " +
+                    "access than usual. If you intentionally unlocked or flashed " +
+                    "this device (for example, a custom ROM you trust), you can " +
+                    "safely continue.\n\nThis is a one-time notice."
+            )
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                androidx.compose.material3.Text("I understand")
+            }
+        },
     )
 }

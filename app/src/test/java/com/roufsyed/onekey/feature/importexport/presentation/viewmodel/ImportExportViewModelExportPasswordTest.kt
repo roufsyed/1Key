@@ -390,6 +390,8 @@ class ImportExportViewModelExportPasswordTest {
         override fun getLockReasonContext(): Flow<String?> = error("unused")
         override suspend fun getLockReasonContextDirect(): String? = error("unused")
         override suspend fun setLockReasonContext(context: String?) = error("unused")
+        override fun getAcknowledgedAttestationReason(): Flow<String?> = error("unused")
+        override suspend fun setAcknowledgedAttestationReason(reason: String) = error("unused")
         override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> = error("unused")
     }
 

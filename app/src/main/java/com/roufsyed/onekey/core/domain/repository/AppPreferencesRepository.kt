@@ -110,6 +110,16 @@ interface AppPreferencesRepository {
      */
     fun getBiometricUnlockGate(): Flow<BiometricUnlockGate>
 
+    /**
+     * The device boot-state attestation advisory the user has already
+     * acknowledged (the Advisory reason string), or `null` if none. The startup
+     * advisory re-shows only when the current reason differs from this - so a
+     * one-time dismissal sticks, yet a changed (e.g. worsened) boot state
+     * surfaces again.
+     */
+    fun getAcknowledgedAttestationReason(): Flow<String?>
+    suspend fun setAcknowledgedAttestationReason(reason: String)
+
     // ── Sync on Master Password Unlock ────────────────────────────────────────
     //
     // Single toggle plus three companion settings. When `syncEnabled` is true AND

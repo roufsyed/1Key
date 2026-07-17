@@ -642,6 +642,8 @@ class SettingsKdfStrengthViewModelTest {
         override fun getLockReasonContext(): Flow<String?> = lockReasonCtx
         override suspend fun getLockReasonContextDirect(): String? = lockReasonCtx.value
         override suspend fun setLockReasonContext(context: String?) { lockReasonCtx.value = context }
+        override fun getAcknowledgedAttestationReason(): Flow<String?> = flowOf(null)
+        override suspend fun setAcknowledgedAttestationReason(reason: String) {}
         override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> =
             flowOf(BiometricUnlockGate(biometricEnabled = false, lockReasonSet = false))
         override fun isSyncEnabled(): Flow<Boolean> = flowOf(false)

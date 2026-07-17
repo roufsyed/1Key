@@ -293,6 +293,15 @@ dependencies {
     // QRCodeWriter + transitive encoder helpers in release builds.
     implementation(libs.zxing.core)
 
+    // BouncyCastle (ASN.1 only) - parses the Key Attestation extension
+    // (OID 1.3.6.1.4.1.11129.2.1.17) for the advisory device boot-state check.
+    // We use ONLY org.bouncycastle.asn1.* directly and never register the JCE
+    // provider, so R8 tree-shakes everything except the ASN.1 subset. Bouncy
+    // Castle License (MIT/X11-style, F-Droid-fine), no transitive deps, pure-JVM
+    // (no native, no reproducibility impact). Chain verification uses the
+    // platform CertPathValidator, so bcpkix is intentionally NOT included.
+    implementation(libs.bouncycastle.bcprov)
+
     // Testing - JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).

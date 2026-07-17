@@ -737,6 +737,8 @@ class AuthViewModelSecretKeyTest {
         override fun getLockReasonContext(): Flow<String?> = flowOf(null)
         override suspend fun getLockReasonContextDirect(): String? = null
         override suspend fun setLockReasonContext(context: String?) {}
+        override fun getAcknowledgedAttestationReason(): Flow<String?> = flowOf(null)
+        override suspend fun setAcknowledgedAttestationReason(reason: String) {}
 
         override fun getThemeMode(): Flow<ThemeMode> = error("unused")
         override suspend fun setThemeMode(mode: ThemeMode) = error("unused")

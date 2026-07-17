@@ -28,6 +28,7 @@ securityCrypto = "1.1.0"
 documentfile = "1.0.1"
 jetbrainsMarkdown = "0.7.3"
 zxingCore = "3.5.3"
+bouncycastle = "1.84"
 # Android instrumented testing - Room MigrationTestHelper + the AndroidX
 # test orchestrator harness. Versions track the Room artifact (room-testing
 # is part of the Room project) and the latest stable AndroidX test runner /
@@ -108,6 +109,12 @@ jetbrains-markdown = { group = "org.jetbrains", name = "markdown", version.ref =
 # dependencies; R8 tree-shakes everything except QRCodeWriter + transitive
 # encoder support classes in release builds.
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
+# BouncyCastle ASN.1 - parses the Key Attestation extension for the advisory
+# boot-state check. We use ONLY org.bouncycastle.asn1.* and never register the
+# JCE provider, so R8 tree-shakes it to the ASN.1 subset. Bouncy Castle License
+# (MIT/X11-style), no transitive deps, pure-JVM. bcpkix intentionally omitted
+# (chain verification uses the platform CertPathValidator).
+bouncycastle-bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 # Room MigrationTestHelper - opens a fixture DB at any prior schema and replays
 # a real migration against it. Required for the v14->v15 instrumented test.
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }

@@ -55,6 +55,7 @@ private val KEY_SYNC_ENABLED = booleanPreferencesKey("sync_enabled")
 private val KEY_SYNC_LOCATION_URI = stringPreferencesKey("sync_location_uri")
 private val KEY_SYNC_COMPLETION_NOTIFICATION_ENABLED = booleanPreferencesKey("sync_completion_notification_enabled")
 private val KEY_SYNC_LAST_SUCCESS_AT = longPreferencesKey("sync_last_success_at")
+private val KEY_ACK_ATTESTATION_REASON = stringPreferencesKey("acknowledged_attestation_reason")
 
 @Singleton
 class AppPreferencesRepositoryImpl @Inject constructor(
@@ -252,6 +253,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
         dataStore.edit { p ->
             if (context == null) p.remove(KEY_LOCK_REASON_CONTEXT) else p[KEY_LOCK_REASON_CONTEXT] = context
         }
+    }
+
+    override fun getAcknowledgedAttestationReason(): Flow<String?> =
+        prefs.map { it[KEY_ACK_ATTESTATION_REASON] }.distinctUntilChanged()
+
+    override suspend fun setAcknowledgedAttestationReason(reason: String) {
+        dataStore.edit { it[KEY_ACK_ATTESTATION_REASON] = reason }
     }
 
     override fun getBiometricUnlockGate(): Flow<BiometricUnlockGate> =
