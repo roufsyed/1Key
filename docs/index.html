@@ -673,7 +673,7 @@
   .tweaks button.active { background: var(--primary); color: var(--on-primary); }
   .tweaks button svg { width: 14px; height: 14px; }
 
-  /* Long unbreakable tokens like the APK filename '1Key_1.1.0_*_release.apk'
+  /* Long unbreakable tokens like the APK filename '1Key_fdroid_1.1.1_*_release.apk'
      must wrap inside the flex .body of an .install-row, else they push
      the row past .get-card and trigger horizontal overflow on phones. */
   .install-row .body { min-width: 0; }
@@ -736,6 +736,75 @@
   /* Fade-in on load */
   @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
   .fade { animation: fadeUp .6s cubic-bezier(.2,.6,.2,1) both; }
+
+  /* ── Install-choice dialog ─────────────────────────────── */
+  .install-modal { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 22px; }
+  .install-modal[hidden] { display: none; }
+  .install-backdrop {
+    position: absolute; inset: 0;
+    background: color-mix(in oklab, #05070d 55%, transparent);
+    backdrop-filter: blur(6px) saturate(140%); -webkit-backdrop-filter: blur(6px) saturate(140%);
+    animation: install-fade .18s ease both;
+  }
+  .install-panel {
+    position: relative; width: 100%; max-width: 440px;
+    background: var(--surface); color: var(--on-surface);
+    border: 1px solid color-mix(in oklab, var(--on-bg) 12%, transparent);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 30px 80px -24px color-mix(in oklab, #05070d 70%, transparent);
+    padding: 28px 26px 20px;
+    animation: install-pop .22s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes install-fade { from { opacity: 0; } }
+  @keyframes install-pop { from { opacity: 0; transform: translateY(12px) scale(.97); } }
+  @media (prefers-reduced-motion: reduce) { .install-backdrop, .install-panel { animation: none; } }
+  .install-close {
+    position: absolute; top: 13px; right: 13px;
+    width: 34px; height: 34px; display: grid; place-items: center;
+    border: 0; border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--muted);
+    transition: background .15s, color .15s;
+  }
+  .install-close:hover { background: var(--surface-variant); color: var(--on-surface); }
+  .install-title { font-family: var(--font-serif); font-size: 30px; line-height: 1.08; margin: 0 4px 6px 0; }
+  .install-sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+  .install-opt {
+    display: flex; align-items: center; gap: 14px;
+    padding: 15px 16px; border-radius: var(--radius);
+    background: var(--surface-variant);
+    border: 1px solid transparent; text-decoration: none; color: inherit;
+    transition: transform .15s, border-color .15s, box-shadow .15s;
+  }
+  .install-opt + .install-opt { margin-top: 12px; }
+  .install-opt:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+    box-shadow: 0 12px 28px -16px color-mix(in oklab, var(--primary) 65%, transparent);
+  }
+  .install-opt:focus-visible {
+    outline: 2px solid var(--primary); outline-offset: 2px;
+    border-color: color-mix(in oklab, var(--primary) 45%, transparent);
+  }
+  .install-opt-ic {
+    width: 44px; height: 44px; flex-shrink: 0; display: grid; place-items: center;
+    border-radius: 12px; background: var(--surface); color: var(--primary);
+    border: 1px solid color-mix(in oklab, var(--on-bg) 8%, transparent);
+  }
+  .install-opt-ic svg { width: 26px; height: 26px; }
+  .install-opt-tx { flex: 1; min-width: 0; }
+  .install-opt-h { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 16px; }
+  .install-pill {
+    font-size: 11px; font-weight: 600; letter-spacing: .01em;
+    padding: 2px 8px; border-radius: 999px;
+    background: color-mix(in oklab, var(--primary) 16%, transparent); color: var(--primary);
+  }
+  /* .install-row span { display:block } would stretch the pill full-width; keep it hugging its text. */
+  .install-row .install-pill { display: inline-block; vertical-align: middle; }
+  .install-opt-d { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.4; margin-top: 3px; }
+  .install-opt-ar { color: var(--muted); flex-shrink: 0; transition: transform .15s, color .15s; }
+  .install-opt:hover .install-opt-ar { color: var(--primary); transform: translateX(2px); }
+  .install-foot { margin: 16px 2px 0; font-size: 12px; color: var(--muted); text-align: center; }
+  body.modal-open { overflow: hidden; }
 </style>
 </head>
 <body>
@@ -768,8 +837,8 @@
           <circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
         </svg>
       </button>
-      <a class="nav-cta" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">
-        Download APK
+      <a class="nav-cta" href="#get" data-install-open>
+        Get 1Key
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
       </a>
     </div>
@@ -780,14 +849,14 @@
 <header class="hero">
   <div class="wrap hero-grid">
     <div class="fade">
-      <span class="badge"><span class="badge-dot"></span> Local-first · GPL-3.0 · v1.1.0</span>
+      <span class="badge"><span class="badge-dot"></span> GPL-3.0 </span>
       <h1 class="h1">The password manager that <em>doesn't have a server</em> to breach.</h1>
       <p class="lede">1Key lives only on your phone. <b>No cloud. No account. No telemetry. No <code style="font-family:var(--font-mono);font-size:.85em;background:var(--surface-variant);padding:1px 6px;border-radius:5px">INTERNET</code> permission</b> in the manifest. Free, forever.</p>
 
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">
+        <a class="btn btn-primary" href="#get" data-install-open>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
-          <span>Download APK<span class="btn-meta">~16-22 MB per-ABI · Android 8+</span></span>
+          <span>Get 1Key<span class="btn-meta">F-Droid or direct APK · Android 8+</span></span>
         </a>
         <a class="btn btn-ghost" href="whitepaper.html" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
@@ -1081,29 +1150,29 @@
   <div class="wrap">
     <span class="eyebrow">Get it</span>
     <h2 class="h2">Two ways in. <em>Both</em> reproducible.</h2>
-    <p class="section-lede">Sideload the signed APK from GitHub Releases, or build from source in three commands. F-Droid distribution is planned.</p>
+    <p class="section-lede">Install from F-Droid (the easy path), sideload the signed APK from GitHub Releases, or build from source in three commands; F-Droid reproduces our build byte-for-byte.</p>
 
     <div class="get-grid">
       <div class="get-card">
-        <span class="step">Option 1 · Fast path</span>
-        <h3>Install the signed APK</h3>
-        <p>Latest release, signed with the developer's key. Verify the SHA-256 against the release notes before sideloading.</p>
+        <span class="step">Option 1 · Install</span>
+        <h3>F-Droid, or a signed APK</h3>
+        <p>F-Droid is the easy path - one tap, automatic updates, and it reproduces our build byte-for-byte. Prefer a direct APK? Grab it from GitHub Releases and verify the SHA-256 against the release notes before sideloading.</p>
 
+        <div class="install-row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 4l1.6 2.4"/><path d="M15.4 4l-1.6 2.4"/><path d="M6 11a6 6 0 0 1 12 0v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 17z"/></svg>
+          <div class="body">
+            <b>F-Droid <span class="install-pill">Recommended</span></b>
+            <span>One tap · auto-updates · reproducible FOSS build · picks your ABI automatically</span>
+          </div>
+          <a href="https://f-droid.org/en/packages/com.roufsyed.onekey/" target="_blank" rel="noopener">Open F-Droid →</a>
+        </div>
         <div class="install-row">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v14m0 0l-5-5m5 5l5-5M5 21h14"/></svg>
           <div class="body">
-            <b>1Key_1.1.0_*_release.apk</b>
-            <span>~16 MB (armeabi-v7a) to ~22 MB (arm64-v8a / x86_64) · Android 8.0+ · arm64-v8a, armeabi-v7a, x86_64 (universal also available)</span>
+            <b>1Key_fdroid_1.1.1_*.apk &nbsp;·&nbsp; 1Key_full_1.1.1_*.apk</b>
+            <span><b>fdroid</b> - lean, fully FOSS, ~3.5-4.5 MB (identical to the F-Droid build). <b>full</b> - adds ML Kit "scan from photo" OCR, ~12-45 MB. Both Android 8.0+, per-ABI + universal.</span>
           </div>
           <a href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">GitHub Releases →</a>
-        </div>
-        <div class="install-row">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-          <div class="body">
-            <b>F-Droid</b>
-            <span>Reproducible build - distribution planned</span>
-          </div>
-          <a style="color:var(--muted)">Soon</a>
         </div>
       </div>
 
@@ -1195,13 +1264,77 @@
     <div class="footer-bottom">
       <div>© 2026 1Key · Built by one developer, for users who want zero servers in their threat model.</div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span class="pill">v1.1.0</span>
+        <span class="pill">v1.1.1</span>
         <span class="pill">min API 26</span>
         <span class="pill">target API 36</span>
       </div>
     </div>
   </div>
 </footer>
+
+<!-- ── INSTALL DIALOG ─────────────────────────────────── -->
+<div class="install-modal" id="install-modal" hidden>
+  <div class="install-backdrop" data-install-close></div>
+  <div class="install-panel" role="dialog" aria-modal="true" aria-labelledby="install-title">
+    <button class="install-close" type="button" data-install-close aria-label="Close">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <h2 class="install-title" id="install-title">Get 1Key</h2>
+    <p class="install-sub">Pick where to install from - both are the same signed, reproducible build.</p>
+
+    <a class="install-opt" href="https://f-droid.org/en/packages/com.roufsyed.onekey/" target="_blank" rel="noopener">
+      <span class="install-opt-ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.6 4l1.6 2.4"/><path d="M15.4 4l-1.6 2.4"/><path d="M6 11a6 6 0 0 1 12 0v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 17z"/><circle cx="10" cy="12" r=".7" fill="currentColor" stroke="none"/><circle cx="14" cy="12" r=".7" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <span class="install-opt-tx">
+        <span class="install-opt-h">F-Droid <span class="install-pill">Recommended</span></span>
+        <span class="install-opt-d">One tap, auto-updates, reproducible FOSS build. Best for most people.</span>
+      </span>
+      <svg class="install-opt-ar" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </a>
+
+    <a class="install-opt" href="https://github.com/roufsyed/1Key/releases" target="_blank" rel="noopener">
+      <span class="install-opt-ic">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="6" r="2"/><circle cx="6.5" cy="18" r="2"/><circle cx="16.5" cy="8.5" r="2"/><path d="M6.5 8v8"/><path d="M8.4 6.3h4.8a2 2 0 0 1 2 2v.2"/><path d="M16.5 10.5c0 4.3-3.6 4.6-6.2 5.2"/></svg>
+      </span>
+      <span class="install-opt-tx">
+        <span class="install-opt-h">GitHub Releases</span>
+        <span class="install-opt-d">Direct APK, updated first. The only place for the <b>full</b> build (adds photo-scan OCR).</span>
+      </span>
+      <svg class="install-opt-ar" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </a>
+
+    <p class="install-foot">Android 8.0+ &middot; verify the SHA-256 in the release notes before sideloading</p>
+  </div>
+</div>
+<script>
+  (function () {
+    var modal = document.getElementById('install-modal');
+    if (!modal) return;
+    var lastFocus = null;
+    function openModal() {
+      lastFocus = document.activeElement;
+      modal.hidden = false;
+      document.body.classList.add('modal-open');
+      var first = modal.querySelector('.install-opt');
+      if (first) first.focus();
+    }
+    function closeModal() {
+      modal.hidden = true;
+      document.body.classList.remove('modal-open');
+      if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    document.querySelectorAll('[data-install-open]').forEach(function (el) {
+      el.addEventListener('click', function (e) { e.preventDefault(); openModal(); });
+    });
+    modal.querySelectorAll('[data-install-close]').forEach(function (el) {
+      el.addEventListener('click', closeModal);
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !modal.hidden) closeModal();
+    });
+  })();
+</script>
 
 <!-- ── TWEAKS ─────────────────────────────────────────── -->
 <div class="tweaks" id="tweaks" style="display:none">
