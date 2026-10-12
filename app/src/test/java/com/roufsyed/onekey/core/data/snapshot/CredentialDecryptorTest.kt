@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.core.data.snapshot
 
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
+import com.roufsyed.onekey.core.data.local.entity.NotesRow
 import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.core.security.HKDF_FIELD_KEY_INFO
@@ -157,6 +158,26 @@ class CredentialDecryptorTest {
         assertThrows(VaultLockedException::class.java) {
             decryptor.decrypt(simpleEntity())
         }
+    }
+
+    @Test fun decryptNotesOrNull_returns_the_notes_of_a_v2_row() {
+        val entity = buildV2Entity(id = "x", title = "T", notes = "recovery codes: 1234")
+        val row = NotesRow(entity.id, entity.notesEncrypted, entity.ivNotes, entity.cipherVersion)
+        assertEquals("recovery codes: 1234", decryptor.decryptNotesOrNull(row))
+    }
+
+    @Test fun decryptNotesOrNull_returns_null_for_a_corrupt_row() {
+        val entity = buildV2Entity(id = "x", title = "T", notes = "n")
+        val tampered = entity.notesEncrypted.copyOf().also { it[0] = (it[0].toInt() xor 0x55).toByte() }
+        val row = NotesRow(entity.id, tampered, entity.ivNotes, entity.cipherVersion)
+        assertNull(decryptor.decryptNotesOrNull(row))
+    }
+
+    @Test fun decryptNotesOrNull_throws_VaultLockedException_when_locked() {
+        val entity = buildV2Entity(id = "x", title = "T", notes = "n")
+        val row = NotesRow(entity.id, entity.notesEncrypted, entity.ivNotes, entity.cipherVersion)
+        keyHolder.lock()
+        assertThrows(VaultLockedException::class.java) { decryptor.decryptNotesOrNull(row) }
     }
 
     @Test fun decryptOrNull_returns_null_when_locked() {

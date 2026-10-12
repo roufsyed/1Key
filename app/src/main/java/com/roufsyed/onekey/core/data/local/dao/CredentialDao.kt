@@ -3,6 +3,7 @@ package com.roufsyed.onekey.core.data.local.dao
 import androidx.room.*
 import androidx.sqlite.db.SupportSQLiteQuery
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
+import com.roufsyed.onekey.core.data.local.entity.NotesRow
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -169,4 +170,12 @@ interface CredentialDao {
 
     @RawQuery(observedEntities = [CredentialEntity::class])
     fun observeListRaw(query: SupportSQLiteQuery): Flow<List<CredentialEntity>>
+
+    /**
+     * Ciphertext-only rows for the on-demand notes search
+     * ([com.roufsyed.onekey.core.data.snapshot.NotesSearch]). Deliberately a
+     * one-shot read, not a Flow: the scan runs once per query and keeps nothing.
+     */
+    @Query("SELECT id, notes_encrypted, iv_notes, cipher_version FROM credentials WHERE deleted_at IS NULL")
+    suspend fun getActiveNotesRows(): List<NotesRow>
 }

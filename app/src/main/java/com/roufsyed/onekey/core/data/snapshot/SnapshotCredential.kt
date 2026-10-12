@@ -17,7 +17,7 @@ import com.roufsyed.onekey.core.domain.model.CredentialType
  * detail screen) needs them:**
  *
  *  - `password` - never enters snapshot memory
- *  - `notes` - never enters snapshot memory
+ *  - `notes` - never enters snapshot memory; searched on demand by [NotesSearch]
  *  - `otpParams.secret` - never enters snapshot memory; [hasOtp] is a boolean
  *  - `customFields` - values + keys are encrypted at rest; not surfaced here
  *
@@ -45,3 +45,18 @@ data class SnapshotCredential(
     /** True iff the credential has a stored TOTP/HOTP secret. The secret itself is NOT in the snapshot. */
     val hasOtp: Boolean,
 )
+
+/**
+ * The vault search predicate shared by the home search and the list screens:
+ * a case-insensitive substring match on title, username or URL, the three text
+ * fields the lean snapshot carries. Passwords, TOTP secrets and custom fields
+ * never enter the snapshot and are never searched; notes are searched
+ * separately, on demand, by [NotesSearch]. A blank query matches nothing;
+ * callers treat blank as "no search" before reaching here.
+ */
+fun SnapshotCredential.matchesSearch(query: String): Boolean {
+    if (query.isBlank()) return false
+    return title.contains(query, ignoreCase = true) ||
+        username.contains(query, ignoreCase = true) ||
+        url.contains(query, ignoreCase = true)
+}

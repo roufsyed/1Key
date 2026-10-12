@@ -1,5 +1,7 @@
 package com.roufsyed.onekey.core.di
 
+import com.roufsyed.onekey.core.data.snapshot.NotesSearch
+import com.roufsyed.onekey.core.data.snapshot.NotesSearchImpl
 import com.roufsyed.onekey.core.data.snapshot.SnapshotState
 import com.roufsyed.onekey.core.data.snapshot.VaultSnapshotStore
 import com.roufsyed.onekey.core.security.CredentialCipherMigrator
@@ -76,6 +78,11 @@ object SnapshotModule {
      * URI parsing). Routed through Hilt so tests can substitute a test
      * dispatcher and have virtual time propagate across the boundary.
      */
+    /** Notes are searched on demand and never cached; see [NotesSearch]. */
+    @Provides
+    @Singleton
+    fun provideNotesSearch(impl: NotesSearchImpl): NotesSearch = impl
+
     @Provides
     @DefaultDispatcher
     fun provideDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default

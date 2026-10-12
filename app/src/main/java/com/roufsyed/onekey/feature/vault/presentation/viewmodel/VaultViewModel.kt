@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
 import com.roufsyed.onekey.core.data.snapshot.SnapshotState
+import com.roufsyed.onekey.core.data.snapshot.NotesSearch
+import com.roufsyed.onekey.core.data.snapshot.matchesSearch
 import com.roufsyed.onekey.core.di.SnapshotStateFlow
 import com.roufsyed.onekey.core.domain.model.TagWithCount
 import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
 import com.roufsyed.onekey.core.domain.repository.TagRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -18,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
@@ -32,7 +36,8 @@ import javax.inject.Inject
  * decrypt pass (which produced the user-visible "search returns empty until
  * All Items is visited once" symptom).
  *
- * Filtering is a case-insensitive `title.contains` match sorted newest-first
+ * Filtering is the shared [matchesSearch] predicate (title, username or URL,
+ * case-insensitive) plus an on-demand notes scan ([NotesSearch]), sorted newest-first
  * by `createdAt`. Tag filtering and alternate sort orders are out of scope for
  * the top-bar search; the tag-specific surface lives in
  * `TaggedCredentialListViewModel`.
@@ -40,13 +45,14 @@ import javax.inject.Inject
  * The 150 ms debounce matches `AutofillUnlockViewModel.SEARCH_DEBOUNCE_MS` so the
  * two search surfaces feel identical on rapid typing.
  */
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class VaultViewModel @Inject constructor(
     tagRepository: TagRepository,
     credentialRepository: CredentialRepository,
     @SnapshotStateFlow snapshotState: StateFlow<@JvmSuppressWildcards SnapshotState>,
     appPrefs: AppPreferencesRepository,
+    private val notesSearch: NotesSearch,
 ) : ViewModel() {
 
     /**
@@ -99,21 +105,29 @@ class VaultViewModel @Inject constructor(
     val searchResults: StateFlow<SearchState> = combine(
         snapshotState,
         _searchQuery.debounce(SEARCH_DEBOUNCE_MS).distinctUntilChanged(),
-    ) { snapshot, q ->
-        if (q.isBlank()) {
-            SearchState.Idle
-        } else when (snapshot) {
-            is SnapshotState.Locked -> SearchState.Idle
-            is SnapshotState.Loading -> SearchState.Loading
-            is SnapshotState.Bypassed -> SearchState.Bypassed
-            is SnapshotState.Loaded -> SearchState.Loaded(
-                snapshot.credentials.asSequence()
-                    .filter { it.title.contains(q, ignoreCase = true) }
-                    .sortedByDescending { it.createdAt }
-                    .toList()
-            )
+    ) { snapshot, q -> snapshot to q }
+        // mapLatest: a newer keystroke, or a snapshot re-emit, cancels an
+        // in-flight notes scan instead of queueing stale answers.
+        .mapLatest { (snapshot, q) ->
+            if (q.isBlank()) {
+                SearchState.Idle
+            } else when (snapshot) {
+                is SnapshotState.Locked -> SearchState.Idle
+                is SnapshotState.Loading -> SearchState.Loading
+                is SnapshotState.Bypassed -> SearchState.Bypassed
+                is SnapshotState.Loaded -> {
+                    // Notes never enter the snapshot; they are scanned on demand
+                    // and only the matching ids come back.
+                    val notesHits = notesSearch.matchingIds(q)
+                    SearchState.Loaded(
+                        snapshot.credentials.asSequence()
+                            .filter { it.matchesSearch(q) || it.id in notesHits }
+                            .sortedByDescending { it.createdAt }
+                            .toList()
+                    )
+                }
+            }
         }
-    }
         // Coalesce unrelated upstream re-fires: a save/toggle on a row that
         // doesn't match the active query produces a fresh `Loaded(snapshot...)`
         // upstream, but the filter output is structurally equal to the

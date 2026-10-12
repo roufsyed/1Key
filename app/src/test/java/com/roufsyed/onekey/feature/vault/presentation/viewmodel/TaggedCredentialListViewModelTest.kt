@@ -3,6 +3,7 @@ package com.roufsyed.onekey.feature.vault.presentation.viewmodel
 import android.app.Application
 import androidx.lifecycle.SavedStateHandle
 import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
+import com.roufsyed.onekey.core.data.snapshot.FakeNotesSearch
 import com.roufsyed.onekey.core.data.snapshot.SnapshotState
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.BackgroundLockTimeout
@@ -63,6 +64,7 @@ class TaggedCredentialListViewModelTest {
     private lateinit var snapshot: MutableStateFlow<SnapshotState>
     private lateinit var deleteUseCase: DeleteCredentialUseCase
     private lateinit var hardDeleteUseCase: HardDeleteCredentialUseCase
+    private val notesSearch = FakeNotesSearch()
 
     @Before fun setup() {
         Dispatchers.setMain(testDispatcher)
@@ -187,18 +189,40 @@ class TaggedCredentialListViewModelTest {
         assertEquals(setOf("1", "2"), ids)
     }
 
-    @Test fun search_does_not_match_username_only_title() = runTest(testDispatcher) {
-        // Matches VaultViewModel's title-only semantic; autofill's broader
-        // title+username path lives in AutofillUnlockViewModel.
+    @Test fun search_includes_notes_matches_but_still_within_the_tag() = runTest(testDispatcher) {
         snapshot.value = SnapshotState.Loaded(
-            listOf(snap("1", "Twitter", username = "alice@example.com")),
+            listOf(
+                snap("1", "Twitter", tags = listOf("Social")),
+                snap("2", "Bank", tags = listOf("Finance")),
+            ),
+        )
+        notesSearch.hits["recovery"] = setOf("1", "2")
+        val vm = buildVm(tag = "Finance")
+        keepAlive(vm)
+        vm.setSearchQuery("recovery")
+        advanceUntilIdle()
+        assertEquals(listOf("2"), (vm.listState.value as CredentialListState.Loaded).credentials.map { it.id })
+    }
+
+    @Test fun search_matches_username_and_url_as_well_as_title() = runTest(testDispatcher) {
+        // Same predicate as VaultViewModel: title, username or URL.
+        snapshot.value = SnapshotState.Loaded(
+            listOf(
+                snap("1", "Twitter", username = "alice@example.com"),
+                snap("2", "Bank", url = "https://www.chase.com/login"),
+                snap("3", "Other"),
+            ),
         )
         val vm = buildVm(tag = TAG_ALL)
         keepAlive(vm)
+
         vm.setSearchQuery("alice")
         advanceUntilIdle()
-        val state = vm.listState.value as CredentialListState.Loaded
-        assertTrue("username must not match", state.credentials.isEmpty())
+        assertEquals(setOf("1"), (vm.listState.value as CredentialListState.Loaded).credentials.map { it.id }.toSet())
+
+        vm.setSearchQuery("chase")
+        advanceUntilIdle()
+        assertEquals(setOf("2"), (vm.listState.value as CredentialListState.Loaded).credentials.map { it.id }.toSet())
     }
 
     @Test fun search_debounce_collapses_rapid_typing_into_one_emission() = runTest(testDispatcher) {
@@ -229,7 +253,7 @@ class TaggedCredentialListViewModelTest {
         val vmWork = TaggedCredentialListViewModel(
             saved, repo, deleteUseCase, hardDeleteUseCase,
             com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
-            prefs, snapshot, testDispatcher,
+            prefs, snapshot, testDispatcher, notesSearch,
         )
         vmWork.setSearchQuery("github")
         advanceUntilIdle()
@@ -239,7 +263,7 @@ class TaggedCredentialListViewModelTest {
         val vmBank = TaggedCredentialListViewModel(
             savedBanking, repo, deleteUseCase, hardDeleteUseCase,
             com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
-            prefs, snapshot, testDispatcher,
+            prefs, snapshot, testDispatcher, notesSearch,
         )
         assertEquals("", vmBank.searchQuery.value)
     }
@@ -472,7 +496,7 @@ class TaggedCredentialListViewModelTest {
         return TaggedCredentialListViewModel(
             saved, repo, deleteUseCase, hardDeleteUseCase,
             com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
-            prefs, snapshot, testDispatcher,
+            prefs, snapshot, testDispatcher, notesSearch,
         )
     }
 
@@ -489,8 +513,9 @@ class TaggedCredentialListViewModelTest {
         updatedAt: Long = 0L,
         accessedAt: Long? = null,
         isFavorite: Boolean = false,
+        url: String = "",
     ) = SnapshotCredential(
-        id = id, title = title, username = username, url = "", tags = tags,
+        id = id, title = title, username = username, url = url, tags = tags,
         isFavorite = isFavorite, type = CredentialType.LOGIN,
         createdAt = createdAt, updatedAt = updatedAt, accessedAt = accessedAt, hasOtp = false,
     )

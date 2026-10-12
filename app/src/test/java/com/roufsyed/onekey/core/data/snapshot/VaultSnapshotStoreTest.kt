@@ -3,6 +3,7 @@ package com.roufsyed.onekey.core.data.snapshot
 import androidx.sqlite.db.SupportSQLiteQuery
 import com.roufsyed.onekey.core.data.local.dao.CredentialDao
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
+import com.roufsyed.onekey.core.data.local.entity.NotesRow
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.core.security.HKDF_FIELD_KEY_INFO
 import com.roufsyed.onekey.core.security.HKDF_TITLE_KEY_INFO
@@ -328,6 +329,7 @@ class VaultSnapshotStoreTest {
      * method is loud.
      */
     private class FakeCredentialDao : CredentialDao {
+        override suspend fun getActiveNotesRows(): List<NotesRow> = error("unused")
         val rows = MutableStateFlow<List<CredentialEntity>>(emptyList())
         val count = MutableStateFlow(0)
 

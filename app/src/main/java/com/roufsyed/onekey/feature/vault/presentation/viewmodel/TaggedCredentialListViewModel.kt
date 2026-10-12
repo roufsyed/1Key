@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
 import com.roufsyed.onekey.core.data.snapshot.SnapshotState
+import com.roufsyed.onekey.core.data.snapshot.NotesSearch
+import com.roufsyed.onekey.core.data.snapshot.matchesSearch
 import com.roufsyed.onekey.core.di.DefaultDispatcher
 import com.roufsyed.onekey.core.di.SnapshotStateFlow
 import com.roufsyed.onekey.core.domain.model.AppResult
@@ -18,6 +20,7 @@ import com.roufsyed.onekey.feature.vault.presentation.screen.TAG_ALL
 import com.roufsyed.onekey.feature.vault.presentation.screen.TAG_FAVORITES
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -31,6 +34,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -68,18 +72,17 @@ sealed class CredentialListEvent {
  *    via [List.contains] is strictly safer than the legacy SQL JSON-LIKE
  *    pattern (no chance a tag "Bank" picks up a credential tagged "Banking").
  *
- * Search uses `title.contains(q, ignoreCase = true)` with a 150 ms debounce.
- * Username matching is intentionally NOT included to match
- * `VaultViewModel.searchResults` (the main-vault search). The autofill VM's
- * broader title+username + host match lives there because its UX problem is
- * different.
+ * Search uses [matchesSearch] (title, username or URL, case-insensitive) plus
+ * an on-demand notes scan ([NotesSearch]) with a 150 ms debounce: the same
+ * rule as `VaultViewModel.searchResults`, so the two vault surfaces never drift. The autofill VM keeps its own host-aware
+ * match because its UX problem is different.
  *
  * The `searchQuery` is persisted in [SavedStateHandle] under a `rawTag`-scoped
  * key so per-tag queries survive process death without cross-tag leakage.
  * Same on-disk PII trade-off as `AutofillUnlockViewModel`'s `KEY_SEARCH_QUERY`
  * persistence; documented here for parity.
  */
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TaggedCredentialListViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle,
@@ -90,6 +93,7 @@ class TaggedCredentialListViewModel @Inject constructor(
     private val appPrefs: AppPreferencesRepository,
     @SnapshotStateFlow private val snapshotState: StateFlow<@JvmSuppressWildcards SnapshotState>,
     @DefaultDispatcher private val filterDispatcher: CoroutineDispatcher,
+    private val notesSearch: NotesSearch,
 ) : ViewModel() {
 
     val rawTag: String = savedStateHandle.get<String>("tagName") ?: ""
@@ -132,19 +136,27 @@ class TaggedCredentialListViewModel @Inject constructor(
         snapshotState,
         sortOrder,
         searchQuery.debounce(SEARCH_DEBOUNCE_MS).distinctUntilChanged(),
-    ) { snapshot, order, q ->
-        when (snapshot) {
-            is SnapshotState.Locked -> CredentialListState.Locked
-            is SnapshotState.Loading -> CredentialListState.Loading
-            is SnapshotState.Bypassed -> CredentialListState.Bypassed
-            is SnapshotState.Loaded -> {
-                val tagFiltered = snapshot.credentials.filter(tagPredicate)
-                val queryFiltered = if (q.isBlank()) tagFiltered
-                    else tagFiltered.filter { it.title.contains(q, ignoreCase = true) }
-                CredentialListState.Loaded(queryFiltered.sortedFor(order))
+    ) { snapshot, order, q -> Triple(snapshot, order, q) }
+        // mapLatest: a newer keystroke, sort change or snapshot re-emit cancels
+        // an in-flight notes scan instead of queueing stale answers.
+        .mapLatest { (snapshot, order, q) ->
+            when (snapshot) {
+                is SnapshotState.Locked -> CredentialListState.Locked
+                is SnapshotState.Loading -> CredentialListState.Loading
+                is SnapshotState.Bypassed -> CredentialListState.Bypassed
+                is SnapshotState.Loaded -> {
+                    val tagFiltered = snapshot.credentials.filter(tagPredicate)
+                    val queryFiltered = if (q.isBlank()) {
+                        tagFiltered
+                    } else {
+                        // Notes never enter the snapshot; they are scanned on demand.
+                        val notesHits = notesSearch.matchingIds(q)
+                        tagFiltered.filter { it.matchesSearch(q) || it.id in notesHits }
+                    }
+                    CredentialListState.Loaded(queryFiltered.sortedFor(order))
+                }
             }
         }
-    }
         .flowOn(filterDispatcher)
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000L), CredentialListState.Locked)

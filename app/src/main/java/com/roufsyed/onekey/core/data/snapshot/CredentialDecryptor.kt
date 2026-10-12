@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.core.data.snapshot
 
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
+import com.roufsyed.onekey.core.data.local.entity.NotesRow
 import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialType
@@ -125,6 +126,23 @@ class CredentialDecryptor @Inject constructor(
      */
     fun decryptOrNull(entity: CredentialEntity): Credential? =
         runCatching { decrypt(entity) }.getOrNull()
+
+    /**
+     * Decrypts one row's notes for the on-demand notes search ([NotesSearch]).
+     * Same key and AAD rules as [decryptFull] (v0 rows under the raw vault key
+     * without AAD, v1+ under the memoised field subkey with the per-field AAD).
+     * Returns null for a row that fails to decrypt, which the scan drops exactly
+     * as the lean path drops corrupt rows. Throws [VaultLockedException] when
+     * the vault is locked so the whole scan aborts rather than answering partially.
+     */
+    fun decryptNotesOrNull(row: NotesRow): String? {
+        val vaultKey = keyHolder.requireKey()
+        val cipherKey = if (row.cipherVersion >= 1) subkeysFor(vaultKey).first else vaultKey
+        val aad = if (row.cipherVersion >= 1) fieldAad(row.id, "notes") else null
+        return runCatching {
+            crypto.decrypt(EncryptedData(row.notesEncrypted, row.ivNotes), cipherKey, aad).toString(Charsets.UTF_8)
+        }.getOrNull()
+    }
 
     /**
      * Called synchronously from [VaultKeyHolder.lock] via the

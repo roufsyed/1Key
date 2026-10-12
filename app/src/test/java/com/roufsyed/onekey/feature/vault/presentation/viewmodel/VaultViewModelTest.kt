@@ -2,6 +2,7 @@ package com.roufsyed.onekey.feature.vault.presentation.viewmodel
 
 import android.app.Application
 import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
+import com.roufsyed.onekey.core.data.snapshot.FakeNotesSearch
 import com.roufsyed.onekey.core.data.snapshot.SnapshotState
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.BackgroundLockTimeout
@@ -74,6 +75,7 @@ class VaultViewModelTest {
     private lateinit var repo: FakeCredentialRepository
     private lateinit var prefs: FakeAppPreferencesRepository
     private lateinit var snapshot: MutableStateFlow<SnapshotState>
+    private val notesSearch = FakeNotesSearch()
 
     @Before fun setup() {
         Dispatchers.setMain(testDispatcher)
@@ -133,20 +135,46 @@ class VaultViewModelTest {
         assertEquals(setOf("1", "2"), r.credentials.map { it.id }.toSet())
     }
 
-    @Test fun snapshot_Loaded_does_not_filter_by_username_only_title() = runTest(testDispatcher) {
-        // Pre-PR3 vault search filtered on title only (legacy slow-path) -
-        // preserve that semantic. Autofill's broader title+username search
-        // is a deliberately distinct surface.
+    @Test fun snapshot_Loaded_includes_notes_matches_from_the_on_demand_scan() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Loaded(
+            listOf(snap("1", "Twitter", 1_000), snap("2", "Bank", 2_000)),
+        )
+        notesSearch.hits["recovery"] = setOf("2")
+        val vm = buildVm()
+        vm.setSearchQuery("recovery")
+        advanceUntilIdle()
+        val r = vm.searchResults.value as VaultViewModel.SearchState.Loaded
+        assertEquals(listOf("2"), r.credentials.map { it.id })
+        assertEquals(listOf("recovery"), notesSearch.queries)
+    }
+
+    @Test fun blank_query_never_triggers_a_notes_scan() = runTest(testDispatcher) {
+        snapshot.value = SnapshotState.Loaded(listOf(snap("1", "Twitter", 1_000)))
+        val vm = buildVm()
+        vm.setSearchQuery("   ")
+        advanceUntilIdle()
+        assertTrue(notesSearch.queries.isEmpty())
+    }
+
+    @Test fun snapshot_Loaded_matches_username_and_url_as_well_as_title() = runTest(testDispatcher) {
+        // Search covers the three text fields the lean snapshot carries. Notes,
+        // passwords and custom fields are not in the snapshot and are never searched.
         snapshot.value = SnapshotState.Loaded(
             listOf(
                 snap("1", "Twitter", 1_000, username = "alice@example.com"),
+                snap("2", "Bank", 2_000, url = "https://www.chase.com/login"),
+                snap("3", "Other", 3_000),
             ),
         )
         val vm = buildVm()
+
         vm.setSearchQuery("alice")
         advanceUntilIdle()
-        val r = vm.searchResults.value as VaultViewModel.SearchState.Loaded
-        assertTrue("must not match on username", r.credentials.isEmpty())
+        assertEquals(setOf("1"), (vm.searchResults.value as VaultViewModel.SearchState.Loaded).credentials.map { it.id }.toSet())
+
+        vm.setSearchQuery("CHASE")
+        advanceUntilIdle()
+        assertEquals(setOf("2"), (vm.searchResults.value as VaultViewModel.SearchState.Loaded).credentials.map { it.id }.toSet())
     }
 
     @Test fun snapshot_Loaded_sorts_newest_first_by_createdAt() = runTest(testDispatcher) {
@@ -291,7 +319,7 @@ class VaultViewModelTest {
      * via `collectAsStateWithLifecycle` for as long as the screen is visible.
      */
     private fun TestScope.buildVm(): VaultViewModel {
-        val vm = VaultViewModel(tags, repo, snapshot, prefs)
+        val vm = VaultViewModel(tags, repo, snapshot, prefs, notesSearch)
         keepAlive(backgroundScope, vm)
         return vm
     }
@@ -305,8 +333,9 @@ class VaultViewModelTest {
         title: String,
         createdAt: Long = 0L,
         username: String = "u",
+        url: String = "",
     ) = SnapshotCredential(
-        id = id, title = title, username = username, url = "",
+        id = id, title = title, username = username, url = url,
         tags = emptyList(), isFavorite = false, type = CredentialType.LOGIN,
         createdAt = createdAt, updatedAt = createdAt, accessedAt = null, hasOtp = false,
     )
