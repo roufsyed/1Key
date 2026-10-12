@@ -27,6 +27,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.roufsyed.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.LifecycleStartEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,6 +74,7 @@ import com.roufsyed.onekey.core.presentation.util.toFormattedDateTime
 import com.roufsyed.onekey.core.presentation.util.toRelativeTime
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriParser
 import com.roufsyed.onekey.feature.twofa.presentation.screen.TotpWidget
+import com.roufsyed.onekey.feature.vault.presentation.screen.card.CARD_REVEAL_TIMEOUT_MS
 import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardAppearanceSection
 import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardDisplayModel
 import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardEmptyStateRow
@@ -241,6 +244,22 @@ private fun CredentialViewContent(
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var historyExpanded by rememberSaveable { mutableStateOf(false) }
     var overflowMenuExpanded by remember { mutableStateOf(false) }
+
+    // Sensitive custom-field rows (Card Number, CVV, PIN, API Token, ...) reveal one
+    // at a time behind an eye, like the password row. The set of revealed row
+    // indices is plain remember (never saved), is dropped whenever the fields
+    // change, and is re-masked after the card's timeout and whenever the screen
+    // stops, so a row is never a weaker path to a value than the card above it.
+    var revealedFields by remember(credential.customFields) { mutableStateOf(emptySet<Int>()) }
+    LaunchedEffect(revealedFields) {
+        if (revealedFields.isNotEmpty()) {
+            delay(CARD_REVEAL_TIMEOUT_MS)
+            revealedFields = emptySet()
+        }
+    }
+    LifecycleStartEffect(Unit) {
+        onStopOrDispose { revealedFields = emptySet() }
+    }
 
     // Flip card (CREDIT_CARD / BANK_ACCOUNT only). It is an addition to the
     // credential view, not a replacement: every custom field keeps its row below,
@@ -441,10 +460,29 @@ private fun CredentialViewContent(
             }
             // Fields without a value are never saved any more; skip any an earlier
             // save left behind so they do not render as empty rows.
-            CustomField.pruneBlank(credential.customFields).forEach { field ->
+            val visibleFields = remember(credential.customFields) { CustomField.pruneBlank(credential.customFields) }
+            visibleFields.forEachIndexed { index, field ->
+                val revealed = index in revealedFields
                 DetailField(
                     label = field.key,
-                    value = if (field.isSensitive) "••••••••" else field.value,
+                    value = if (field.isSensitive && !revealed) "••••••••" else field.value,
+                    // A revealed sensitive value keeps the password row's protections:
+                    // no selection, hidden from accessibility services.
+                    sensitive = field.isSensitive && revealed,
+                    trailing = if (field.isSensitive) {
+                        {
+                            IconButton(
+                                onClick = {
+                                    revealedFields = if (revealed) revealedFields - index else revealedFields + index
+                                },
+                            ) {
+                                Icon(
+                                    if (revealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (revealed) "Hide ${field.key}" else "Show ${field.key}",
+                                )
+                            }
+                        }
+                    } else null,
                 )
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
