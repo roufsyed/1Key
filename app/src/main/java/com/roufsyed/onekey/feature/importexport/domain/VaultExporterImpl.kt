@@ -3,6 +3,7 @@ package com.roufsyed.onekey.feature.importexport.domain
 import com.google.gson.GsonBuilder
 import com.opencsv.CSVWriter
 import com.roufsyed.onekey.core.domain.model.AppResult
+import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.runCatchingResult
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
@@ -151,6 +152,11 @@ class VaultExporterImpl @Inject constructor(
         // accessed_at don't suddenly start showing one in the export.
         if (deletedAt != null) dto = dto + ("deleted_at" to deletedAt)
         if (accessedAt != null) dto = dto + ("accessed_at" to accessedAt)
+        // card_theme only when the user picked a non-default theme: every existing
+        // backup stays byte-identical, and the blast radius on OLDER app versions
+        // (which turn unknown keys into a visible custom field) is limited to the
+        // cards that were actually decorated. Enum name, like `type`.
+        if (cardTheme != CardTheme.GRAPHITE) dto = dto + ("card_theme" to cardTheme.name)
         return dto
     }
 

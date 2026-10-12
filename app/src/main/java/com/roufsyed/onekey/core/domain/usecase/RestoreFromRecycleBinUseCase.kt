@@ -50,6 +50,9 @@ class RestoreFromRecycleBinUseCase @Inject constructor(
         tags = if (existing.tags.isNotEmpty()) existing.tags else binItem.tags,
         customFields = if (existing.customFields.isNotEmpty()) existing.customFields else binItem.customFields,
         isFavorite = existing.isFavorite || binItem.isFavorite,
+        // cardTheme is deliberately not listed: copy() keeps the existing row's
+        // theme, so existing always wins (like `type`). Treating the default as
+        // "unset" would resurrect a colour the user reverted on purpose.
         deletedAt = null,
     )
 }

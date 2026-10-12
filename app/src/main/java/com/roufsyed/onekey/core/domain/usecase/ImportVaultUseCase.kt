@@ -286,6 +286,9 @@ class ImportVaultUseCase @Inject constructor(
         tags = if (existing.tags.isNotEmpty()) existing.tags else incoming.tags,
         customFields = if (existing.customFields.isNotEmpty()) existing.customFields else incoming.customFields,
         isFavorite = existing.isFavorite || incoming.isFavorite,
+        // cardTheme is deliberately not listed: copy() keeps the existing row's
+        // theme, so existing always wins (like `type`). Treating the default as
+        // "unset" would resurrect a colour the user reverted on purpose.
         deletedAt = null,
     )
 }

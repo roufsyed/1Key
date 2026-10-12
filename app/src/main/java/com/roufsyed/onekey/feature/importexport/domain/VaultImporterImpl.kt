@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.opencsv.CSVReader
 import com.roufsyed.onekey.core.domain.model.AppResult
+import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.CustomField
@@ -174,6 +175,10 @@ class VaultImporterImpl @Inject constructor(
                         // batch at this instant". In-app SaveCredentialUseCase paths
                         // do NOT set this field; they leave it null.
                         importedAt = now,
+                        // Card colour theme (DB v16). A missing key (older backups), a
+                        // name from a newer palette, or garbage all resolve to the
+                        // neutral default - never a per-row failure.
+                        cardTheme = CardTheme.fromNameOrDefault(normalized["card_theme"] as? String),
                     )
                 )
             }.onFailure { e ->
@@ -313,6 +318,9 @@ class VaultImporterImpl @Inject constructor(
             "id", "title", "username", "password", "url", "notes",
             "totp_secret", "tags", "custom_fields", "created_at", "updated_at",
             "is_favorite", "favorite", "type", "deleted_at", "accessed_at",
+            // Card colour theme (DB v16). Listed so the unknown-key fallback below
+            // never demotes it to a visible "Card Theme" custom field.
+            "card_theme",
         )
 
         // Foreign-tool JSON keys we translate into canonical snake_case before
