@@ -4,12 +4,12 @@ import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.CustomField
 
 /**
- * The card fields a NEW card credential starts with, and the matching clean-up at
- * save time. New CREDIT_CARD and BANK_ACCOUNT credentials are pre-filled with empty
- * Bank Name, Name on Card, Card Number, Expiry, CVV and Card Scheme fields so the card can be completed
+ * The card fields a NEW card credential starts with. New CREDIT_CARD and
+ * BANK_ACCOUNT credentials are pre-filled with empty Bank Name, Name on Card,
+ * Card Number, Expiry, CVV and Card Scheme fields so the card can be completed
  * without hunting for suggestion chips; whatever the user leaves blank is dropped
- * on save, because a blank card slot carries no information and would otherwise
- * become an empty row (the chips offer the label again at any time).
+ * on save by [CustomField.pruneBlank], the rule every custom field follows (the
+ * chips offer the label again at any time).
  */
 object CardFields {
 
@@ -29,16 +29,5 @@ object CardFields {
             defaultSlots.map { CustomField(key = it.canonicalLabel, value = "", isSensitive = it.sensitiveByDefault) }
         } else {
             emptyList()
-        }
-
-    /**
-     * Drops card-slot fields (by canonical label or alias) whose value is blank.
-     * Fields that name no slot are never touched, and non-card types pass through.
-     */
-    fun pruneBlank(type: CredentialType, fields: List<CustomField>): List<CustomField> =
-        if (!CardSlot.hasCard(type)) {
-            fields
-        } else {
-            fields.filterNot { it.value.isBlank() && CardFieldBinder.slotFor(type, it.key) != null }
         }
 }

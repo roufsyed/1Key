@@ -9,6 +9,7 @@ import com.roufsyed.onekey.core.domain.card.CardFields
 import com.roufsyed.onekey.core.domain.card.CardSlot
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
+import com.roufsyed.onekey.core.domain.model.CustomField
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
 import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.Tag
@@ -249,9 +250,10 @@ class CredentialDetailViewModel @Inject constructor(
             // surface the generated id back to callers - so we generate here, keep it, and
             // hand the same id to both the repo and the post-save nav callback.
             val wasNew = credential.id.isBlank()
-            // Card slots pre-added for a new card credential but left blank carry no
-            // information; drop them so they do not become empty rows.
-            val pruned = credential.copy(customFields = CardFields.pruneBlank(credential.type, credential.customFields))
+            // A custom field left without a value (including the card slots pre-added
+            // to a new card credential) carries no information; drop it so it never
+            // becomes an empty row.
+            val pruned = credential.copy(customFields = CustomField.pruneBlank(credential.customFields))
             val toSave = if (wasNew) pruned.copy(id = UUID.randomUUID().toString()) else pruned
             when (val result = saveCredential(toSave)) {
                 is AppResult.Success -> {

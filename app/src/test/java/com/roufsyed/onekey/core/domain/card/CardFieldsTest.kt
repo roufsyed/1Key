@@ -33,30 +33,7 @@ class CardFieldsTest {
         assertEquals(CardFields.defaultSlots.toSet(), bound.keys)
     }
 
-    @Test fun pruneBlank_drops_only_blank_card_slot_fields() {
-        val fields = listOf(
-            CustomField("Name on Card", "Alice", false),
-            CustomField("Card Number", "   ", true),
-            CustomField("Expiry", "", false),
-            CustomField("Security Code", "", true),
-            CustomField("PIN", "", true),
-            CustomField("", "", false),
-            CustomField("CVV", "123", true),
-        )
-        assertEquals(
-            listOf(
-                CustomField("Name on Card", "Alice", false),
-                CustomField("PIN", "", true),
-                CustomField("", "", false),
-                CustomField("CVV", "123", true),
-            ),
-            CardFields.pruneBlank(CredentialType.CREDIT_CARD, fields),
-        )
-    }
-
-    @Test fun pruneBlank_leaves_non_card_types_untouched() {
-        val fields = listOf(CustomField("Card Number", "", true), CustomField("Host", "", false))
-        assertEquals(fields, CardFields.pruneBlank(CredentialType.LOGIN, fields))
-        assertEquals(fields, CardFields.pruneBlank(CredentialType.SERVER, fields))
+    @Test fun untouched_defaults_are_all_pruned_on_save() {
+        assertTrue(CustomField.pruneBlank(CardFields.defaultsFor(CredentialType.CREDIT_CARD)).isEmpty())
     }
 }

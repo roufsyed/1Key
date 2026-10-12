@@ -64,6 +64,16 @@ data class CustomField(
 ) {
     companion object {
         const val MAX_FIELDS = 20
+
+        /**
+         * Drops fields whose value is blank. A field without a value carries no
+         * information and would only render as an empty row, so the editor prunes
+         * these on save (including the card fields pre-added to new card
+         * credentials) and view mode skips any that earlier saves left behind.
+         * A field with a value but no label is kept: it still holds data.
+         */
+        fun pruneBlank(fields: List<CustomField>): List<CustomField> =
+            fields.filterNot { it.value.isBlank() }
     }
 }
 

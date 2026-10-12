@@ -440,7 +440,9 @@ private fun CredentialViewContent(
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }
             }
-            credential.customFields.forEach { field ->
+            // Fields without a value are never saved any more; skip any an earlier
+            // save left behind so they do not render as empty rows.
+            CustomField.pruneBlank(credential.customFields).forEach { field ->
                 DetailField(
                     label = field.key,
                     value = if (field.isSensitive) "••••••••" else field.value,
@@ -983,7 +985,10 @@ private fun CredentialEditContent(
             notesField.text.trim() != credential.notes ||
             totpSecret.trim() != (credential.otpParams?.secret ?: "") ||
             selectedTags != credential.tags ||
-            customFields != credential.customFields ||
+            // Compare what a save would actually store: an added-but-empty field is
+            // pruned on save, so on its own it is not a change worth a Room write
+            // and a history snapshot.
+            CustomField.pruneBlank(customFields) != CustomField.pruneBlank(credential.customFields) ||
             cardTheme != credential.cardTheme
         }
     }
