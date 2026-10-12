@@ -3,6 +3,7 @@ package com.roufsyed.onekey.feature.importexport.domain
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.opencsv.CSVReader
+import com.roufsyed.onekey.core.domain.card.FieldLabelCatalog
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
@@ -122,10 +123,15 @@ class VaultImporterImpl @Inject constructor(
                         k !in KNOWN_JSON_KEYS && (v is String || v is Number || v is Boolean)
                     }
                     .map { (k, v) ->
+                        val key = CustomFieldKeyFormatter.prettify(k)
                         CustomField(
-                            key = CustomFieldKeyFormatter.prettify(k),
+                            key = key,
                             value = v.toString(),
-                            isSensitive = false,
+                            // Foreign exports carry no sensitivity flag. A label the
+                            // catalogue treats as sensitive (Card Number, CVV, API
+                            // Token, ...) is masked from its first view instead of
+                            // rendering plain; everything else stays visible as before.
+                            isSensitive = FieldLabelCatalog.sensitiveByDefault(key),
                         )
                     }
 
@@ -193,10 +199,14 @@ class VaultImporterImpl @Inject constructor(
     private fun parseCustomFields(raw: Any?): List<CustomField> {
         val list = raw as? List<*> ?: return emptyList()
         return list.filterIsInstance<Map<String, Any>>().map { cf ->
+            val key = cf["key"] as? String ?: ""
             CustomField(
-                key = cf["key"] as? String ?: "",
+                key = key,
                 value = cf["value"] as? String ?: "",
-                isSensitive = cf["sensitive"] as? Boolean ?: false,
+                // An explicit boolean flag (true or false) is the source's word and
+                // is kept as is, so a 1Key backup round-trips faithfully. Only a
+                // missing (or non-boolean) flag falls back to the catalogue default.
+                isSensitive = cf["sensitive"] as? Boolean ?: FieldLabelCatalog.sensitiveByDefault(key),
             )
         }
     }
@@ -247,12 +257,17 @@ class VaultImporterImpl @Inject constructor(
                     val customFields = customFieldCols
                         .mapNotNull { (idx, header) ->
                             val value = row.getOrElse(idx) { "" }.trim()
-                            if (value.isEmpty()) null
-                            else CustomField(
-                                key = CustomFieldKeyFormatter.prettify(header),
-                                value = value,
-                                isSensitive = false,
-                            )
+                            if (value.isEmpty()) {
+                                null
+                            } else {
+                                // CSV has no sensitivity column; see the JSON path above.
+                                val key = CustomFieldKeyFormatter.prettify(header)
+                                CustomField(
+                                    key = key,
+                                    value = value,
+                                    isSensitive = FieldLabelCatalog.sensitiveByDefault(key),
+                                )
+                            }
                         }
                         .take(CustomField.MAX_FIELDS)
 
