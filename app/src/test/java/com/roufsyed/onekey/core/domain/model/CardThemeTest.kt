@@ -17,7 +17,7 @@ class CardThemeTest {
         assertEquals(
             listOf(
                 "CHARCOAL", "MIDNIGHT", "MAROON", "GRAPHITE", "PINE", "GRAPE", "SLATE",
-                "TEAL", "RUST", "CORAL", "MUSTARD", "POWDER", "PEACH", "LEMON", "IVORY",
+                "TEAL", "RUST", "SOFT_BLUE", "CORAL", "MUSTARD", "POWDER", "PEACH", "LEMON", "IVORY",
             ),
             CardTheme.entries.map { it.name },
         )

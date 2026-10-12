@@ -4,6 +4,9 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.roufsyed.onekey.core.domain.card.CardCopy
+import com.roufsyed.onekey.core.domain.card.CardFields
+import com.roufsyed.onekey.core.domain.card.CardSlot
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
@@ -246,7 +249,10 @@ class CredentialDetailViewModel @Inject constructor(
             // surface the generated id back to callers - so we generate here, keep it, and
             // hand the same id to both the repo and the post-save nav callback.
             val wasNew = credential.id.isBlank()
-            val toSave = if (wasNew) credential.copy(id = UUID.randomUUID().toString()) else credential
+            // Card slots pre-added for a new card credential but left blank carry no
+            // information; drop them so they do not become empty rows.
+            val pruned = credential.copy(customFields = CardFields.pruneBlank(credential.type, credential.customFields))
+            val toSave = if (wasNew) pruned.copy(id = UUID.randomUUID().toString()) else pruned
             when (val result = saveCredential(toSave)) {
                 is AppResult.Success -> {
                     if (wasNew) {
@@ -376,6 +382,21 @@ class CredentialDetailViewModel @Inject constructor(
     }
 
     /**
+     * Copies one card slot (card number, CVV, account number, IBAN, IFSC) from the
+     * LIVE credential. The slot is resolved through the same binder the card draws
+     * with, so view and copy can never pick different duplicate fields; the clip
+     * label is the slot's fixed text, never user input; numeric slots are stripped
+     * to digits unless [exact] is set (long press on the card copies the field verbatim).
+     * Bumps accessed_at like [copyPassword]. No-op for an unbound slot.
+     */
+    fun copyCardSlot(slot: CardSlot, exact: Boolean) {
+        val cred = (_uiState.value as? CredentialDetailUiState.Success)?.credential ?: return
+        val payload = CardCopy.payload(cred, slot, exact) ?: return
+        secureClipboard.copySecure(payload.label, payload.text)
+        bumpAccessedAt(cred.id)
+    }
+
+    /**
      * Records that the user actually used this credential. Skipped for
      * unsaved-new entries (blank id) and silently skipped at the SQL layer
      * for soft-deleted ones. Fire-and-forget - a failed bump shouldn't
@@ -455,7 +476,9 @@ class CredentialDetailViewModel @Inject constructor(
         id = "", title = "", username = "", password = "", url = "",
         notes = "", otpParams = null,
         tags = if (initialTag.isNotEmpty()) listOf(initialTag) else emptyList(),
-        customFields = emptyList(), createdAt = 0L, updatedAt = 0L,
+        // New card credentials start with their card fields pre-added (empty) so the
+        // card can be filled in straight away; blank ones are pruned again on save.
+        customFields = CardFields.defaultsFor(initialType), createdAt = 0L, updatedAt = 0L,
         type = initialType,
     )
 }

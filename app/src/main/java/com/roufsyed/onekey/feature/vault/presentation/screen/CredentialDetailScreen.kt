@@ -46,6 +46,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.roufsyed.onekey.core.scan.ZxingQrAnalyzer
+import com.roufsyed.onekey.core.domain.card.CardFieldBinder
+import com.roufsyed.onekey.core.domain.card.CardSlot
+import com.roufsyed.onekey.core.domain.card.FieldLabel
+import com.roufsyed.onekey.core.domain.card.FieldLabelCatalog
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
 import com.roufsyed.onekey.core.domain.model.CredentialType
@@ -66,6 +70,11 @@ import com.roufsyed.onekey.core.presentation.util.toFormattedDateTime
 import com.roufsyed.onekey.core.presentation.util.toRelativeTime
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriParser
 import com.roufsyed.onekey.feature.twofa.presentation.screen.TotpWidget
+import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardAppearanceSection
+import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardDisplayModel
+import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardEmptyStateRow
+import com.roufsyed.onekey.feature.vault.presentation.screen.card.CardSchemeField
+import com.roufsyed.onekey.feature.vault.presentation.screen.card.CredentialCardSection
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.CredentialDetailUiState
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.CredentialDetailViewModel
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.DeleteKind
@@ -74,46 +83,9 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
-private data class FieldSuggestion(val label: String, val sensitive: Boolean)
-
-private fun fieldSuggestionsFor(type: CredentialType): List<FieldSuggestion> = when (type) {
-    CredentialType.BANK_ACCOUNT -> listOf(
-        FieldSuggestion("Account Holder", sensitive = false),
-        FieldSuggestion("Account Number", sensitive = true),
-        FieldSuggestion("Bank Name", sensitive = false),
-        FieldSuggestion("IFSC / Routing", sensitive = true),
-        FieldSuggestion("IBAN", sensitive = true),
-        FieldSuggestion("Branch", sensitive = false),
-        FieldSuggestion("PIN", sensitive = true),
-    )
-    CredentialType.CREDIT_CARD -> listOf(
-        FieldSuggestion("Cardholder", sensitive = false),
-        FieldSuggestion("Card Number", sensitive = true),
-        FieldSuggestion("Expiry", sensitive = false),
-        FieldSuggestion("CVV", sensitive = true),
-        FieldSuggestion("PIN", sensitive = true),
-        FieldSuggestion("Billing Zip", sensitive = false),
-        FieldSuggestion("Network", sensitive = false),
-    )
-    CredentialType.SERVER -> listOf(
-        FieldSuggestion("Host", sensitive = false),
-        FieldSuggestion("Port", sensitive = false),
-        FieldSuggestion("SSH Key Path", sensitive = false),
-        FieldSuggestion("API Token", sensitive = true),
-    )
-    CredentialType.DATABASE -> listOf(
-        FieldSuggestion("Host", sensitive = false),
-        FieldSuggestion("Port", sensitive = false),
-        FieldSuggestion("Database", sensitive = false),
-        FieldSuggestion("Connection String", sensitive = true),
-    )
-    CredentialType.EMAIL -> listOf(
-        FieldSuggestion("IMAP Host", sensitive = false),
-        FieldSuggestion("SMTP Host", sensitive = false),
-        FieldSuggestion("App Password", sensitive = true),
-    )
-    else -> emptyList()
-}
+// Type-specific quick-add suggestions come from the shared catalogue so the editor
+// chips and the OCR targets (OcrModels.kt) can never drift apart.
+private fun fieldSuggestionsFor(type: CredentialType): List<FieldLabel> = FieldLabelCatalog.suggestionsFor(type)
 
 // Types that don't surface auth (username/password/url/totp) inputs at all. Notes still
 // flows through `notes` - sometimes promoted to a primary content area.
@@ -207,6 +179,7 @@ fun CredentialDetailScreen(
                     onRestore = viewModel::restore,
                     onCopyUsername = viewModel::copyUsername,
                     onCopyPassword = viewModel::copyPassword,
+                    onCopyCardSlot = viewModel::copyCardSlot,
                     onBack = onBack,
                     onToggleFavorite = viewModel::toggleFavorite,
                 )
@@ -255,6 +228,7 @@ private fun CredentialViewContent(
     onRestore: () -> Unit,
     onCopyUsername: () -> Unit,
     onCopyPassword: () -> Unit,
+    onCopyCardSlot: (slot: CardSlot, exact: Boolean) -> Unit,
     onBack: () -> Unit,
     onToggleFavorite: () -> Unit,
 ) {
@@ -265,6 +239,12 @@ private fun CredentialViewContent(
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var historyExpanded by rememberSaveable { mutableStateOf(false) }
     var overflowMenuExpanded by remember { mutableStateOf(false) }
+
+    // Flip card (CREDIT_CARD / BANK_ACCOUNT only). It is an addition to the
+    // credential view, not a replacement: every custom field keeps its row below,
+    // and the card adds reveal and copy for the card-shaped values.
+    val cardModel = remember(credential) { CardDisplayModel.from(credential) }
+    val showsCard = CardSlot.hasCard(credential.type) && !cardModel.isEmpty
 
     // Snackbar plumbing for notes-display transient events (auto-flip toast,
     // blocked-link copy). Lives at the screen level so notes-section and dialog
@@ -355,6 +335,8 @@ private fun CredentialViewContent(
     ) { padding ->
         // Flat divider-separated sections - same visual language as the home and list
         // screens. No card chrome, no per-row gap; dividers carry the structural rhythm.
+        // The flip card for card types is the one deliberate exception: it depicts an
+        // object, it is not a container for rows.
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -362,33 +344,25 @@ private fun CredentialViewContent(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 8.dp, bottom = 16.dp),
         ) {
-            androidx.compose.animation.AnimatedVisibility(visible = clipboardCountdown != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Clipboard clears in ${clipboardCountdown}s",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
+            // For card types the countdown banner renders below the card's action row
+            // instead (inside CredentialCardSection), so a copy never pushes the card
+            // and its buttons down under the user's finger.
+            if (!showsCard) ClipboardCountdownBanner(clipboardCountdown)
             if (isInRecycleBin) {
                 RecycleBinBanner(onRestore = onRestore)
+            }
+            if (showsCard) {
+                CredentialCardSection(
+                    model = cardModel,
+                    theme = credential.cardTheme,
+                    stateKey = credential.id,
+                    onCopy = onCopyCardSlot,
+                    belowActions = { ClipboardCountdownBanner(clipboardCountdown) },
+                )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+            } else if (CardSlot.hasCard(credential.type) && !isInRecycleBin) {
+                CardEmptyStateRow(onAdd = onEdit)
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
             if (credential.type in NO_AUTH_TYPES) {
                 if (credential.notes.isNotEmpty()) {
@@ -524,6 +498,35 @@ private fun CredentialViewContent(
             },
             onDismiss = { pendingLink = null },
         )
+    }
+}
+
+@Composable
+private fun ClipboardCountdownBanner(clipboardCountdown: Int?) {
+    AnimatedVisibility(visible = clipboardCountdown != null) {
+        Surface(
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Clipboard clears in ${clipboardCountdown}s",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
     }
 }
 
@@ -927,6 +930,14 @@ private fun CredentialEditContent(
     var nextCustomFieldId by remember(credential.id) {
         mutableStateOf(credential.customFields.size.toLong())
     }
+    // Card colour theme (CREDIT_CARD / BANK_ACCOUNT). Enum values are Serializable,
+    // so rememberSaveable needs no custom Saver.
+    var cardTheme by rememberSaveable(credential.id) { mutableStateOf(credential.cardTheme) }
+    // Per-row reveal state for the custom-field value fields, keyed by the stable
+    // row id so it survives add/remove shifts. Hoisted (rather than row-local) so the
+    // card preview can mirror exactly what each row shows. Absent entry = the
+    // default for the row's sensitivity (masked when sensitive, shown otherwise).
+    var revealedRows by remember(credential.id) { mutableStateOf<Map<Long, Boolean>>(emptyMap()) }
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var showTagPicker by rememberSaveable { mutableStateOf(false) }
     var showPasswordGenerator by rememberSaveable { mutableStateOf(false) }
@@ -971,7 +982,8 @@ private fun CredentialEditContent(
             notesField.text.trim() != credential.notes ||
             totpSecret.trim() != (credential.otpParams?.secret ?: "") ||
             selectedTags != credential.tags ||
-            customFields != credential.customFields
+            customFields != credential.customFields ||
+            cardTheme != credential.cardTheme
         }
     }
     var showDiscardDialog by rememberSaveable { mutableStateOf(false) }
@@ -1027,6 +1039,7 @@ private fun CredentialEditContent(
                                 otpParams = buildOtpParamsForSave(),
                                 tags = selectedTags,
                                 customFields = customFields,
+                                cardTheme = cardTheme,
                             ))
                         },
                         // Save is enabled only when there is something to save. Gating
@@ -1048,12 +1061,31 @@ private fun CredentialEditContent(
         ) {
             LockAwareOutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
 
-            // Type-aware body. NO_AUTH types (Secure Note, Credit Card, Other) drop
-            // auth fields entirely and either promote notes to a primary content area
-            // or render notes inline. BANK_ACCOUNT hides TOTP since 2FA-on-bank doesn't
-            // fit this app's TOTP shape. Login-shaped types keep the full layout.
+            // Card appearance (CREDIT_CARD / BANK_ACCOUNT): live preview of the flip card
+            // fed by the hoisted title and custom-field state, plus the theme swatches.
+            if (CardSlot.hasCard(credential.type)) {
+                val revealedFieldIndices = customFields.indices.filterTo(HashSet()) { index ->
+                    revealedRows[customFieldIds[index]] ?: !customFields[index].isSensitive
+                }
+                CardAppearanceSection(
+                    type = credential.type,
+                    title = title,
+                    customFields = customFields,
+                    revealedFieldIndices = revealedFieldIndices,
+                    theme = cardTheme,
+                    onThemeSelected = { cardTheme = it },
+                    stateKey = credential.id,
+                )
+            }
+
+            // Type-aware body. A Secure Note promotes its content to the primary area
+            // right under the title. The other NO_AUTH types (Credit Card, Other) have no
+            // auth fields at all. Login-shaped types keep username / password / URL /
+            // TOTP here (BANK_ACCOUNT hides TOTP since 2FA-on-bank doesn't fit this app's
+            // TOTP shape). Notes and Category always close the form, below the custom
+            // fields, for every type except the Secure Note whose content is the note.
             when {
-                credential.type in NO_AUTH_TYPES -> {
+                credential.type == CredentialType.SECURE_NOTE -> {
                     // Live-preview markdown editor when the global toggle is on and the user
                     // hasn't opted into plain-source mode for this credential; otherwise the
                     // existing plain field with monospace styling so raw markers stay legible.
@@ -1061,12 +1093,10 @@ private fun CredentialEditContent(
                         MarkdownEditorField(
                             value = notesField,
                             onValueChange = { notesField = it },
-                            label = {
-                                Text(if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes")
-                            },
+                            label = { Text("Content") },
                             supportingText = { Text(MARKDOWN_SYNTAX_HINT) },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = if (credential.type == CredentialType.SECURE_NOTE) 12 else 4,
+                            minLines = 12,
                             maxLines = 30,
                             trailingIcon = {
                                 IconButton(onClick = { showOcrScanner = true }) {
@@ -1079,11 +1109,9 @@ private fun CredentialEditContent(
                         LockAwareOutlinedTextField(
                             value = notesField,
                             onValueChange = { notesField = it },
-                            label = {
-                                Text(if (credential.type == CredentialType.SECURE_NOTE) "Content" else "Notes")
-                            },
+                            label = { Text("Content") },
                             modifier = Modifier.fillMaxWidth(),
-                            minLines = if (credential.type == CredentialType.SECURE_NOTE) 12 else 4,
+                            minLines = 12,
                             maxLines = 30,
                             textStyle = MaterialTheme.typography.bodyLarge.copy(
                                 fontFamily = FontFamily.Monospace,
@@ -1095,6 +1123,9 @@ private fun CredentialEditContent(
                             },
                         )
                     }
+                }
+                credential.type in NO_AUTH_TYPES -> {
+                    // Credit Card / Other: no auth fields. Notes live at the bottom.
                 }
                 else -> {
                     LockAwareOutlinedTextField(
@@ -1135,38 +1166,6 @@ private fun CredentialEditContent(
                         },
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (showLiveEditor) {
-                        MarkdownEditorField(
-                            value = notesField,
-                            onValueChange = { notesField = it },
-                            label = { Text("Notes") },
-                            supportingText = { Text(MARKDOWN_SYNTAX_HINT) },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            trailingIcon = {
-                                IconButton(onClick = { showOcrScanner = true }) {
-                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                                }
-                            },
-                            onSizeCapExceeded = { notesCapTrigger += 1 },
-                        )
-                    } else {
-                        LockAwareOutlinedTextField(
-                            value = notesField,
-                            onValueChange = { notesField = it },
-                            label = { Text("Notes") },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                fontFamily = FontFamily.Monospace,
-                            ),
-                            trailingIcon = {
-                                IconButton(onClick = { showOcrScanner = true }) {
-                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                                }
-                            },
-                        )
-                    }
                     if (credential.type != CredentialType.BANK_ACCOUNT) {
                         LockAwareOutlinedTextField(
                             value = totpSecret,
@@ -1180,45 +1179,6 @@ private fun CredentialEditContent(
                             },
                         )
                     }
-                }
-            }
-
-            // Category (chip-based, non-editable)
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "Category",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    selectedTags.forEach { tag ->
-                        InputChip(
-                            selected = true,
-                            onClick = { selectedTags = selectedTags - tag },
-                            label = { Text(tag) },
-                            trailingIcon = {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = "Remove category",
-                                    modifier = Modifier.size(InputChipDefaults.IconSize),
-                                )
-                            },
-                        )
-                    }
-                    AssistChip(
-                        onClick = { showTagPicker = true },
-                        label = { Text("Add category") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = null,
-                                modifier = Modifier.size(AssistChipDefaults.IconSize),
-                            )
-                        },
-                    )
                 }
             }
 
@@ -1268,10 +1228,23 @@ private fun CredentialEditContent(
             Text("Custom Fields (${customFields.size}/${CustomField.MAX_FIELDS})", style = MaterialTheme.typography.titleSmall)
             customFields.forEachIndexed { index, field ->
                 key(customFieldIds[index]) {
+                    val rowId = customFieldIds[index]
                     CustomFieldRow(
                         field = field,
-                        onFieldChanged = { updated -> customFields = customFields.toMutableList().also { it[index] = updated } },
+                        slot = CardFieldBinder.slotFor(credential.type, field.key),
+                        showValue = revealedRows[rowId] ?: !field.isSensitive,
+                        onToggleShowValue = {
+                            val current = revealedRows[rowId] ?: !field.isSensitive
+                            revealedRows = revealedRows + (rowId to !current)
+                        },
+                        onFieldChanged = { updated ->
+                            // Flipping the Sensitive switch resets the reveal to the new
+                            // mode's default, exactly as the row-local state used to.
+                            if (updated.isSensitive != field.isSensitive) revealedRows = revealedRows - rowId
+                            customFields = customFields.toMutableList().also { it[index] = updated }
+                        },
                         onRemove = {
+                            revealedRows = revealedRows - rowId
                             customFields = customFields.toMutableList().also { it.removeAt(index) }
                             customFieldIds = customFieldIds.toMutableList().also { it.removeAt(index) }
                         },
@@ -1283,6 +1256,84 @@ private fun CredentialEditContent(
                     onClick = { appendCustomField(CustomField("", "", false)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add Custom Field") }
+            }
+
+            // Notes and Category always close the form, below the custom fields. The
+            // Secure Note type already rendered its content as the primary area above.
+            if (credential.type != CredentialType.SECURE_NOTE) {
+                if (showLiveEditor) {
+                    MarkdownEditorField(
+                        value = notesField,
+                        onValueChange = { notesField = it },
+                        label = { Text("Notes") },
+                        supportingText = { Text(MARKDOWN_SYNTAX_HINT) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 30,
+                        trailingIcon = {
+                            IconButton(onClick = { showOcrScanner = true }) {
+                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                            }
+                        },
+                        onSizeCapExceeded = { notesCapTrigger += 1 },
+                    )
+                } else {
+                    LockAwareOutlinedTextField(
+                        value = notesField,
+                        onValueChange = { notesField = it },
+                        label = { Text("Notes") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 30,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            fontFamily = FontFamily.Monospace,
+                        ),
+                        trailingIcon = {
+                            IconButton(onClick = { showOcrScanner = true }) {
+                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                            }
+                        },
+                    )
+                }
+            }
+
+            // Category (chip-based, non-editable)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Category",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    selectedTags.forEach { tag ->
+                        InputChip(
+                            selected = true,
+                            onClick = { selectedTags = selectedTags - tag },
+                            label = { Text(tag) },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Remove category",
+                                    modifier = Modifier.size(InputChipDefaults.IconSize),
+                                )
+                            },
+                        )
+                    }
+                    AssistChip(
+                        onClick = { showTagPicker = true },
+                        label = { Text("Add category") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(AssistChipDefaults.IconSize),
+                            )
+                        },
+                    )
+                }
             }
         }
     }
@@ -1385,6 +1436,7 @@ private fun CredentialEditContent(
                             otpParams = buildOtpParamsForSave(),
                             tags = selectedTags,
                             customFields = customFields,
+                            cardTheme = cardTheme,
                         ))
                     },
                     enabled = title.isNotBlank(),
@@ -1694,42 +1746,37 @@ private fun TagPickerDialog(
 }
 
 @Composable
-private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> Unit, onRemove: () -> Unit) {
+private fun CustomFieldRow(
+    field: CustomField,
+    slot: CardSlot?,
+    showValue: Boolean,
+    onToggleShowValue: () -> Unit,
+    onFieldChanged: (CustomField) -> Unit,
+    onRemove: () -> Unit,
+) {
     // Field content is read straight from the prop and propagated through the callback -
     // no internal mirror. Internal state used to drift when the parent removed an earlier
     // row: each surviving row's `remember`d text would carry over into the wrong slot
     // because Compose reused slots positionally. Reading the prop directly removes that
     // class of bug entirely.
     //
-    // The reveal toggle is genuinely view-only; key it on isSensitive so flipping the
-    // sensitivity switch resets visibility to the correct default for the new mode.
-    var showValue by remember(field.isSensitive) { mutableStateOf(!field.isSensitive) }
+    // The reveal toggle is hoisted as well (keyed by the row's stable id in the parent)
+    // so the editor's card preview can mirror it; the parent resets it when the
+    // Sensitive switch flips, preserving the old "default for the new mode" behaviour.
+    //
+    // Rows bound to a card slot get a slot-aware keyboard. The sensitive flag keeps
+    // precedence because the password variants are what stop IME suggestion learning.
+    val keyboardType = when {
+        slot != null && slot.numeric -> if (field.isSensitive) KeyboardType.NumberPassword else KeyboardType.Number
+        field.isSensitive -> KeyboardType.Password
+        else -> KeyboardType.Text
+    }
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "Custom Field",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = onRemove) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "Remove field",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-
             LockAwareOutlinedTextField(
                 value = field.key,
                 onValueChange = { onFieldChanged(field.copy(key = it)) },
@@ -1739,35 +1786,47 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
                 singleLine = true,
             )
 
-            LockAwareOutlinedTextField(
-                value = field.value,
-                onValueChange = { onFieldChanged(field.copy(value = it)) },
-                label = { Text("Value") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = if (field.isSensitive && !showValue) PasswordVisualTransformation()
-                                       else VisualTransformation.None,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = if (field.isSensitive) KeyboardType.Password else KeyboardType.Text,
-                ),
-                trailingIcon = if (field.isSensitive) {
-                    {
-                        IconButton(onClick = { showValue = !showValue }) {
-                            Icon(
-                                if (showValue) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (showValue) "Hide value" else "Show value",
-                            )
+            if (slot == CardSlot.SCHEME) {
+                // The card scheme is picked from a dropdown (plus a Custom text option);
+                // the chosen name is still stored as this row's plain value.
+                CardSchemeField(
+                    value = field.value,
+                    onValueChange = { onFieldChanged(field.copy(value = it)) },
+                )
+            } else {
+                LockAwareOutlinedTextField(
+                    value = field.value,
+                    onValueChange = { onFieldChanged(field.copy(value = it)) },
+                    label = { Text("Value") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (field.isSensitive && !showValue) PasswordVisualTransformation()
+                                           else VisualTransformation.None,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = keyboardType,
+                        // Autocorrect mangles names and codes; only card-slot rows opt out so
+                        // generic rows keep today's behaviour.
+                        autoCorrectEnabled = if (slot != null) false else null,
+                    ),
+                    trailingIcon = if (field.isSensitive) {
+                        {
+                            IconButton(onClick = onToggleShowValue) {
+                                Icon(
+                                    if (showValue) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showValue) "Hide value" else "Show value",
+                                )
+                            }
                         }
-                    }
-                } else null,
-            )
+                    } else null,
+                )
+            }
 
+            // One slim footer: the Sensitive switch, a pipe, then the delete action.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text("Sensitive", style = MaterialTheme.typography.bodySmall)
                     Text(
                         "Masks this value in view mode",
@@ -1781,6 +1840,20 @@ private fun CustomFieldRow(field: CustomField, onFieldChanged: (CustomField) -> 
                         onFieldChanged(field.copy(isSensitive = checked))
                     },
                 )
+                VerticalDivider(
+                    modifier = Modifier
+                        .padding(horizontal = 12.dp)
+                        .height(24.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Remove field",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
             }
         }
     }

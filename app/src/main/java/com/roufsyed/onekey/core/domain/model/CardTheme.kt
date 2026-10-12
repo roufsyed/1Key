@@ -34,6 +34,7 @@ enum class CardTheme(val displayName: String) {
     SLATE("Slate"),
     TEAL("Teal"),
     RUST("Rust"),
+    SOFT_BLUE("Soft Blue"),
     CORAL("Coral"),
     MUSTARD("Mustard"),
     POWDER("Powder"),

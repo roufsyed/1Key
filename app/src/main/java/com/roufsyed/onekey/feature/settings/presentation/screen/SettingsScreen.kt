@@ -276,7 +276,7 @@ fun SettingsScreen(
                     Column {
                         ListItem(
                             headlineContent = { Text("Seed Sample Data") },
-                            supportingContent = { Text("Insert 9 sample credentials covering all categories") },
+                            supportingContent = { Text("Insert sample credentials covering all categories") },
                             leadingContent = {
                                 if (isSeedingData) {
                                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)

@@ -1,7 +1,9 @@
 package com.roufsyed.onekey.core.domain.usecase
 
 import com.roufsyed.onekey.core.domain.model.AppResult
+import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
+import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.CustomField
 import com.roufsyed.onekey.core.domain.model.OtpParams
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
@@ -124,23 +126,32 @@ class SeedDataUseCase @Inject constructor(
             createdAt = now,
             updatedAt = now,
         ),
+        // Card-shaped sample: exercises the flip card (front: number, holder, expiry;
+        // back: CVV) and a non-default theme. The number lives in a custom field, not
+        // the password, because CREDIT_CARD renders no auth fields.
         Credential(
             id = "",
             title = "Visa Platinum",
-            username = "John Doe",
-            password = "4532 1234 5678 9012",
+            username = "",
+            password = "",
             url = "",
-            notes = "Expires 12/2027. Billing zip: 10001.",
+            notes = "Billing zip: 10001.",
             otpParams = null,
             tags = listOf("Credit Card"),
             customFields = listOf(
+                CustomField(key = "Bank Name", value = "Example Bank", isSensitive = false),
+                CustomField(key = "Name on Card", value = "John Doe", isSensitive = false),
+                CustomField(key = "Card Number", value = "4532 1234 5678 9012", isSensitive = true),
+                CustomField(key = "Expiry", value = "12/27", isSensitive = false),
                 CustomField(key = "CVV", value = "123", isSensitive = true),
-                CustomField(key = "Expiry", value = "12/2027", isSensitive = false),
                 CustomField(key = "PIN", value = "1234", isSensitive = true),
+                CustomField(key = "Card Scheme", value = "Visa", isSensitive = false),
             ),
             isFavorite = false,
             createdAt = now,
             updatedAt = now,
+            type = CredentialType.CREDIT_CARD,
+            cardTheme = CardTheme.MIDNIGHT,
         ),
         Credential(
             id = "",
@@ -166,12 +177,22 @@ class SeedDataUseCase @Inject constructor(
             otpParams = null,
             tags = listOf("Bank Account"),
             customFields = listOf(
+                CustomField(key = "Account Holder", value = "John Doe", isSensitive = false),
                 CustomField(key = "Account Number", value = "000123456789", isSensitive = true),
-                CustomField(key = "Routing Number", value = "021000021", isSensitive = true),
+                CustomField(key = "Bank Name", value = "Chase", isSensitive = false),
+                CustomField(key = "IFSC / Routing", value = "021000021", isSensitive = true),
+                // The debit card attached to the account drives the flip card.
+                CustomField(key = "Name on Card", value = "John Doe", isSensitive = false),
+                CustomField(key = "Card Number", value = "4000 1234 5678 9010", isSensitive = true),
+                CustomField(key = "Expiry", value = "09/28", isSensitive = false),
+                CustomField(key = "CVV", value = "321", isSensitive = true),
+                CustomField(key = "Card Scheme", value = "Mastercard", isSensitive = false),
             ),
             isFavorite = true,
             createdAt = now,
             updatedAt = now,
+            type = CredentialType.BANK_ACCOUNT,
+            cardTheme = CardTheme.PINE,
         ),
         Credential(
             id = "",
