@@ -1,0 +1,10 @@
+Card credentials, wider search and fixes.
+
+• Flip card for credit cards and bank accounts: 16 colour themes, scheme picker, long-press to copy
+• Search covers username, URL and notes
+• Reveal eye on sensitive custom fields
+• Imported card numbers and CVVs come masked
+• Slimmer field editor, scan icon in the top bar, blank fields not saved
+• Gold star favourites, bottom bar now blue, capitalised titles
+• Fix crash adding a suggested custom field
+• Advisory Keystore attestation check

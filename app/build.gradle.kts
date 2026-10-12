@@ -22,8 +22,8 @@ android {
         applicationId = "com.roufsyed.onekey"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.1.1"
+        versionCode = 4
+        versionName = "1.1.2"
         // Required for Room MigrationTestHelper / AndroidX ext-junit in
         // src/androidTest. The runner picks up @RunWith(AndroidJUnit4::class)
         // tests and drives them through an actual Android instrumentation harness.
