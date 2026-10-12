@@ -948,6 +948,20 @@ private fun CredentialEditContent(
 
     val canAddField by remember { derivedStateOf { customFields.size < CustomField.MAX_FIELDS } }
 
+    /**
+     * The single append path for every "add a row" affordance (suggestion chips,
+     * the Add Custom Field button). `customFields` and `customFieldIds` must grow
+     * in lock-step: the row loop keys each row on `customFieldIds[index]`, so
+     * appending to one list without the other throws IndexOutOfBounds on the next
+     * recomposition. Enforces the MAX_FIELDS cap so no caller can bypass it.
+     */
+    fun appendCustomField(field: CustomField) {
+        if (customFields.size >= CustomField.MAX_FIELDS) return
+        customFields = customFields + field
+        customFieldIds = customFieldIds + nextCustomFieldId
+        nextCustomFieldId += 1
+    }
+
     val hasUnsavedChanges by remember {
         derivedStateOf {
             title.trim() != credential.title ||
@@ -1229,13 +1243,13 @@ private fun CredentialEditContent(
                         activeSuggestions.forEach { suggestion ->
                             AssistChip(
                                 onClick = {
-                                    if (canAddField) {
-                                        customFields = customFields + CustomField(
+                                    appendCustomField(
+                                        CustomField(
                                             key = suggestion.label,
                                             value = "",
                                             isSensitive = suggestion.sensitive,
                                         )
-                                    }
+                                    )
                                 },
                                 label = { Text(suggestion.label) },
                                 leadingIcon = {
@@ -1266,11 +1280,7 @@ private fun CredentialEditContent(
             }
             if (canAddField) {
                 OutlinedButton(
-                    onClick = {
-                        customFields = customFields + CustomField("", "", false)
-                        customFieldIds = customFieldIds + nextCustomFieldId
-                        nextCustomFieldId += 1
-                    },
+                    onClick = { appendCustomField(CustomField("", "", false)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Icon(Icons.Default.Add, null); Spacer(Modifier.width(8.dp)); Text("Add Custom Field") }
             }
