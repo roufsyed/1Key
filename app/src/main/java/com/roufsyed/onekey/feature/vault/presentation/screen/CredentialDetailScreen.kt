@@ -1028,6 +1028,11 @@ private fun CredentialEditContent(
                     }
                 },
                 actions = {
+                    // One "Scan from photo" entry point for the whole form; the sheet
+                    // decides which fields a photo can fill from the credential type.
+                    IconButton(onClick = { showOcrScanner = true }) {
+                        Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
+                    }
                     TextButton(
                         onClick = {
                             onSave(credential.copy(
@@ -1098,11 +1103,6 @@ private fun CredentialEditContent(
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 12,
                             maxLines = 30,
-                            trailingIcon = {
-                                IconButton(onClick = { showOcrScanner = true }) {
-                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                                }
-                            },
                             onSizeCapExceeded = { notesCapTrigger += 1 },
                         )
                     } else {
@@ -1116,11 +1116,6 @@ private fun CredentialEditContent(
                             textStyle = MaterialTheme.typography.bodyLarge.copy(
                                 fontFamily = FontFamily.Monospace,
                             ),
-                            trailingIcon = {
-                                IconButton(onClick = { showOcrScanner = true }) {
-                                    Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                                }
-                            },
                         )
                     }
                 }
@@ -1133,11 +1128,6 @@ private fun CredentialEditContent(
                         onValueChange = { username = it },
                         label = { Text("Username") },
                         modifier = Modifier.fillMaxWidth(),
-                        trailingIcon = {
-                            IconButton(onClick = { showOcrScanner = true }) {
-                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                            }
-                        },
                     )
                     LockAwareOutlinedTextField(
                         value = password,
@@ -1270,11 +1260,6 @@ private fun CredentialEditContent(
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 3,
                         maxLines = 30,
-                        trailingIcon = {
-                            IconButton(onClick = { showOcrScanner = true }) {
-                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                            }
-                        },
                         onSizeCapExceeded = { notesCapTrigger += 1 },
                     )
                 } else {
@@ -1288,11 +1273,6 @@ private fun CredentialEditContent(
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             fontFamily = FontFamily.Monospace,
                         ),
-                        trailingIcon = {
-                            IconButton(onClick = { showOcrScanner = true }) {
-                                Icon(Icons.Default.DocumentScanner, contentDescription = "Scan from photo")
-                            }
-                        },
                     )
                 }
             }
