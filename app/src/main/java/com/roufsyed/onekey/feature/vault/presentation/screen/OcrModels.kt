@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.vault.presentation.screen
 
+import com.roufsyed.onekey.core.domain.card.FieldLabelCatalog
 import com.roufsyed.onekey.core.domain.model.CredentialType
 
 // ---------------------------------------------------------------------------
@@ -48,69 +49,24 @@ data class OcrAssignments(
 )
 
 /**
- * Default OCR target list per credential type. Mirrors the editor's `fieldSuggestionsFor`
- * + the universal Notes fallback. Username/Password/URL are dropped for `SECURE_NOTE` and
- * `OTHER` since those types have no auth fields rendered. They stay for `CREDIT_CARD`
- * because users may also store the online-card-portal login on the same record.
+ * Default OCR target list per credential type. The custom-field targets come from
+ * [FieldLabelCatalog], the same table that feeds the editor's suggestion chips, so
+ * the two can never disagree on labels or default sensitivity. Username/Password/URL
+ * are dropped for `SECURE_NOTE` and `OTHER` since those types have no auth fields
+ * rendered. They stay for `CREDIT_CARD` because users may also store the
+ * online-card-portal login on the same record. URL is offered only for the
+ * login-shaped `LOGIN` and `PASSWORD` types.
  */
-fun ocrTargetsFor(type: CredentialType): List<OcrTarget> = when (type) {
-    CredentialType.LOGIN, CredentialType.PASSWORD -> listOf(
-        OcrTarget.Username,
-        OcrTarget.Password,
-        OcrTarget.Url,
-        OcrTarget.Notes,
-    )
-    CredentialType.SECURE_NOTE, CredentialType.OTHER -> listOf(
-        OcrTarget.Notes,
-    )
-    CredentialType.CREDIT_CARD -> listOf(
-        OcrTarget.Username,
-        OcrTarget.Password,
-        OcrTarget.CustomField("Cardholder", sensitive = false),
-        OcrTarget.CustomField("Card Number", sensitive = true),
-        OcrTarget.CustomField("Expiry", sensitive = false),
-        OcrTarget.CustomField("CVV", sensitive = true),
-        OcrTarget.CustomField("PIN", sensitive = true),
-        OcrTarget.CustomField("Billing Zip", sensitive = false),
-        OcrTarget.CustomField("Network", sensitive = false),
-        OcrTarget.Notes,
-    )
-    CredentialType.BANK_ACCOUNT -> listOf(
-        OcrTarget.Username,
-        OcrTarget.Password,
-        OcrTarget.CustomField("Account Holder", sensitive = false),
-        OcrTarget.CustomField("Account Number", sensitive = true),
-        OcrTarget.CustomField("Bank Name", sensitive = false),
-        OcrTarget.CustomField("IFSC / Routing", sensitive = true),
-        OcrTarget.CustomField("IBAN", sensitive = true),
-        OcrTarget.CustomField("Branch", sensitive = false),
-        OcrTarget.CustomField("PIN", sensitive = true),
-        OcrTarget.Notes,
-    )
-    CredentialType.SERVER -> listOf(
-        OcrTarget.Username,
-        OcrTarget.Password,
-        OcrTarget.CustomField("Host", sensitive = false),
-        OcrTarget.CustomField("Port", sensitive = false),
-        OcrTarget.CustomField("SSH Key Path", sensitive = false),
-        OcrTarget.CustomField("API Token", sensitive = true),
-        OcrTarget.Notes,
-    )
-    CredentialType.DATABASE -> listOf(
-        OcrTarget.Username,
-        OcrTarget.Password,
-        OcrTarget.CustomField("Host", sensitive = false),
-        OcrTarget.CustomField("Port", sensitive = false),
-        OcrTarget.CustomField("Database", sensitive = false),
-        OcrTarget.CustomField("Connection String", sensitive = true),
-        OcrTarget.Notes,
-    )
-    CredentialType.EMAIL -> listOf(
-        OcrTarget.Username,
-        OcrTarget.Password,
-        OcrTarget.CustomField("IMAP Host", sensitive = false),
-        OcrTarget.CustomField("SMTP Host", sensitive = false),
-        OcrTarget.CustomField("App Password", sensitive = true),
-        OcrTarget.Notes,
-    )
+fun ocrTargetsFor(type: CredentialType): List<OcrTarget> {
+    if (type == CredentialType.SECURE_NOTE || type == CredentialType.OTHER) {
+        return listOf(OcrTarget.Notes)
+    }
+    val customFieldTargets = FieldLabelCatalog.suggestionsFor(type)
+        .map { OcrTarget.CustomField(it.label, it.sensitive) }
+    val urlTarget = if (type == CredentialType.LOGIN || type == CredentialType.PASSWORD) {
+        listOf(OcrTarget.Url)
+    } else {
+        emptyList()
+    }
+    return listOf(OcrTarget.Username, OcrTarget.Password) + urlTarget + customFieldTargets + OcrTarget.Notes
 }
