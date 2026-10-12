@@ -13,7 +13,10 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD6E4FF),
     onPrimaryContainer = Color(0xFF001C57),
-    secondary = Color(0xFF0694A2),
+    // secondary follows primary: nothing in the app reads it directly, but M3
+    // components do (the active bottom-navigation label is drawn in `secondary`
+    // since material3 1.4), and a separate cyan there read as a foreign accent.
+    secondary = Color(0xFF1A56DB),
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFE3E6EC),
     onSecondaryContainer = Color(0xFF1A1C24),
@@ -41,8 +44,9 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = Color(0xFF00215D),
     primaryContainer = Color(0xFF003399),
     onPrimaryContainer = Color(0xFFDAE2FF),
-    secondary = Color(0xFF4ECDC4),
-    onSecondary = Color(0xFF003737),
+    // secondary follows primary (see the light scheme).
+    secondary = Color(0xFF6C9FFF),
+    onSecondary = Color(0xFF00215D),
     secondaryContainer = Color(0xFF343842),
     onSecondaryContainer = Color(0xFFFFFFFF),
     tertiary = Color(0xFFFF6B6B),
