@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
@@ -201,7 +202,7 @@ fun VaultScreen(
                 // ── Favorites ─────────────────────────────────────────────────────
                 item(key = "favorites") {
                     TagRow(
-                        icon = Icons.Default.FavoriteBorder,
+                        icon = FavoriteIcons.Outlined,
                         name = "Favorites",
                         count = favoriteCount,
                         onClick = { onTagClick(TAG_FAVORITES) },

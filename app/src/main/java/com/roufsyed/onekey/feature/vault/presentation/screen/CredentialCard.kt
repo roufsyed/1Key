@@ -5,8 +5,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -122,12 +122,11 @@ private fun CredentialCardImpl(
                     tint = MaterialTheme.colorScheme.primary,
                 )
                 if (isFavorite && !isSelected) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
+                    FavoriteIcon(
+                        isFavorite = true,
                         contentDescription = "Favorited",
-                        tint = MaterialTheme.colorScheme.tertiary,
+                        size = 18.dp,
                         modifier = Modifier
-                            .size(16.dp)
                             .align(Alignment.BottomEnd)
                             .offset(x = 4.dp, y = 4.dp),
                     )

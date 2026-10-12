@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.*
@@ -194,16 +195,12 @@ fun TaggedCredentialListScreen(
                             IconButton(
                                 onClick = { viewModel.setFavouriteOnSelected(!selectedAreAllFavourite) },
                             ) {
-                                Icon(
-                                    imageVector = if (selectedAreAllFavourite)
-                                        Icons.Default.Favorite
-                                    else
-                                        Icons.Default.FavoriteBorder,
+                                FavoriteIcon(
+                                    isFavorite = selectedAreAllFavourite,
                                     contentDescription = if (selectedAreAllFavourite)
                                         "Remove from favourites"
                                     else
                                         "Mark as favourite",
-                                    tint = MaterialTheme.colorScheme.primary,
                                 )
                             }
                             IconButton(onClick = { showDeleteDialog = true }) {

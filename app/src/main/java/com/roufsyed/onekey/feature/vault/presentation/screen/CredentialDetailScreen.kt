@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
@@ -296,11 +297,9 @@ private fun CredentialViewContent(
                 actions = {
                     if (!isInRecycleBin) {
                         IconButton(onClick = onToggleFavorite) {
-                            Icon(
-                                if (credential.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            FavoriteIcon(
+                                isFavorite = credential.isFavorite,
                                 contentDescription = if (credential.isFavorite) "Remove from favourites" else "Add to favourites",
-                                tint = if (credential.isFavorite) MaterialTheme.colorScheme.primary
-                                       else LocalContentColor.current,
                             )
                         }
                         IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "Edit") }

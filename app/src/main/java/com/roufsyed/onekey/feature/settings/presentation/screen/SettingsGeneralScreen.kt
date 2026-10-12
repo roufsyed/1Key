@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIconSize
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Subject
 import androidx.compose.material.icons.filled.*
@@ -137,7 +139,7 @@ fun SettingsGeneralScreen(
                                 )
                             },
                             leadingContent = {
-                                Icon(Icons.Default.Favorite, contentDescription = null)
+                                Icon(FavoriteIcons.Filled, contentDescription = null, modifier = Modifier.size(FavoriteIconSize))
                             },
                             trailingContent = {
                                 Switch(

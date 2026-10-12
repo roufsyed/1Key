@@ -26,6 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.automirrored.filled.StickyNote2
@@ -1326,7 +1328,7 @@ private fun PreviewPhaseBody(
                             }
                         }
                     }
-                    FieldToggleRow("Favourites", Icons.Default.Favorite, opts.isFavorite) {
+                    FieldToggleRow("Favourites", FavoriteIcons.Filled, opts.isFavorite) {
                         onOptsChange(opts.copy(isFavorite = it))
                     }
                 }
@@ -1913,12 +1915,7 @@ private fun PreviewCredentialCard(
                     )
                 }
                 if (opts.isFavorite && credential.isFavorite) {
-                    Icon(
-                        Icons.Default.Favorite,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
+                    FavoriteIcon(isFavorite = true, contentDescription = null, size = 16.dp)
                 }
             }
 

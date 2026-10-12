@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIconSize
+import com.roufsyed.onekey.core.presentation.theme.FavoriteIcons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -609,7 +612,7 @@ private fun OneKeyBottomNav(
             NavigationBarItem(
                 selected = currentRoute == Screen.Favourites.route,
                 onClick = { onNavigate(Screen.Favourites.route) },
-                icon = { Icon(Icons.Default.Favorite, contentDescription = "Favourites") },
+                icon = { Icon(FavoriteIcons.Filled, contentDescription = "Favourites", modifier = Modifier.size(FavoriteIconSize)) },
                 label = { Text("Favourites") },
                 alwaysShowLabel = false,
             )
