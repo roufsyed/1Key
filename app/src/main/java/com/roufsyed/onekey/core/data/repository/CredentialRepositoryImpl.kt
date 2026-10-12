@@ -312,6 +312,8 @@ class CredentialRepositoryImpl @Inject constructor(
             // That's the only signal we have telling "imported" from "manual".
             importedAt = importedAt,
             type = type.name,
+            // Enum name, like `type`. Plaintext UI preference; see CardTheme.
+            cardTheme = cardTheme.name,
             deletedAt = deletedAt,
             // OTP metadata only carries meaning when a secret is enrolled. When
             // otpParams is null we still write the column DEFAULTs (TOTP/SHA1/6/30)

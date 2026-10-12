@@ -193,6 +193,18 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
     }
 }
 
+// Adds `card_theme`: the colour theme of the flip card shown for CREDIT_CARD and
+// BANK_ACCOUNT credentials, stored as the CardTheme enum NAME (same convention
+// as `type`). Plaintext UI preference, not a secret. NOT NULL DEFAULT 'GRAPHITE'
+// so every pre-v16 row reads as the neutral default with no unlock-time
+// backfill. The DEFAULT clause must stay identical to the entity's
+// @ColumnInfo(defaultValue) or Room's schema validation fails at open.
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE credentials ADD COLUMN card_theme TEXT NOT NULL DEFAULT 'GRAPHITE'")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -209,7 +221,7 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 
 @Database(
     entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 15,
+    version = 16,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

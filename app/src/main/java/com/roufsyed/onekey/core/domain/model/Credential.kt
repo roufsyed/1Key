@@ -39,6 +39,12 @@ data class Credential(
      * audit-trail field: read paths surface it; in-app save paths leave it null.
      */
     val importedAt: Long? = null,
+    /**
+     * Colour theme of the flip card shown for CREDIT_CARD and BANK_ACCOUNT
+     * credentials. Stored for every type (inert on the others) and defaults to
+     * [CardTheme.GRAPHITE]; see [CardTheme] for the storage contract.
+     */
+    val cardTheme: CardTheme = CardTheme.GRAPHITE,
 ) {
     companion object {
         /**

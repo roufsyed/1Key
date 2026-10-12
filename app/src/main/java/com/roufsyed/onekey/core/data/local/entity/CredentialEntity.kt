@@ -89,6 +89,14 @@ data class CredentialEntity(
     // rows are silently re-encrypted to v2 on the next unlock by
     // CredentialCipherMigrator - without bumping `updated_at`.
     @ColumnInfo(name = "cipher_version", defaultValue = "0") val cipherVersion: Int = 0,
+    // ── Card theme (added in DB v16) ─────────────────────────────────────────
+    // Enum NAME of CardTheme ("GRAPHITE", "MIDNIGHT", ...), the same convention
+    // as `type`. Plaintext UI preference, not a secret - see CardTheme for the
+    // leak analysis. NOT NULL DEFAULT 'GRAPHITE' so pre-v16 rows read as the
+    // neutral default without an unlock-time backfill. The defaultValue here
+    // must match MIGRATION_15_16's DEFAULT clause exactly, otherwise Room's
+    // schema validation (and OneKeyDatabaseMigration15To16Test) fails.
+    @ColumnInfo(name = "card_theme", defaultValue = "GRAPHITE") val cardTheme: String = "GRAPHITE",
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

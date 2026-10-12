@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.core.data.snapshot
 
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
+import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.core.security.HKDF_FIELD_KEY_INFO
 import com.roufsyed.onekey.core.security.HKDF_TITLE_KEY_INFO
@@ -180,6 +181,33 @@ class CredentialDecryptorTest {
         assertEquals("T", out!!.title)
     }
 
+    // ── card_theme mapping (DB v16) ──────────────────────────────────────
+
+    @Test fun decrypt_maps_known_card_theme_name_to_enum() {
+        val entity = buildV2Entity(id = "card", title = "Visa", cardTheme = "MIDNIGHT")
+        assertEquals(CardTheme.MIDNIGHT, decryptor.decrypt(entity).cardTheme)
+    }
+
+    @Test fun decrypt_falls_back_to_default_theme_for_unknown_name() {
+        // A newer app version (or a hand-edited DB) may store a name this build
+        // does not know. The read path must degrade to the neutral default, never throw.
+        val entity = buildV2Entity(id = "future", title = "T", cardTheme = "NOT_A_THEME")
+        assertEquals(CardTheme.GRAPHITE, decryptor.decrypt(entity).cardTheme)
+    }
+
+    @Test fun decrypt_reads_pre_v16_default_as_graphite() {
+        // Pre-v16 rows carry the SQL DEFAULT written by MIGRATION_15_16.
+        val entity = buildV2Entity(id = "legacy", title = "T", cardTheme = "GRAPHITE")
+        assertEquals(CardTheme.GRAPHITE, decryptor.decrypt(entity).cardTheme)
+    }
+
+    @Test fun lean_projection_is_unaffected_by_card_theme() = runBlocking {
+        val entity = buildV2Entity(id = "card", title = "Visa", cardTheme = "MIDNIGHT")
+        val lean = decryptor.decryptAllLeanWithLockCheck(listOf(entity)).single()
+        assertEquals("card", lean.id)
+        assertEquals("Visa", lean.title)
+    }
+
     // ── Subkey memoisation ───────────────────────────────────────────────
 
     @Test fun memoisedFor_field_populated_after_first_lean_call() = runBlocking {
@@ -267,6 +295,7 @@ class CredentialDecryptorTest {
         url: String = "https://x.example",
         notes: String = "",
         totpSecret: String? = null,
+        cardTheme: String = "GRAPHITE",
     ): CredentialEntity {
         val fieldKey = crypto.deriveSubkey(vaultKey, HKDF_FIELD_KEY_INFO)
         val titleKey = crypto.deriveSubkey(vaultKey, HKDF_TITLE_KEY_INFO)
@@ -308,6 +337,7 @@ class CredentialDecryptorTest {
             totpPeriod = 30L,
             hotpCounter = null,
             cipherVersion = 2,
+            cardTheme = cardTheme,
         )
     }
 

@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.core.data.snapshot
 
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
+import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.CustomField
@@ -300,6 +301,10 @@ class CredentialDecryptor @Inject constructor(
             // non-null means "arrived via a foreign import". Never back-filled
             // for legacy rows - we don't know what was imported.
             importedAt = entity.importedAt,
+            // Enum name validated on read: unknown or future names collapse to
+            // the neutral default instead of throwing (crafted backups, a palette
+            // from a newer build). Pre-v16 rows carry the SQL DEFAULT 'GRAPHITE'.
+            cardTheme = CardTheme.fromNameOrDefault(entity.cardTheme),
         )
     }
 
