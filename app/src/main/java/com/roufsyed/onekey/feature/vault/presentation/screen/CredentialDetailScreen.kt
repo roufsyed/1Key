@@ -34,6 +34,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
@@ -1064,7 +1065,17 @@ private fun CredentialEditContent(
             modifier = Modifier.padding(padding).imePadding().fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            LockAwareOutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title *") }, modifier = Modifier.fillMaxWidth(), isError = title.isBlank())
+            LockAwareOutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Title *") },
+                modifier = Modifier.fillMaxWidth(),
+                isError = title.isBlank(),
+                // Titles read as names: start the keyboard shifted so the first
+                // letter comes out capital. Only the IME state changes; what the
+                // user types is stored as typed.
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            )
 
             // Card appearance (CREDIT_CARD / BANK_ACCOUNT): live preview of the flip card
             // fed by the hoisted title and custom-field state, plus the theme swatches.
@@ -1764,6 +1775,7 @@ private fun CustomFieldRow(
                 placeholder = { Text("e.g. API Key, PIN, Recovery Code") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
             )
 
             if (slot == CardSlot.SCHEME) {
