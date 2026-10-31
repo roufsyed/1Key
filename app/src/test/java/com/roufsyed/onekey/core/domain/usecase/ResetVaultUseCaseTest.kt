@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.core.domain.usecase
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
@@ -39,7 +40,7 @@ class ResetVaultUseCaseTest {
         val creds = RecordingCredentialRepository(calls)
         val history = RecordingHistoryRepository(calls)
 
-        val useCase = ResetVaultUseCase(auth, creds, history)
+        val useCase = ResetVaultUseCase(auth, creds, history, FakePasskeyRepository())
         val result = useCase()
 
         assertTrue("Reset must succeed when every step returns Success", result is AppResult.Success)
@@ -63,7 +64,7 @@ class ResetVaultUseCaseTest {
         val creds = RecordingCredentialRepository(calls)
         val history = RecordingHistoryRepository(calls)
 
-        val useCase = ResetVaultUseCase(auth, creds, history)
+        val useCase = ResetVaultUseCase(auth, creds, history, FakePasskeyRepository())
         val result = useCase()
 
         assertTrue(result is AppResult.Error)
@@ -82,7 +83,7 @@ class ResetVaultUseCaseTest {
         }
         val history = RecordingHistoryRepository(calls)
 
-        val useCase = ResetVaultUseCase(auth, creds, history)
+        val useCase = ResetVaultUseCase(auth, creds, history, FakePasskeyRepository())
         val result = useCase()
 
         assertTrue(result is AppResult.Error)
@@ -100,7 +101,7 @@ class ResetVaultUseCaseTest {
             deleteAllResult = AppResult.Error(IllegalStateException("simulated history-DB failure"))
         }
 
-        val useCase = ResetVaultUseCase(auth, creds, history)
+        val useCase = ResetVaultUseCase(auth, creds, history, FakePasskeyRepository())
         val result = useCase()
 
         assertTrue(result is AppResult.Error)

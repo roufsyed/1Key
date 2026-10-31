@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.settings.presentation.viewmodel
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import android.app.ActivityManager
 import android.app.Application
 import android.content.Context
@@ -449,7 +450,7 @@ class SettingsKdfStrengthViewModelTest {
         val historyRepository = StubCredentialHistoryRepository()
         val tagRepository = StubTagRepository()
         val deleteTagUseCase = DeleteTagUseCase(tagRepository, credentialRepository)
-        val resetVaultUseCase = ResetVaultUseCase(auth, credentialRepository, historyRepository)
+        val resetVaultUseCase = ResetVaultUseCase(auth, credentialRepository, historyRepository, FakePasskeyRepository())
         val seedDataUseCase = SeedDataUseCase(credentialRepository)
         val lockReasonStore = LockReasonStore(appPrefs, testScope)
         val authAttemptsStore = AuthAttemptsStore()

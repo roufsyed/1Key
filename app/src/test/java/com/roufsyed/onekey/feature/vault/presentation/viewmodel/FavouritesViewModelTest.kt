@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.vault.presentation.viewmodel
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import android.app.Application
 import app.cash.turbine.test
 import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
@@ -74,7 +75,7 @@ class FavouritesViewModelTest {
         // override this default explicitly.
         snapshot = MutableStateFlow(SnapshotState.Loaded(emptyList()))
         deleteUseCase = DeleteCredentialUseCase(repo)
-        hardDeleteUseCase = HardDeleteCredentialUseCase(repo, historyRepo)
+        hardDeleteUseCase = HardDeleteCredentialUseCase(repo, historyRepo, FakePasskeyRepository())
     }
 
     @After fun teardown() {
@@ -387,7 +388,7 @@ class FavouritesViewModelTest {
         credentialRepository = repo,
         deleteCredential = deleteUseCase,
         hardDeleteCredential = hardDeleteUseCase,
-        restoreFromRecycleBin = com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+        restoreFromRecycleBin = com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo, FakePasskeyRepository()),
         appPrefs = prefs,
         snapshotState = snapshot,
         filterDispatcher = testDispatcher,

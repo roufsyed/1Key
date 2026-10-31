@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.vault.presentation.viewmodel
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import android.app.Application
 import androidx.lifecycle.SavedStateHandle
 import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
@@ -76,7 +77,7 @@ class TaggedCredentialListViewModelTest {
         // override this default explicitly.
         snapshot = MutableStateFlow(SnapshotState.Loaded(emptyList()))
         deleteUseCase = DeleteCredentialUseCase(repo)
-        hardDeleteUseCase = HardDeleteCredentialUseCase(repo, historyRepo)
+        hardDeleteUseCase = HardDeleteCredentialUseCase(repo, historyRepo, FakePasskeyRepository())
     }
 
     @After fun teardown() {
@@ -252,7 +253,7 @@ class TaggedCredentialListViewModelTest {
         val saved = SavedStateHandle(mapOf("tagName" to "Work"))
         val vmWork = TaggedCredentialListViewModel(
             saved, repo, deleteUseCase, hardDeleteUseCase,
-            com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+            com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo, FakePasskeyRepository()),
             prefs, snapshot, testDispatcher, notesSearch,
         )
         vmWork.setSearchQuery("github")
@@ -262,7 +263,7 @@ class TaggedCredentialListViewModelTest {
         val savedBanking = SavedStateHandle(mapOf("tagName" to "Banking"))
         val vmBank = TaggedCredentialListViewModel(
             savedBanking, repo, deleteUseCase, hardDeleteUseCase,
-            com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+            com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo, FakePasskeyRepository()),
             prefs, snapshot, testDispatcher, notesSearch,
         )
         assertEquals("", vmBank.searchQuery.value)
@@ -495,7 +496,7 @@ class TaggedCredentialListViewModelTest {
         val saved = SavedStateHandle(mapOf("tagName" to tag))
         return TaggedCredentialListViewModel(
             saved, repo, deleteUseCase, hardDeleteUseCase,
-            com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo),
+            com.roufsyed.onekey.core.domain.usecase.RestoreFromRecycleBinUseCase(repo, historyRepo, FakePasskeyRepository()),
             prefs, snapshot, testDispatcher, notesSearch,
         )
     }

@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.core.domain.usecase
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
@@ -29,7 +30,7 @@ class RestoreFromRecycleBinUseCaseTest {
         val existing = card(id = "e1", theme = CardTheme.MIDNIGHT)
         val binItem = card(id = "b1", theme = CardTheme.CORAL, deletedAt = 5L)
         val repo = InMemoryCredentialRepository(listOf(existing, binItem))
-        val useCase = RestoreFromRecycleBinUseCase(repo, history)
+        val useCase = RestoreFromRecycleBinUseCase(repo, history, FakePasskeyRepository())
 
         val result = useCase.mergeInto(existing, binItem)
 
@@ -46,7 +47,7 @@ class RestoreFromRecycleBinUseCaseTest {
         val existing = card(id = "e1", theme = CardTheme.GRAPHITE)
         val binItem = card(id = "b1", theme = CardTheme.CORAL, deletedAt = 5L)
         val repo = InMemoryCredentialRepository(listOf(existing, binItem))
-        val useCase = RestoreFromRecycleBinUseCase(repo, history)
+        val useCase = RestoreFromRecycleBinUseCase(repo, history, FakePasskeyRepository())
 
         useCase.mergeInto(existing, binItem)
 
@@ -59,7 +60,7 @@ class RestoreFromRecycleBinUseCaseTest {
         val existing = card(id = "e1", theme = CardTheme.MIDNIGHT, username = "", password = "keep")
         val binItem = card(id = "b1", theme = CardTheme.CORAL, username = "alice", password = "drop", deletedAt = 5L)
         val repo = InMemoryCredentialRepository(listOf(existing, binItem))
-        val useCase = RestoreFromRecycleBinUseCase(repo, history)
+        val useCase = RestoreFromRecycleBinUseCase(repo, history, FakePasskeyRepository())
 
         useCase.mergeInto(existing, binItem)
 
@@ -73,7 +74,7 @@ class RestoreFromRecycleBinUseCaseTest {
         val existing = card(id = "e1", title = "Visa", username = "alice")
         val binItem = card(id = "b1", title = " Visa ", username = "alice ", deletedAt = 5L)
         val repo = InMemoryCredentialRepository(listOf(existing, binItem))
-        val useCase = RestoreFromRecycleBinUseCase(repo, history)
+        val useCase = RestoreFromRecycleBinUseCase(repo, history, FakePasskeyRepository())
 
         assertEquals(existing, useCase.findConflict(binItem))
         assertNull(useCase.findConflict(card(id = "b2", title = "Other", deletedAt = 5L)))

@@ -4,12 +4,14 @@ import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.repository.AuthRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialHistoryRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import javax.inject.Inject
 
 class ResetVaultUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
+    private val passkeyRepository: PasskeyRepository,
 ) {
     /**
      * Locks the vault FIRST, then deletes credential + history data, then
@@ -48,6 +50,10 @@ class ResetVaultUseCase @Inject constructor(
         // STEP 3 - Delete history rows.
         val historyResult = historyRepository.deleteAll()
         if (historyResult is AppResult.Error) return historyResult
+
+        // STEP 3b - Delete passkey rows (no foreign key, so never implicit).
+        val passkeyResult = passkeyRepository.deleteAll()
+        if (passkeyResult is AppResult.Error) return passkeyResult
 
         // STEP 4 - Reset auth state (master-password verifier, PIN,
         // biometric pref, etc.). The new setup flow runs from scratch.

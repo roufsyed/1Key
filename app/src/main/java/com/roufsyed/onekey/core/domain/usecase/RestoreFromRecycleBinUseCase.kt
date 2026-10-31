@@ -4,6 +4,7 @@ import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.repository.CredentialHistoryRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import javax.inject.Inject
 
 /**
@@ -15,6 +16,7 @@ import javax.inject.Inject
 class RestoreFromRecycleBinUseCase @Inject constructor(
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
+    private val passkeyRepository: PasskeyRepository,
 ) {
     /** Returns the active credential that collides with [binItem], or null if none. */
     suspend fun findConflict(binItem: Credential): Credential? {
@@ -30,12 +32,15 @@ class RestoreFromRecycleBinUseCase @Inject constructor(
     /**
      * Merge the bin item's fields into [existing] (existing wins where both have a value),
      * save it, then permanently remove the bin item along with its history. Net result:
-     * one richer active row, zero duplicates.
+     * one richer active row, zero duplicates. The bin item's passkeys are moved onto
+     * the surviving row rather than deleted: a passkey is a key the site already
+     * trusts, so losing it would lock the user out of that site.
      */
     suspend fun mergeInto(existing: Credential, binItem: Credential): AppResult<Unit> {
         val merged = merge(existing, binItem)
         val saveResult = credentialRepository.saveCredential(merged)
         if (saveResult is AppResult.Error) return saveResult
+        passkeyRepository.reassignCredential(binItem.id, existing.id)
         historyRepository.deleteForCredential(binItem.id)
         return credentialRepository.purgeFromRecycleBin(binItem.id)
     }

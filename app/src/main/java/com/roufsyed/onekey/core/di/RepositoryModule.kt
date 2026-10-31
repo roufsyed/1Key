@@ -5,6 +5,7 @@ import com.roufsyed.onekey.core.data.repository.AuthRepositoryImpl
 import com.roufsyed.onekey.core.data.repository.CredentialHistoryRepositoryImpl
 import com.roufsyed.onekey.core.data.repository.CredentialRepositoryImpl
 import com.roufsyed.onekey.core.data.repository.NotesDisplayPrefsRepositoryImpl
+import com.roufsyed.onekey.core.data.repository.PasskeyRepositoryImpl
 import com.roufsyed.onekey.core.data.repository.TagRepositoryImpl
 import com.roufsyed.onekey.core.data.wordlist.AssetWordlistProvider
 import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
@@ -12,6 +13,7 @@ import com.roufsyed.onekey.core.domain.repository.AuthRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialHistoryRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
 import com.roufsyed.onekey.core.domain.repository.NotesDisplayPrefsRepository
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import com.roufsyed.onekey.core.domain.repository.TagRepository
 import com.roufsyed.onekey.core.domain.wordlist.WordlistProvider
 import com.roufsyed.onekey.feature.sync.data.AndroidSyncCompletionNotifier
@@ -51,6 +53,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindCredentialHistoryRepository(impl: CredentialHistoryRepositoryImpl): CredentialHistoryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPasskeyRepository(impl: PasskeyRepositoryImpl): PasskeyRepository
 
     @Binds
     @Singleton
