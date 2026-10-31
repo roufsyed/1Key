@@ -63,6 +63,9 @@ class PrivilegedAllowlist @Inject constructor(
         return merged
     }
 
+    /** Packages any bundled list already trusts; Settings hides these from the "add a browser" picker. */
+    fun bundledPackages(): Set<String> = bundled.mapTo(HashSet()) { it.packageName }
+
     /** Counts for the Settings summary line. */
     fun bundledCounts(): BundledCounts = BundledCounts(
         google = readAsset(ASSET_GOOGLE).size,

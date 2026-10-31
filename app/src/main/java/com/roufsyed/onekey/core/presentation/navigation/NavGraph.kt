@@ -50,6 +50,7 @@ import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsFaqScree
 import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsGeneralScreen
 import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsPrivacyPolicyScreen
 import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsAutofillScreen
+import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsPasskeysScreen
 import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsScreen
 import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsKdfStrengthScreen
 import com.roufsyed.onekey.feature.settings.presentation.screen.SettingsSecretKeyScreen
@@ -113,6 +114,7 @@ sealed class Screen(val route: String) {
     data object SettingsSecretKeyEnableExplainer : Screen("settings/security/secret_key/explainer")
     data object SettingsSecretKeyEmergencyKit : Screen("settings/security/secret_key/emergency_kit")
     data object SettingsAutofill : Screen("settings/autofill")
+    data object SettingsPasskeys : Screen("settings/passkeys")
     data object SettingsSync : Screen("settings/sync")
     data object SettingsPrivacyPolicy : Screen("settings/privacy_policy")
     data object SettingsFaq : Screen("settings/faq")
@@ -395,6 +397,7 @@ fun OneKeyNavGraph(
                         onGeneral = { navController.navigate(Screen.SettingsGeneral.route) },
                         onSecurity = { navController.navigate(Screen.SettingsSecurity.route) },
                         onAutofill = { navController.navigate(Screen.SettingsAutofill.route) },
+                        onPasskeys = { navController.navigate(Screen.SettingsPasskeys.route) },
                         onBackup = { navController.navigate(Screen.Backup.route) },
                         onSync = { navController.navigate(Screen.SettingsSync.route) },
                         onPrivacyPolicy = { navController.navigate(Screen.SettingsPrivacyPolicy.route) },
@@ -491,6 +494,10 @@ fun OneKeyNavGraph(
 
                 composable(Screen.SettingsAutofill.route) {
                     SettingsAutofillScreen(onBack = { navController.popBackStack() })
+                }
+
+                composable(Screen.SettingsPasskeys.route) {
+                    SettingsPasskeysScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable(Screen.SettingsSync.route) {

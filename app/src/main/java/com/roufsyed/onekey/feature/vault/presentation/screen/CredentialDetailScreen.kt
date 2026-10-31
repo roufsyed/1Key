@@ -62,6 +62,8 @@ import com.roufsyed.onekey.core.domain.model.OtpParams
 import com.roufsyed.onekey.core.domain.model.OtpType
 import com.roufsyed.onekey.core.domain.model.Tag
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDialog
+import com.roufsyed.onekey.feature.vault.presentation.screen.passkey.PasskeysSection
+import com.roufsyed.onekey.core.domain.model.PasskeySummary
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDropdownMenu
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareOutlinedTextField
@@ -132,6 +134,7 @@ fun CredentialDetailScreen(
     // so the credential data carried by uiState stays purely the live row.
     val displayAccessedAt by viewModel.displayAccessedAt.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle(initialValue = emptyList())
+    val passkeys by viewModel.passkeys.collectAsStateWithLifecycle(initialValue = emptyList())
     val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState) {
@@ -170,6 +173,7 @@ fun CredentialDetailScreen(
                     credential = state.credential,
                     displayAccessedAt = displayAccessedAt,
                     history = history,
+                    passkeys = passkeys,
                     binEnabled = binEnabled,
                     isInRecycleBin = state.credential.deletedAt != null,
                     clipboardCountdown = clipboardCountdown,
@@ -182,6 +186,7 @@ fun CredentialDetailScreen(
                     onDelete = viewModel::delete,
                     onDeleteNow = viewModel::deleteNow,
                     onRestore = viewModel::restore,
+                    onDeletePasskey = viewModel::deletePasskey,
                     onCopyUsername = viewModel::copyUsername,
                     onCopyPassword = viewModel::copyPassword,
                     onCopyCardSlot = viewModel::copyCardSlot,
@@ -219,6 +224,7 @@ private fun CredentialViewContent(
     credential: Credential,
     displayAccessedAt: Long?,
     history: List<CredentialHistoryEntry>,
+    passkeys: List<PasskeySummary>,
     binEnabled: Boolean,
     isInRecycleBin: Boolean,
     clipboardCountdown: Int?,
@@ -231,6 +237,7 @@ private fun CredentialViewContent(
     onDelete: () -> Unit,
     onDeleteNow: () -> Unit,
     onRestore: () -> Unit,
+    onDeletePasskey: (String) -> Unit,
     onCopyUsername: () -> Unit,
     onCopyPassword: () -> Unit,
     onCopyCardSlot: (slot: CardSlot, exact: Boolean) -> Unit,
@@ -457,6 +464,11 @@ private fun CredentialViewContent(
                         TotpWidget(params = params)
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     }
+            }
+            // Passkeys owned by this entry (view mode only; nothing to edit, only delete).
+            if (passkeys.isNotEmpty()) {
+                PasskeysSection(passkeys = passkeys, onDelete = onDeletePasskey)
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
             // Fields without a value are never saved any more; skip any an earlier
             // save left behind so they do not render as empty rows.

@@ -15,6 +15,8 @@ import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.Tag
 import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialHistoryRepository
+import com.roufsyed.onekey.core.domain.model.PasskeySummary
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
 import com.roufsyed.onekey.core.domain.repository.NotesDisplayPrefsRepository
 import com.roufsyed.onekey.core.domain.repository.TagRepository
@@ -68,6 +70,7 @@ class CredentialDetailViewModel @Inject constructor(
     private val restoreFromBin: RestoreFromRecycleBinUseCase,
     private val credentialRepository: CredentialRepository,
     private val historyRepository: CredentialHistoryRepository,
+    private val passkeyRepository: PasskeyRepository,
     private val tagRepository: TagRepository,
     private val secureClipboard: SecureClipboardManager,
     private val autoLockManager: AutoLockManager,
@@ -177,6 +180,19 @@ class CredentialDetailViewModel @Inject constructor(
     val history: Flow<List<CredentialHistoryEntry>> = credentialId
         ?.let { id -> historyRepository.observeHistory(id) }
         ?: flowOf(emptyList())
+
+    /**
+     * Lean passkey rows for the detail screen (no key material). Empty while the
+     * vault is locked, like history.
+     */
+    val passkeys: Flow<List<PasskeySummary>> = credentialId
+        ?.let { id -> passkeyRepository.observeForCredential(id) }
+        ?: flowOf(emptyList())
+
+    /** Removes one passkey. The site keeps its public key; the user signs in another way and registers again. */
+    fun deletePasskey(passkeyId: String) {
+        viewModelScope.launch { passkeyRepository.deleteById(passkeyId) }
+    }
 
     init {
         if (credentialId == null) {

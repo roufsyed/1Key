@@ -15,7 +15,7 @@ sealed class SettingsAction {
 }
 
 enum class SettingsDestination {
-    General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword, Autofill, Sync
+    General, Security, Backup, Faq, PrivacyPolicy, SetupPin, ChangePassword, Autofill, Sync, Passkeys
 }
 
 // Only dialogs whose state lives in SettingsScreen itself.
@@ -244,6 +244,15 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         keywords = listOf("autofill", "fill", "input method", "service", "auto-fill", "password fill", "cross host", "save url"),
         action = SettingsAction.Navigate(SettingsDestination.Autofill),
         highlightKey = SettingsHighlightKeys.AUTOFILL_ENABLED,
+    ),
+
+    // ── Passkeys ─────────────────────────────────────────────────────────────
+    SettingsEntry(
+        title = "Passkeys",
+        subtitle = "Sign in without passwords, stored in your vault",
+        sectionLabel = "Passkeys",
+        keywords = listOf("passkey", "passkeys", "webauthn", "fido", "credential manager", "trusted browsers", "sign in without password"),
+        action = SettingsAction.Navigate(SettingsDestination.Passkeys),
     ),
 
     // ── Backup ───────────────────────────────────────────────────────────────

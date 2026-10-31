@@ -56,6 +56,7 @@ fun SettingsScreen(
     onGeneral: () -> Unit,
     onSecurity: () -> Unit,
     onAutofill: () -> Unit,
+    onPasskeys: () -> Unit,
     onBackup: () -> Unit,
     onSync: () -> Unit,
     onPrivacyPolicy: () -> Unit,
@@ -153,6 +154,7 @@ fun SettingsScreen(
                 SettingsDestination.SetupPin -> onSetupPin()
                 SettingsDestination.ChangePassword -> onChangePassword()
                 SettingsDestination.Autofill -> onAutofill()
+                SettingsDestination.Passkeys -> onPasskeys()
                 SettingsDestination.Sync -> onSync()
             }
             is SettingsAction.OpenDialogOn -> when (action.dialogId) {
@@ -236,6 +238,13 @@ fun SettingsScreen(
                         title = "Autofill",
                         subtitle = "Fill saved logins into other apps and websites",
                         onClick = onAutofill,
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    SettingsMenuRow(
+                        icon = Icons.Default.Key,
+                        title = "Passkeys",
+                        subtitle = "Sign in without passwords, stored in your vault",
+                        onClick = onPasskeys,
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                     SettingsMenuRow(
