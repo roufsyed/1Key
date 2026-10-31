@@ -4,11 +4,17 @@
     keep flowing through the Autofill service, so Android's "Passwords,
     passkeys and accounts" picker lists 1Key for passkeys without changing
     what existing users see for password fills.
+
+    The capability attribute is deliberately NOT namespaced: the framework's
+    CredentialProviderInfoFactory reads it with getAttributeValue(null, "name"),
+    so "android:name" is invisible and the provider is skipped with "Service
+    does not have the required capabilities". settingsSubtitle is read through
+    a styleable and does need the android: prefix.
 -->
 <credential-provider
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsSubtitle="Passkeys in your encrypted vault">
     <capabilities>
-        <capability android:name="android.credentials.TYPE_PUBLIC_KEY_CREDENTIAL" />
+        <capability name="androidx.credentials.TYPE_PUBLIC_KEY_CREDENTIAL" />
     </capabilities>
 </credential-provider>
