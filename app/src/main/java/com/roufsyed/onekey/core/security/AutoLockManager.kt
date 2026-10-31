@@ -46,6 +46,16 @@ class AutoLockManager @Inject constructor(
     // turning the screen off while a camera is open still locks the vault.
     private val inactivitySuppressionCount = AtomicInteger(0)
 
+    // Keeps the vault unlocked across a round trip through Android's credential
+    // selector: the passkey unlock activity finishes, the selector takes the
+    // foreground (onStop fires here), and the sign activity the user picks
+    // returns a few seconds later. Time-boxed so an abandoned selector cannot
+    // leave the vault open: on expiry the normal background rule applies if the
+    // app is still in the background.
+    private var selectorHoldJob: Job? = null
+    @Volatile private var selectorHoldActive = false
+    private var inForeground = false
+
     /**
      * Suppresses the inactivity timer until [releaseInactivitySuppression] is
      * called. Re-entrant - N acquires require N releases. Callers MUST pair
@@ -88,6 +98,36 @@ class AutoLockManager @Inject constructor(
         releaseInactivitySuppression()
     }
 
+    /**
+     * Starts (or restarts) the credential-selector hold. Called by the passkey
+     * unlock-and-list activity right before it hands entries to the system.
+     * Main thread only, like every other entry point here.
+     */
+    fun holdForCredentialSelector() {
+        selectorHoldJob?.cancel()
+        selectorHoldActive = true
+        backgroundJob?.cancel()
+        backgroundJob = null
+        selectorHoldJob = scope.launch {
+            delay(CREDENTIAL_SELECTOR_HOLD_MS)
+            releaseCredentialSelectorHold()
+        }
+    }
+
+    /**
+     * Ends the hold. The passkey sign activity calls it when it finishes; the
+     * hold also calls it on itself when it expires. If the app is in the
+     * background at that moment the background lock starts now, exactly as if
+     * onStop had just fired.
+     */
+    fun releaseCredentialSelectorHold() {
+        if (!selectorHoldActive) return
+        selectorHoldActive = false
+        selectorHoldJob?.cancel()
+        selectorHoldJob = null
+        if (!inForeground) startBackgroundLock()
+    }
+
     init {
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
         scope.launch {
@@ -96,8 +136,11 @@ class AutoLockManager @Inject constructor(
                 if (!unlocked) {
                     idleJob?.cancel()
                     backgroundJob?.cancel()
+                    selectorHoldJob?.cancel()
                     idleJob = null
                     backgroundJob = null
+                    selectorHoldJob = null
+                    selectorHoldActive = false
                 } else {
                     resetIdleTimer()
                 }
@@ -119,23 +162,30 @@ class AutoLockManager @Inject constructor(
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        inForeground = false
+        if (!isVaultUnlocked || pickerActive || selectorHoldActive) return
+        startBackgroundLock()
+    }
+
+    private fun startBackgroundLock() {
         if (!isVaultUnlocked || pickerActive) return
         idleJob?.cancel()
         idleJob = null
         backgroundJob?.cancel()
         backgroundJob = scope.launch {
             val timeout = appPrefs.getBackgroundLockTimeout().first()
-            if (pickerActive) return@launch
+            if (pickerActive || selectorHoldActive) return@launch
             if (timeout == BackgroundLockTimeout.IMMEDIATE) {
                 authRepository.lock()
             } else {
                 delay(timeout.millis)
-                if (isVaultUnlocked && !pickerActive) authRepository.lock()
+                if (isVaultUnlocked && !pickerActive && !selectorHoldActive) authRepository.lock()
             }
         }
     }
 
     override fun onStart(owner: LifecycleOwner) {
+        inForeground = true
         backgroundJob?.cancel()
         backgroundJob = null
         // If a suppression is active (camera flow re-foregrounding mid-session),
@@ -155,5 +205,7 @@ class AutoLockManager @Inject constructor(
 
     private companion object {
         const val ACTIVITY_THROTTLE_MS = 5_000L
+        /** Longest the vault stays unlocked while waiting for the user to pick an entry in the system selector. */
+        const val CREDENTIAL_SELECTOR_HOLD_MS = 60_000L
     }
 }

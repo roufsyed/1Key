@@ -39,6 +39,7 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
 
     @Inject lateinit var planner: PasskeyGetPlanner
     @Inject lateinit var entries: PasskeyEntries
+    @Inject lateinit var unlockGrant: PasskeyUnlockGrant
 
     override val cancelLabel: String = "Cancel sign-in"
 
@@ -50,7 +51,7 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
             MODE_SIGN -> {
                 val request = PendingIntentHandler.retrieveProviderGetCredentialRequest(intent) ?: return false
                 val passkeyId = intent.getStringExtra(EXTRA_PASSKEY_ID) ?: return false
-                ceremony.startSign(request, passkeyId)
+                ceremony.startSign(request, passkeyId, intent.getStringExtra(EXTRA_UNLOCK_GRANT))
             }
             MODE_UNLOCK_AND_LIST -> {
                 beginRequest = PendingIntentHandler.retrieveBeginGetCredentialRequest(intent) ?: return false
@@ -80,8 +81,17 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
                 lifecycleScope.launch {
                     val builder = BeginGetCredentialResponse.Builder()
                     when (val plan = runCatching { planner.plan(request) }.getOrNull()) {
-                        is PasskeyGetPlanner.Plan.Candidates ->
-                            plan.entries.forEach { (option, passkey) -> builder.addCredentialEntry(entries.credentialEntry(option, passkey)) }
+                        is PasskeyGetPlanner.Plan.Candidates -> {
+                            // The user just unlocked for this request. Let that unlock be the
+                            // verification for the entry they pick next (one-shot grant) and keep
+                            // the vault open while the system selector is in front; the sign
+                            // activity ends the hold, or it expires on its own.
+                            val grant = unlockGrant.issue(plan.entries.map { it.second.id }.toSet())
+                            autoLockManager.holdForCredentialSelector()
+                            plan.entries.forEach { (option, passkey) ->
+                                builder.addCredentialEntry(entries.credentialEntry(option, passkey, unlockGrant = grant))
+                            }
+                        }
                         is PasskeyGetPlanner.Plan.Refused -> builder.addAction(entries.explainAction(plan.reason))
                         else -> Unit
                     }
@@ -107,6 +117,15 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
         }
     }
 
+    override fun onDestroy() {
+        // Any finishing instance other than unlock-and-list ends the selector hold:
+        // the sign activity on success, failure or cancel, and the explain screen.
+        if (isFinishing && intent.getStringExtra(EXTRA_MODE) != MODE_UNLOCK_AND_LIST) {
+            autoLockManager.releaseCredentialSelectorHold()
+        }
+        super.onDestroy()
+    }
+
     override fun finishCancelled() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val result = Intent()
@@ -122,6 +141,7 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
         const val EXTRA_MODE = "com.roufsyed.onekey.passkey.MODE"
         const val EXTRA_PASSKEY_ID = "com.roufsyed.onekey.passkey.PASSKEY_ID"
         const val EXTRA_REFUSAL = "com.roufsyed.onekey.passkey.REFUSAL"
+        const val EXTRA_UNLOCK_GRANT = "com.roufsyed.onekey.passkey.UNLOCK_GRANT"
         const val MODE_SIGN = "sign"
         const val MODE_UNLOCK_AND_LIST = "unlock_and_list"
         const val MODE_EXPLAIN = "explain"

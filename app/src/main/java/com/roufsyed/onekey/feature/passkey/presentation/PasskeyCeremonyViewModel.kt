@@ -42,9 +42,11 @@ import javax.inject.Inject
  * Order of gates for every ceremony: vault unlocked, then (create only) the
  * target chosen, then user verification when the relying party asked for it,
  * then the cryptography. An unlock performed inside this ceremony counts as
- * user verification; so does Android 15's single-tap biometric result; so does
- * a fresh biometric, PIN or master-password check on the verification surface.
- * Three failed verification attempts lock the vault, like everywhere else.
+ * user verification; so does the unlock the user did moments earlier in the
+ * unlock-and-list step of the same request ([PasskeyUnlockGrant]); so does
+ * Android 15's single-tap biometric result; so does a fresh biometric, PIN or
+ * master-password check on the verification surface. Three failed verification
+ * attempts lock the vault, like everywhere else.
  */
 @HiltViewModel
 class PasskeyCeremonyViewModel @Inject constructor(
@@ -52,6 +54,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
     private val passkeyRepository: PasskeyRepository,
     private val credentialRepository: CredentialRepository,
     private val callerVerifier: CallerVerifier,
+    private val unlockGrant: PasskeyUnlockGrant,
     @SnapshotStateFlow private val snapshot: StateFlow<@JvmSuppressWildcards SnapshotState>,
 ) : ViewModel() {
 
@@ -88,7 +91,8 @@ class PasskeyCeremonyViewModel @Inject constructor(
         val option: GetPublicKeyCredentialOption,
         val options: RequestOptions,
         val caller: CallerKind,
-        val biometricSatisfied: Boolean,
+        /** Verified before this activity started: system single-tap prompt or the unlock grant. */
+        val preVerified: Boolean,
     )
 
     private class CreateJob(
@@ -96,7 +100,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         val options: CreationOptions,
         val caller: CallerKind,
         val rpId: String,
-        val biometricSatisfied: Boolean,
+        val preVerified: Boolean,
     ) {
         var targetCredentialId: String? = null
         var confirmed = false
@@ -120,9 +124,11 @@ class PasskeyCeremonyViewModel @Inject constructor(
 
     // ── starts ───────────────────────────────────────────────────────────────
 
-    fun startSign(request: ProviderGetCredentialRequest, passkeyId: String) {
+    fun startSign(request: ProviderGetCredentialRequest, passkeyId: String, unlockGrantToken: String? = null) {
         if (started) return
         started = true
+        // Redeem first and once, whatever happens next: a grant must never outlive the launch it was made for.
+        val grantHonoured = unlockGrant.redeem(unlockGrantToken, passkeyId)
         viewModelScope.launch {
             val option = request.credentialOptions.filterIsInstance<GetPublicKeyCredentialOption>().firstOrNull()
                 ?: return@launch fail("The request carried no passkey option.")
@@ -131,7 +137,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
             val caller = callerVerifier.resolve(request.callingAppInfo)
             if (caller is CallerKind.Refused) { _step.value = Step.Explain(caller.reason); return@launch }
             target = options.rpId ?: requesterLabel(caller)
-            sign = SignJob(passkeyId, option, options, caller, request.biometricPromptResult?.isSuccessful == true)
+            sign = SignJob(passkeyId, option, options, caller, preVerified = grantHonoured || request.biometricPromptResult?.isSuccessful == true)
             proceed()
         }
     }
@@ -155,7 +161,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
                 return@launch fail("The app asked for a passkey with an invalid site name.", FailureKind.NOT_ALLOWED)
             }
             target = rpId
-            create = CreateJob(callingRequest, options, caller, rpId, request.biometricPromptResult?.isSuccessful == true)
+            create = CreateJob(callingRequest, options, caller, rpId, preVerified = request.biometricPromptResult?.isSuccessful == true)
             proceed()
         }
     }
@@ -221,7 +227,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         if (listAfterUnlock) { _step.value = Step.ListAfterUnlock; return }
 
         sign?.let { job ->
-            if (job.options.userVerification.wantsVerification && !userVerified(job.biometricSatisfied)) {
+            if (job.options.userVerification.wantsVerification && !userVerified(job.preVerified)) {
                 _step.value = Step.Verify(target, error = null, busy = false)
                 return
             }
@@ -233,7 +239,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
                 _step.value = Step.Create(buildForm(job))
                 return
             }
-            if (job.options.userVerification.wantsVerification && !userVerified(job.biometricSatisfied)) {
+            if (job.options.userVerification.wantsVerification && !userVerified(job.preVerified)) {
                 _step.value = Step.Verify(target, error = null, busy = false)
                 return
             }
@@ -241,7 +247,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         }
     }
 
-    private fun userVerified(biometricSatisfied: Boolean): Boolean = freshUnlock || verified || biometricSatisfied
+    private fun userVerified(preVerified: Boolean): Boolean = freshUnlock || verified || preVerified
 
     private fun verifyWith(check: suspend () -> AppResult<Unit>) {
         viewModelScope.launch {
@@ -281,7 +287,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         if (!job.options.allows(passkey.webauthnCredentialId)) {
             return fail("The site did not ask for this passkey.", FailureKind.NOT_ALLOWED)
         }
-        val uv = userVerified(job.biometricSatisfied)
+        val uv = userVerified(job.preVerified)
         val (clientDataJson, clientDataHash) = clientData(ClientData.TYPE_GET, job.option.clientDataHash, job.options.challenge, job.caller)
             ?: return fail("Could not establish the requesting origin.")
         val assertion = try {
@@ -351,7 +357,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         val binding = CallerPolicy.bindingFor(job.caller) ?: return fail("This app can't create passkeys.", FailureKind.NOT_ALLOWED)
 
         val credentialId = job.targetCredentialId ?: createCredential(job) ?: return fail("The vault entry could not be saved.")
-        val uv = userVerified(job.biometricSatisfied)
+        val uv = userVerified(job.preVerified)
         val registration = WebAuthnAuthenticator.register(rpId = job.rpId, userVerified = uv, backupState = false)
         val now = System.currentTimeMillis()
         val saved = try {

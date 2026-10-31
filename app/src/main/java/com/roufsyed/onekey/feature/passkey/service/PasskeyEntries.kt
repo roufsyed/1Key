@@ -54,15 +54,28 @@ class PasskeyEntries @Inject constructor(
         subtitle = "1Key can't verify this app",
     )
 
-    fun credentialEntry(option: BeginGetPublicKeyCredentialOption, passkey: PasskeySummary): PublicKeyCredentialEntry {
+    /**
+     * [unlockGrant] is set when the unlock-and-list activity builds the entries:
+     * the user has just unlocked inside this ceremony, so the entry carries that
+     * proof for the sign activity and skips the system's own biometric prompt.
+     * Entries the service builds while the vault is already unlocked carry no
+     * grant and keep Android 15's single-tap prompt, which then counts as the
+     * user verification.
+     */
+    fun credentialEntry(
+        option: BeginGetPublicKeyCredentialOption,
+        passkey: PasskeySummary,
+        unlockGrant: String? = null,
+    ): PublicKeyCredentialEntry {
         val intent = Intent(context, PasskeyGetActivity::class.java)
             .putExtra(PasskeyGetActivity.EXTRA_MODE, PasskeyGetActivity.MODE_SIGN)
             .putExtra(PasskeyGetActivity.EXTRA_PASSKEY_ID, passkey.id)
+        unlockGrant?.let { intent.putExtra(PasskeyGetActivity.EXTRA_UNLOCK_GRANT, it) }
         val builder = PublicKeyCredentialEntry.Builder(context, passkey.userName.ifBlank { passkey.userDisplayName }, pendingIntent(intent), option)
             .setDisplayName(passkey.userDisplayName.ifBlank { passkey.rpName })
             .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
         passkey.lastUsedAt?.let { builder.setLastUsedTime(Instant.ofEpochMilli(it)) }
-        if (Build.VERSION.SDK_INT >= 35) {
+        if (unlockGrant == null && Build.VERSION.SDK_INT >= 35) {
             // Android 15 single tap: the system shows the biometric prompt itself and
             // reports the result through ProviderGetCredentialRequest.biometricPromptResult.
             builder.setBiometricPromptData(
