@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Credential Manager providers exist from API 34. The service component is
+        declared once and switched on by resource: false here, true in
+        values-v34/, so Android 13 and lower never see it in Settings and never
+        try to bind a class whose base type does not exist on that release.
+    -->
+    <bool name="passkey_provider_enabled">false</bool>
+</resources>

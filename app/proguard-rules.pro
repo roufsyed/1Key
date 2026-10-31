@@ -43,6 +43,11 @@
 # default rules; we only need an explicit rule for the service.
 -keep class com.roufsyed.onekey.feature.autofill.service.OneKeyAutofillService { *; }
 
+# Credential Manager passkey provider - bound by name from the manifest like
+# the autofill service. Its activities are manifest-referenced and kept by the
+# AGP defaults.
+-keep class com.roufsyed.onekey.feature.passkey.service.OneKeyCredentialProviderService { *; }
+
 # Parcelable @Parcelize types crossing process boundaries. ParsedFields rides
 # Intent extras between OneKeyAutofillService (our process) and
 # AutofillUnlockActivity (also our process, but launched via PendingIntent so

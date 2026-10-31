@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Credential Manager provider metadata (API 34+). Passkeys only: passwords
+    keep flowing through the Autofill service, so Android's "Passwords,
+    passkeys and accounts" picker lists 1Key for passkeys without changing
+    what existing users see for password fills.
+-->
+<credential-provider
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsSubtitle="Passkeys in your encrypted vault">
+    <capabilities>
+        <capability android:name="android.credentials.TYPE_PUBLIC_KEY_CREDENTIAL" />
+    </capabilities>
+</credential-provider>

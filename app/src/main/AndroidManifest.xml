@@ -24,6 +24,22 @@
          permissions). The fdroid flavor has no ML Kit, so its merged manifest never
          contains INTERNET in the first place. -->
 
+    <!--
+        Package visibility for the passkey provider, NOT a permission: lets 1Key
+        see apps that open https links (browsers, and apps with verified App
+        Links) so Settings can list installed browsers to trust and, later, read
+        Android's own link-verification state for a native app. The wildcard
+        host is what matches host-specific App Links filters. Deliberately not
+        QUERY_ALL_PACKAGES, which Play reserves for other app categories.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" android:host="*" />
+        </intent>
+    </queries>
+
     <application
         android:name=".OneKeyApp"
         android:allowBackup="false"
@@ -109,5 +125,53 @@
                 android:name="android.autofill"
                 android:resource="@xml/autofill_service_config" />
         </service>
+
+        <!--
+            Credential Manager passkey provider (Android 14+).
+
+            BIND_CREDENTIAL_PROVIDER_SERVICE is held only by the system, so no
+            other app can bind. android:enabled is false below API 34 through
+            res/values/bools.xml (true in values-v34), which keeps the component
+            out of Settings on older releases. exported=true is required for the
+            framework to resolve the component. Nothing in this service or its
+            activities touches the network; see docs/internal/PASSKEYS_PLAN.md.
+        -->
+        <service
+            android:name=".feature.passkey.service.OneKeyCredentialProviderService"
+            android:enabled="@bool/passkey_provider_enabled"
+            android:exported="true"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.credentials.provider"
+                android:resource="@xml/passkey_provider" />
+        </service>
+
+        <!--
+            Passkey ceremony activities, launched only through the provider's
+            PendingIntents. exported=false keeps them private; excludeFromRecents
+            and an empty taskAffinity keep them out of the main task, as for the
+            autofill activities. singleTop rather than singleInstance so a
+            passkey request and an autofill request never cancel each other.
+        -->
+        <activity
+            android:name=".feature.passkey.presentation.PasskeyGetActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.OneKey" />
+
+        <activity
+            android:name=".feature.passkey.presentation.PasskeyCreateActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.OneKey" />
     </application>
 </manifest>

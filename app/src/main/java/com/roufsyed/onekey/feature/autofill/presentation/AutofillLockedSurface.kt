@@ -138,6 +138,7 @@ fun AutofillLockedSurface(
     biometricController: BiometricPromptController,
     onUnlocked: () -> Unit,
     onAbort: () -> Unit,
+    cancelLabel: String = "Cancel autofill",
 ) {
     val state by authViewModel.state.collectAsStateWithLifecycle()
     val isPinSetup by authViewModel.isPinSetup.collectAsStateWithLifecycle()
@@ -542,7 +543,7 @@ fun AutofillLockedSurface(
                 TextButton(
                     onClick = onAbort,
                     modifier = Modifier.align(Alignment.CenterHorizontally),
-                ) { Text("Cancel autofill") }
+                ) { Text(cancelLabel) }
             }
         }
     }
