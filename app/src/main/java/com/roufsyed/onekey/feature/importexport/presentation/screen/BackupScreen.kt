@@ -304,11 +304,23 @@ fun BackupScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                if (selectedFormat == ExportFormat.JSON) {
+                    Text(
+                        "Passkeys are included. Restoring on 1Key 1.1.2 or older keeps passwords but drops passkeys.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             } else {
                 Text(
                     "NOT encrypted - anyone who gets this file can read all your passwords.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+                Text(
+                    "Passkeys are never written to unencrypted exports.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 

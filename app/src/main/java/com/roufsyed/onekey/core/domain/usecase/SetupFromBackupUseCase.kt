@@ -3,6 +3,7 @@ package com.roufsyed.onekey.core.domain.usecase
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.repository.AuthRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import com.roufsyed.onekey.feature.importexport.domain.EncryptedParseResult
 import com.roufsyed.onekey.feature.importexport.domain.ImportResult
 import com.roufsyed.onekey.feature.importexport.domain.VaultImporter
@@ -12,6 +13,7 @@ class SetupFromBackupUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val importer: VaultImporter,
     private val credentialRepository: CredentialRepository,
+    private val passkeyRepository: PasskeyRepository,
 ) {
     /**
      * Restores an encrypted 1Key backup during onboarding (no vault exists yet).
@@ -73,12 +75,22 @@ class SetupFromBackupUseCase @Inject constructor(
         val setupResult = authRepository.setupMasterPassword(password)
         if (setupResult is AppResult.Error) return setupResult
 
-        // Step 3 - vault is now unlocked; import credentials.
+        // Step 3 - vault is now unlocked; import credentials, then their passkeys
+        // (a fresh vault, so no de-duplication is needed; per-passkey failures
+        // never fail the restore).
+        var importedPasskeys = 0
         if (credentials.isNotEmpty()) {
             val importResult = credentialRepository.importCredentials(credentials)
             if (importResult is AppResult.Error) return importResult
+            for (credential in credentials) {
+                for (passkey in credential.passkeys) {
+                    if (passkeyRepository.save(passkey.copyWith(id = "", credentialId = credential.id)) is AppResult.Success) importedPasskeys++
+                }
+            }
         }
 
-        return AppResult.Success(ImportResult(imported = credentials.size, skipped = emptyList(), failed = failed))
+        return AppResult.Success(
+            ImportResult(imported = credentials.size, skipped = emptyList(), failed = failed, importedPasskeys = importedPasskeys),
+        )
     }
 }

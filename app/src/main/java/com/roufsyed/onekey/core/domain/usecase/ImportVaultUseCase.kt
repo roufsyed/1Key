@@ -3,7 +3,9 @@ package com.roufsyed.onekey.core.domain.usecase
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CustomField
+import com.roufsyed.onekey.core.domain.model.Passkey
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import com.roufsyed.onekey.feature.importexport.domain.ConflictPair
 import com.roufsyed.onekey.feature.importexport.domain.ConflictResolution
 import com.roufsyed.onekey.feature.importexport.domain.EncryptedParseResult
@@ -16,11 +18,13 @@ import com.roufsyed.onekey.feature.importexport.domain.SkipReason
 import com.roufsyed.onekey.feature.importexport.domain.SkippedCredential
 import com.roufsyed.onekey.feature.importexport.domain.UrlTitleExtractor
 import com.roufsyed.onekey.feature.importexport.domain.VaultImporter
+import java.util.UUID
 import javax.inject.Inject
 
 class ImportVaultUseCase @Inject constructor(
     private val repository: CredentialRepository,
     private val importer: VaultImporter,
+    private val passkeyRepository: PasskeyRepository,
 ) {
     suspend fun isEncrypted(filePath: String): Boolean = importer.isEncrypted(filePath)
 
@@ -105,10 +109,13 @@ class ImportVaultUseCase @Inject constructor(
         val autoMerges = mutableListOf<MergePair>()
         val conflicts = mutableListOf<ConflictPair>()
         val skipped = mutableListOf<SkippedCredential>()
+        val passkeyAttachments = mutableListOf<Passkey>()
 
         for (incoming in filtered) {
             if (incoming.id.isNotBlank() && incoming.id in activeIds) {
                 skipped.add(SkippedCredential(incoming.title, incoming.username, SkipReason.DUPLICATE_ID))
+                // The row is already here; passkeys added to it elsewhere still land on it.
+                passkeyAttachments += incoming.passkeys.map { it.copyWith(credentialId = incoming.id) }
                 continue
             }
             val match = byKey[incoming.title.trim() to incoming.username.trim()]
@@ -138,6 +145,7 @@ class ImportVaultUseCase @Inject constructor(
                 conflicts = conflicts,
                 skipped = skipped,
                 failed = parsed.failed,
+                passkeyAttachments = passkeyAttachments,
             )
         )
     }
@@ -152,14 +160,23 @@ class ImportVaultUseCase @Inject constructor(
         conflictResolution: ConflictResolution,
     ): AppResult<ImportResult> {
         val toUpsert = mutableListOf<Credential>()
+        // Passkeys follow their credential's FINAL id: a merge keeps the existing
+        // row's id, ADD_AS_SEPARATE gets a fresh one minted here (not inside the
+        // repository) so the passkeys can be re-keyed before they are saved.
+        val passkeys = mutableListOf<Passkey>()
         var restoredFromBin = 0
         var mergedOnConflict = 0
         var addedSeparately = 0
 
-        toUpsert.addAll(plan.newItems)
+        for (item in plan.newItems) {
+            val keyed = if (item.id.isBlank()) item.copy(id = UUID.randomUUID().toString()) else item
+            toUpsert.add(keyed)
+            passkeys += keyed.passkeys.map { it.copyWith(credentialId = keyed.id) }
+        }
 
         for (merge in plan.autoMerges) {
             toUpsert.add(merged(merge.existing, merge.incoming))
+            passkeys += merge.incoming.passkeys.map { it.copyWith(credentialId = merge.existing.id) }
             if (merge.restoreFromBin) restoredFromBin++
         }
 
@@ -168,21 +185,26 @@ class ImportVaultUseCase @Inject constructor(
                 ConflictResolution.MERGE -> {
                     // Existing wins on clashing fields; compatible (one-side-empty) fields still fill.
                     toUpsert.add(merged(conflict.existing, conflict.incoming))
+                    passkeys += conflict.incoming.passkeys.map { it.copyWith(credentialId = conflict.existing.id) }
                     if (conflict.restoreFromBin) restoredFromBin++
                     mergedOnConflict++
                 }
                 ConflictResolution.ADD_AS_SEPARATE -> {
                     // Insert incoming as a brand-new row; existing is untouched.
-                    toUpsert.add(conflict.incoming.copy(id = ""))
+                    val newId = UUID.randomUUID().toString()
+                    toUpsert.add(conflict.incoming.copy(id = newId))
+                    passkeys += conflict.incoming.passkeys.map { it.copyWith(credentialId = newId) }
                     addedSeparately++
                 }
             }
         }
+        passkeys += plan.passkeyAttachments
 
         if (toUpsert.isNotEmpty()) {
             val importResult = repository.importCredentials(toUpsert)
             if (importResult is AppResult.Error) return importResult
         }
+        val importedPasskeys = savePasskeys(passkeys)
 
         return AppResult.Success(
             ImportResult(
@@ -193,8 +215,34 @@ class ImportVaultUseCase @Inject constructor(
                 restoredFromBin = restoredFromBin,
                 skipped = plan.skipped,
                 failed = plan.failed,
+                importedPasskeys = importedPasskeys,
             )
         )
+    }
+
+    /**
+     * Writes imported passkeys after their credential rows exist. Two copies of
+     * the same passkey are the same passkey (immutable key material), so a
+     * WebAuthn credential ID already present on this device, or earlier in the
+     * same batch, is skipped. Failures are per passkey; the import itself has
+     * already succeeded. Returns how many were written.
+     */
+    private suspend fun savePasskeys(passkeys: List<Passkey>): Int {
+        if (passkeys.isEmpty()) return 0
+        val knownByRp = HashMap<String, MutableList<ByteArray>>()
+        var saved = 0
+        for (passkey in passkeys) {
+            val known = knownByRp.getOrPut(passkey.rpId) {
+                (passkeyRepository.listActiveForRpId(passkey.rpId) as? AppResult.Success)?.data
+                    ?.map { it.webauthnCredentialId }?.toMutableList() ?: mutableListOf()
+            }
+            if (known.any { it.contentEquals(passkey.webauthnCredentialId) }) continue
+            if (passkeyRepository.save(passkey.copyWith(id = "")) is AppResult.Success) {
+                known += passkey.webauthnCredentialId
+                saved++
+            }
+        }
+        return saved
     }
 
     /**

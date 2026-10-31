@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.core.domain.usecase
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
@@ -31,7 +32,7 @@ class ImportVaultUseCaseCardThemeTest {
 
     @Test fun new_item_keeps_incoming_theme() = runBlocking {
         val repo = InMemoryCredentialRepository()
-        val useCase = ImportVaultUseCase(repo, UnusedImporter)
+        val useCase = ImportVaultUseCase(repo, UnusedImporter, FakePasskeyRepository())
 
         val plan = planOrThrow(useCase, parsed(card(id = "", theme = CardTheme.CORAL)))
         assertEquals(1, plan.newItems.size)
@@ -43,7 +44,7 @@ class ImportVaultUseCaseCardThemeTest {
     @Test fun theme_difference_alone_is_not_a_conflict_and_existing_theme_wins() = runBlocking {
         val existing = card(id = "e1", theme = CardTheme.MIDNIGHT)
         val repo = InMemoryCredentialRepository(listOf(existing))
-        val useCase = ImportVaultUseCase(repo, UnusedImporter)
+        val useCase = ImportVaultUseCase(repo, UnusedImporter, FakePasskeyRepository())
 
         val plan = planOrThrow(useCase, parsed(card(id = "", theme = CardTheme.CORAL)))
         assertEquals(0, plan.conflicts.size)
@@ -56,7 +57,7 @@ class ImportVaultUseCaseCardThemeTest {
     @Test fun merge_on_conflict_keeps_existing_theme() = runBlocking {
         val existing = card(id = "e1", theme = CardTheme.MIDNIGHT, password = "old")
         val repo = InMemoryCredentialRepository(listOf(existing))
-        val useCase = ImportVaultUseCase(repo, UnusedImporter)
+        val useCase = ImportVaultUseCase(repo, UnusedImporter, FakePasskeyRepository())
 
         val plan = planOrThrow(useCase, parsed(card(id = "", theme = CardTheme.CORAL, password = "new")))
         assertEquals(1, plan.conflicts.size)
@@ -70,7 +71,7 @@ class ImportVaultUseCaseCardThemeTest {
     @Test fun add_as_separate_keeps_incoming_theme_and_leaves_existing_untouched() = runBlocking {
         val existing = card(id = "e1", theme = CardTheme.MIDNIGHT, password = "old")
         val repo = InMemoryCredentialRepository(listOf(existing))
-        val useCase = ImportVaultUseCase(repo, UnusedImporter)
+        val useCase = ImportVaultUseCase(repo, UnusedImporter, FakePasskeyRepository())
 
         val plan = planOrThrow(useCase, parsed(card(id = "", theme = CardTheme.CORAL, password = "new")))
         useCase.applyPlan(plan, ConflictResolution.ADD_AS_SEPARATE)
@@ -84,7 +85,7 @@ class ImportVaultUseCaseCardThemeTest {
     @Test fun bin_match_auto_merge_restores_row_and_keeps_existing_default_theme() = runBlocking {
         val binRow = card(id = "b1", theme = CardTheme.GRAPHITE, deletedAt = 5L)
         val repo = InMemoryCredentialRepository(listOf(binRow))
-        val useCase = ImportVaultUseCase(repo, UnusedImporter)
+        val useCase = ImportVaultUseCase(repo, UnusedImporter, FakePasskeyRepository())
 
         val plan = planOrThrow(useCase, parsed(card(id = "", theme = CardTheme.CORAL)))
         assertEquals(1, plan.autoMerges.size)

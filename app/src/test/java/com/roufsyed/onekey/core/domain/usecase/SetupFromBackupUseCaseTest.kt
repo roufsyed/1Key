@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.core.domain.usecase
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialSortOrder
@@ -42,7 +43,7 @@ class SetupFromBackupUseCaseTest {
         val capturingAuth = CapturingFakeAuth()
         val fakeCreds = NoopFakeCreds()
 
-        val useCase = SetupFromBackupUseCase(capturingAuth, fakeImporter, fakeCreds)
+        val useCase = SetupFromBackupUseCase(capturingAuth, fakeImporter, fakeCreds, FakePasskeyRepository())
         val result = useCase(originalPassword, "/fake/path.1key")
 
         assertTrue(
@@ -85,7 +86,7 @@ class SetupFromBackupUseCaseTest {
         val capturingAuth = CapturingFakeAuth()
         val fakeCreds = NoopFakeCreds()
 
-        val useCase = SetupFromBackupUseCase(capturingAuth, fakeImporter, fakeCreds)
+        val useCase = SetupFromBackupUseCase(capturingAuth, fakeImporter, fakeCreds, FakePasskeyRepository())
         val result = useCase(password, "/fake/path.1key")
 
         assertTrue("returns the importer's Error", result is AppResult.Error)

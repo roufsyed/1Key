@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.auth.presentation
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import android.app.Application
 import android.content.Context
 import android.net.Uri
@@ -575,7 +576,7 @@ class AuthViewModelSecretKeyTest {
             appPrefs = appPrefs,
             setupMasterPassword = SetupMasterPasswordUseCase(auth),
             unlockVault = UnlockVaultUseCase(auth),
-            setupFromBackup = SetupFromBackupUseCase(auth, importer, credentialRepository),
+            setupFromBackup = SetupFromBackupUseCase(auth, importer, credentialRepository, FakePasskeyRepository()),
             lockReasonStore = LockReasonStore(appPrefs, appScope),
             autoLockManager = AutoLockManager(auth, appPrefs),
             authAttemptsStore = AuthAttemptsStore(),

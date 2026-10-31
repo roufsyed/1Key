@@ -8,6 +8,8 @@ import com.roufsyed.onekey.core.di.ApplicationScope
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
+import com.roufsyed.onekey.core.domain.usecase.ExportVaultUseCase
+import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
 import com.roufsyed.onekey.core.security.BackupKeyMaterial
 import com.roufsyed.onekey.core.security.CryptoManager
@@ -77,6 +79,7 @@ class SyncEngineImpl @Inject constructor(
     private val vaultVersionTracker: VaultVersionTracker,
     keyHolder: VaultKeyHolder,
     private val notifier: SyncCompletionNotifier,
+    private val passkeyRepository: PasskeyRepository,
 ) : SyncEngine {
 
     private val _state = MutableStateFlow<SyncState>(SyncState.Idle)
@@ -228,7 +231,12 @@ class SyncEngineImpl @Inject constructor(
             _state.value = SyncState.Failed(SyncFailureReason.INTERNAL_ERROR)
             return
         }
-        val all = (activeResult as AppResult.Success).data + (binResult as AppResult.Success).data
+        // Passkeys ride the sync file too (it is always encrypted). Same join as
+        // the encrypted manual export, per-row isolated inside the repository.
+        val (all, passkeyIds) = ExportVaultUseCase.attachPasskeys(
+            (activeResult as AppResult.Success).data + (binResult as AppResult.Success).data,
+            passkeyRepository,
+        )
         val plaintext = vaultExporter.serializeForSync(all, ExportFormat.JSON)
         val vaultVersion = vaultVersionTracker.getVersion()
 
@@ -294,6 +302,7 @@ class SyncEngineImpl @Inject constructor(
 
         // Success.
         appPrefs.setSyncLastSuccessAt(System.currentTimeMillis())
+        passkeyRepository.markBackedUp(passkeyIds)
         _state.value = SyncState.Synced
 
         // Optional completion notification (gated by the user preference).

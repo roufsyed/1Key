@@ -46,6 +46,28 @@ class Passkey(
     /** BS flag input: a backup containing this passkey is known to exist. */
     val isBackedUp: Boolean get() = backedUpAt != null
 
+    /** Re-keys the passkey (import re-ids credentials; rows get fresh ids) without touching the secrets. */
+    fun copyWith(
+        id: String = this.id,
+        credentialId: String = this.credentialId,
+        backedUpAt: Long? = this.backedUpAt,
+    ): Passkey = Passkey(
+        id = id,
+        credentialId = credentialId,
+        rpId = rpId,
+        rpName = rpName,
+        userName = userName,
+        userDisplayName = userDisplayName,
+        userHandle = userHandle,
+        webauthnCredentialId = webauthnCredentialId,
+        privateKeyPkcs8 = privateKeyPkcs8,
+        prfSecret = prfSecret,
+        origin = origin,
+        createdAt = createdAt,
+        lastUsedAt = lastUsedAt,
+        backedUpAt = backedUpAt,
+    )
+
     fun toSummary(): PasskeySummary = PasskeySummary(
         id = id,
         credentialId = credentialId,

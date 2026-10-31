@@ -45,6 +45,17 @@ data class Credential(
      * [CardTheme.GRAPHITE]; see [CardTheme] for the storage contract.
      */
     val cardTheme: CardTheme = CardTheme.GRAPHITE,
+    /**
+     * Passkeys owned by this credential, carried ONLY through backup, import and
+     * sync. Repositories never populate it: `getAllCredentials` and every
+     * observer return an empty list, so autofill matching and the detail screen
+     * never decrypt private keys, and one corrupt passkey can never break those
+     * flows. The export use case attaches passkeys with a separate, per-row
+     * isolated pass; the importer fills it from the `passkeys` JSON array; the
+     * import use case persists them through `PasskeyRepository` after the
+     * credential rows are written. Plain (unencrypted) exports never carry it.
+     */
+    val passkeys: List<Passkey> = emptyList(),
 ) {
     companion object {
         /**

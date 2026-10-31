@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.importexport.presentation.viewmodel
 
+import com.roufsyed.onekey.core.domain.repository.FakePasskeyRepository
 import android.app.Application
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -262,10 +263,12 @@ class ImportExportViewModelExportPasswordTest {
             exporter = vaultExporter,
             vaultVersionTracker = vaultVersionTracker,
             authRepository = auth,
+            passkeyRepository = FakePasskeyRepository(),
         )
         val importVaultUseCase = ImportVaultUseCase(
             repository = credentialRepository,
             importer = vaultImporter,
+            passkeyRepository = FakePasskeyRepository(),
         )
         val autoLockManager = AutoLockManager(auth, appPrefs)
         return ImportExportViewModel(

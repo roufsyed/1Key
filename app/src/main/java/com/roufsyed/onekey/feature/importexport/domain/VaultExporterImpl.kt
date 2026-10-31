@@ -5,8 +5,12 @@ import com.opencsv.CSVWriter
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.CardTheme
 import com.roufsyed.onekey.core.domain.model.Credential
+import com.roufsyed.onekey.core.domain.model.Passkey
+import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.model.runCatchingResult
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
+import com.roufsyed.onekey.core.domain.webauthn.Base64Url
+import com.roufsyed.onekey.core.domain.webauthn.Es256
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.core.security.SecretKeyHolder
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriBuilder
@@ -157,6 +161,37 @@ class VaultExporterImpl @Inject constructor(
         // (which turn unknown keys into a visible custom field) is limited to the
         // cards that were actually decorated. Enum name, like `type`.
         if (cardTheme != CardTheme.GRAPHITE) dto = dto + ("card_theme" to cardTheme.name)
+        // Passkeys only when the credential carries any: the export use case
+        // attaches them for encrypted backups and sync, never for plain exports,
+        // so backups without passkeys stay byte-identical to the previous format.
+        // Older app versions drop an unknown array key silently (plan D6).
+        if (passkeys.isNotEmpty()) dto = dto + ("passkeys" to passkeys.map { it.toDto() })
+        return dto
+    }
+
+    /**
+     * One passkey in the backup. Field names follow the plan (section 9.1):
+     * the private key as PKCS#8 PEM (the KeePassXC interchange form), binary
+     * identifiers base64url, the origin binding as a small object.
+     */
+    private fun Passkey.toDto(): Map<String, Any> {
+        var dto = mapOf<String, Any>(
+            "rp_id" to rpId,
+            "rp_name" to rpName,
+            "user_name" to userName,
+            "user_display_name" to userDisplayName,
+            "user_handle" to Base64Url.encode(userHandle),
+            "credential_id" to Base64Url.encode(webauthnCredentialId),
+            "private_key_pem" to Es256.toPem(privateKeyPkcs8),
+            "origin" to when (val o = origin) {
+                is PasskeyOrigin.Browser -> mapOf("type" to "browser", "origin" to o.origin)
+                is PasskeyOrigin.App -> mapOf("type" to "app", "package" to o.packageName, "cert_sha256" to o.certSha256)
+            },
+            "created_at" to createdAt,
+        )
+        prfSecret?.let { dto = dto + ("prf_secret" to Base64Url.encode(it)) }
+        lastUsedAt?.let { dto = dto + ("last_used_at" to it) }
+        backedUpAt?.let { dto = dto + ("backed_up_at" to it) }
         return dto
     }
 

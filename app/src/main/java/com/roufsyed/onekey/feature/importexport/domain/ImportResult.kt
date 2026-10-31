@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.feature.importexport.domain
 
 import com.roufsyed.onekey.core.domain.model.Credential
+import com.roufsyed.onekey.core.domain.model.Passkey
 
 data class ImportResult(
     /** Brand-new credentials inserted (no match in active or recycle bin). */
@@ -15,12 +16,17 @@ data class ImportResult(
     val restoredFromBin: Int = 0,
     val skipped: List<SkippedCredential>,
     val failed: List<FailedEntry>,
+    /** Passkeys written to the vault by this import (new ones only; duplicates are skipped). */
+    val importedPasskeys: Int = 0,
 )
 
 data class ParsedImport(
     val credentials: List<Credential>,
     val failed: List<FailedEntry>,
-)
+) {
+    /** Passkeys carried by the parsed credentials; shown in the import preview. */
+    val passkeyCount: Int get() = credentials.sumOf { it.passkeys.size }
+}
 
 data class SkippedCredential(
     val title: String,
@@ -49,6 +55,13 @@ data class ImportPlan(
     val conflicts: List<ConflictPair>,
     val skipped: List<SkippedCredential>,
     val failed: List<FailedEntry>,
+    /**
+     * Passkeys from credentials skipped as DUPLICATE_ID. The credential row
+     * already exists on this device, but a passkey added to it on another
+     * device must still arrive (plan section 9.3), so these are saved onto the
+     * existing row when the plan is applied.
+     */
+    val passkeyAttachments: List<Passkey> = emptyList(),
 ) {
     /** True when the plan can be applied silently - no user decision needed. */
     val needsConflictResolution: Boolean get() = conflicts.isNotEmpty()

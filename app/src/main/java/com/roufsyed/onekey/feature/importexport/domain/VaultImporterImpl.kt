@@ -10,9 +10,13 @@ import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.CustomField
 import com.roufsyed.onekey.core.domain.model.OtpParams
+import com.roufsyed.onekey.core.domain.model.Passkey
+import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.model.runCatchingResult
 import com.roufsyed.onekey.core.domain.notes.notesNormalize
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
+import com.roufsyed.onekey.core.domain.webauthn.Base64Url
+import com.roufsyed.onekey.core.domain.webauthn.Es256
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriParser
 import java.io.ByteArrayInputStream
@@ -147,9 +151,10 @@ class VaultImporterImpl @Inject constructor(
                 // still runs notesNormalize defensively at toEntity() - both
                 // layers are idempotent, so double-normalisation is a no-op.
                 val rawNotes = normalized["notes"] as? String ?: ""
+                val credentialId = (normalized["id"] as? String) ?: UUID.randomUUID().toString()
                 credentials.add(
                     Credential(
-                        id = (normalized["id"] as? String) ?: UUID.randomUUID().toString(),
+                        id = credentialId,
                         title = normalized["title"] as? String ?: "",
                         username = normalized["username"] as? String ?: "",
                         password = normalized["password"] as? String ?: "",
@@ -185,6 +190,10 @@ class VaultImporterImpl @Inject constructor(
                         // name from a newer palette, or garbage all resolve to the
                         // neutral default - never a per-row failure.
                         cardTheme = CardTheme.fromNameOrDefault(normalized["card_theme"] as? String),
+                        // Passkeys from an encrypted 1Key backup (plan section 9.2). A
+                        // malformed passkey is dropped on its own; the credential and
+                        // its other passkeys still import.
+                        passkeys = parsePasskeys(normalized["passkeys"], credentialId, now),
                     )
                 )
             }.onFailure { e ->
@@ -193,6 +202,46 @@ class VaultImporterImpl @Inject constructor(
         }
 
         return ParsedImport(credentials, failed)
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun parsePasskeys(raw: Any?, credentialId: String, now: Long): List<Passkey> {
+        val list = raw as? List<*> ?: return emptyList()
+        return list.filterIsInstance<Map<String, Any>>().mapNotNull { pk ->
+            runCatching {
+                val rpId = (pk["rp_id"] as? String)?.trim()?.lowercase().orEmpty()
+                require(rpId.isNotEmpty()) { "rp_id missing" }
+                val originMap = pk["origin"] as? Map<String, Any>
+                val origin = when (originMap?.get("type") as? String) {
+                    "app" -> PasskeyOrigin.App(
+                        packageName = originMap["package"] as? String ?: error("origin.package missing"),
+                        certSha256 = (originMap["cert_sha256"] as? String ?: error("origin.cert_sha256 missing")).lowercase(),
+                    )
+                    // Browser-created, or an older/foreign file without a binding:
+                    // served to browsers only until an app of its own creates one.
+                    else -> PasskeyOrigin.Browser((originMap?.get("origin") as? String) ?: "https://$rpId")
+                }
+                val privateKey = Es256.fromPem(pk["private_key_pem"] as? String ?: error("private_key_pem missing"))
+                Es256.decodePrivateKey(privateKey) // rejects anything that is not a valid EC key up front
+                Passkey(
+                    id = "",
+                    credentialId = credentialId,
+                    rpId = rpId,
+                    rpName = pk["rp_name"] as? String ?: rpId,
+                    userName = pk["user_name"] as? String ?: "",
+                    userDisplayName = pk["user_display_name"] as? String ?: "",
+                    userHandle = Base64Url.decode(pk["user_handle"] as? String ?: error("user_handle missing")),
+                    webauthnCredentialId = Base64Url.decode(pk["credential_id"] as? String ?: error("credential_id missing")),
+                    privateKeyPkcs8 = privateKey,
+                    prfSecret = (pk["prf_secret"] as? String)?.let { Base64Url.decode(it) },
+                    origin = origin,
+                    createdAt = TimestampParser.parseToEpochMillis(pk["created_at"]) ?: now,
+                    lastUsedAt = TimestampParser.parseToEpochMillis(pk["last_used_at"]),
+                    // It arrived through a backup, so a backup containing it exists (BS flag).
+                    backedUpAt = TimestampParser.parseToEpochMillis(pk["backed_up_at"]) ?: now,
+                )
+            }.getOrNull()
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -336,6 +385,9 @@ class VaultImporterImpl @Inject constructor(
             // Card colour theme (DB v16). Listed so the unknown-key fallback below
             // never demotes it to a visible "Card Theme" custom field.
             "card_theme",
+            // Passkeys (DB v17). An array, so the scalar fallback would ignore it
+            // anyway; listed for the same single-source-of-truth reason.
+            "passkeys",
         )
 
         // Foreign-tool JSON keys we translate into canonical snake_case before
