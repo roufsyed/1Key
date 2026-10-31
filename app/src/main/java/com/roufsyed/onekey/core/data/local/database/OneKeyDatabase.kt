@@ -7,9 +7,11 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.roufsyed.onekey.core.data.local.dao.CredentialDao
 import com.roufsyed.onekey.core.data.local.dao.CredentialHistoryDao
+import com.roufsyed.onekey.core.data.local.dao.PasskeyDao
 import com.roufsyed.onekey.core.data.local.dao.TagDao
 import com.roufsyed.onekey.core.data.local.entity.CredentialEntity
 import com.roufsyed.onekey.core.data.local.entity.CredentialHistoryEntity
+import com.roufsyed.onekey.core.data.local.entity.PasskeyEntity
 import com.roufsyed.onekey.core.data.local.entity.TagEntity
 
 val DEFAULT_TAG_NAMES = listOf(
@@ -205,6 +207,50 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
     }
 }
 
+// Adds the `passkeys` table (WebAuthn discoverable credentials owned by a vault
+// credential). Purely additive: `credentials`, `tags` and `credential_history`
+// are untouched, so every existing BLOB keeps its bytes and its AAD-bound GCM
+// tag. No foreign key on purpose (see PasskeyEntity): credential writes are
+// REPLACE upserts, which would cascade-delete children on every edit. The
+// column list, NOT NULL set, DEFAULT clause and index name must match what Room
+// generates for PasskeyEntity (schemas/.../17.json), or validation fails at open.
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `passkeys` (
+                `id` TEXT NOT NULL,
+                `credential_id` TEXT NOT NULL,
+                `rp_id_encrypted` BLOB NOT NULL,
+                `iv_rp_id` BLOB NOT NULL,
+                `rp_name_encrypted` BLOB NOT NULL,
+                `iv_rp_name` BLOB NOT NULL,
+                `user_name_encrypted` BLOB NOT NULL,
+                `iv_user_name` BLOB NOT NULL,
+                `user_display_name_encrypted` BLOB NOT NULL,
+                `iv_user_display_name` BLOB NOT NULL,
+                `user_handle_encrypted` BLOB NOT NULL,
+                `iv_user_handle` BLOB NOT NULL,
+                `webauthn_id_encrypted` BLOB NOT NULL,
+                `iv_webauthn_id` BLOB NOT NULL,
+                `private_key_encrypted` BLOB NOT NULL,
+                `iv_private_key` BLOB NOT NULL,
+                `prf_secret_encrypted` BLOB,
+                `iv_prf_secret` BLOB,
+                `origin_binding_encrypted` BLOB NOT NULL,
+                `iv_origin_binding` BLOB NOT NULL,
+                `created_at` INTEGER NOT NULL,
+                `last_used_at` INTEGER,
+                `backed_up_at` INTEGER,
+                `cipher_version` INTEGER NOT NULL DEFAULT 2,
+                PRIMARY KEY(`id`)
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_passkeys_credential_id` ON `passkeys` (`credential_id`)")
+    }
+}
+
 // Seeds default tags on a brand-new database (no migration path yet exists).
 val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
     override fun onCreate(db: SupportSQLiteDatabase) {
@@ -220,8 +266,8 @@ val DATABASE_CALLBACK = object : RoomDatabase.Callback() {
 }
 
 @Database(
-    entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class],
-    version = 16,
+    entities = [CredentialEntity::class, TagEntity::class, CredentialHistoryEntity::class, PasskeyEntity::class],
+    version = 17,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -229,4 +275,5 @@ abstract class OneKeyDatabase : RoomDatabase() {
     abstract fun credentialDao(): CredentialDao
     abstract fun tagDao(): TagDao
     abstract fun credentialHistoryDao(): CredentialHistoryDao
+    abstract fun passkeyDao(): PasskeyDao
 }

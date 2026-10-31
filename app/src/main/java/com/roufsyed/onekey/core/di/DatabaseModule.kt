@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.roufsyed.onekey.core.data.local.dao.CredentialDao
 import com.roufsyed.onekey.core.data.local.dao.CredentialHistoryDao
+import com.roufsyed.onekey.core.data.local.dao.PasskeyDao
 import com.roufsyed.onekey.core.data.local.dao.TagDao
 import com.roufsyed.onekey.core.data.local.database.DATABASE_CALLBACK
 import com.roufsyed.onekey.core.data.local.database.MIGRATION_1_2
@@ -21,6 +22,7 @@ import com.roufsyed.onekey.core.data.local.database.MIGRATION_12_13
 import com.roufsyed.onekey.core.data.local.database.MIGRATION_13_14
 import com.roufsyed.onekey.core.data.local.database.MIGRATION_14_15
 import com.roufsyed.onekey.core.data.local.database.MIGRATION_15_16
+import com.roufsyed.onekey.core.data.local.database.MIGRATION_16_17
 import com.roufsyed.onekey.core.data.local.database.OneKeyDatabase
 import dagger.Module
 import dagger.Provides
@@ -60,6 +62,7 @@ object DatabaseModule {
                 MIGRATION_13_14,
                 MIGRATION_14_15,
                 MIGRATION_15_16,
+                MIGRATION_16_17,
             )
             .addCallback(DATABASE_CALLBACK)
             // Deliberately NOT calling fallbackToDestructiveMigration(): for a password
@@ -76,4 +79,7 @@ object DatabaseModule {
 
     @Provides
     fun provideCredentialHistoryDao(db: OneKeyDatabase): CredentialHistoryDao = db.credentialHistoryDao()
+
+    @Provides
+    fun providePasskeyDao(db: OneKeyDatabase): PasskeyDao = db.passkeyDao()
 }
