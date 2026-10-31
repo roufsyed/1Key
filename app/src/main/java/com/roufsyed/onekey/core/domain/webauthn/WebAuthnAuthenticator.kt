@@ -16,6 +16,8 @@ object WebAuthnAuthenticator {
         val credentialId: ByteArray,
         val privateKeyPkcs8: ByteArray,
         val cosePublicKey: ByteArray,
+        /** X.509 SubjectPublicKeyInfo DER, the `response.publicKey` field of RegistrationResponseJSON. */
+        val publicKeySpki: ByteArray,
         val authenticatorData: ByteArray,
         val attestationObject: ByteArray,
     )
@@ -52,6 +54,7 @@ object WebAuthnAuthenticator {
             credentialId = credentialId,
             privateKeyPkcs8 = Es256.privateKeyPkcs8(keyPair),
             cosePublicKey = cosePublicKey,
+            publicKeySpki = keyPair.public.encoded,
             authenticatorData = authenticatorData,
             attestationObject = AttestationObject.none(authenticatorData),
         )

@@ -1,0 +1,20 @@
+Privileged browser allowlists used by 1Key's passkey provider.
+
+privileged_apps_google.json
+  Verbatim snapshot of Google's list of apps allowed to set a WebAuthn origin
+  (https://www.gstatic.com/gpm-passkeys-privileged-apps/apps.json). Snapshot
+  hash and date are in privileged_apps_google.meta.json. Refresh with
+  scripts/refresh-passkey-allowlist.sh; never fetched at runtime.
+
+privileged_apps_community.json
+  Browsers Google does not list, mostly F-Droid style builds signed with their
+  own keys. Seeded from the community lists maintained in the Bitwarden Android
+  client (GPL-3.0, github.com/bitwarden/android, app/src/main/assets/
+  fido2_privileged_community.json) and KeePassDX (GPL-3.0,
+  github.com/Kunzisoft/KeePassDX, app/src/free/assets/
+  passkeys_privileged_apps_community.json). Package names and certificate
+  hashes are facts about published software; attribution is given with thanks.
+
+app/src/fdroid/assets/passkeys/privileged_apps_fdroid.json (F-Droid flavour only)
+  Signing certificates of browsers as built and signed by f-droid.org, taken
+  from the F-Droid repository index (https://f-droid.org/repo/index-v2.json).

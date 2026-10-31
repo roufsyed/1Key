@@ -1,0 +1,40 @@
+{
+  "apps": [
+    {
+      "type": "android",
+      "info": {
+        "package_name": "com.duckduckgo.mobile.android",
+        "signatures": [
+          {
+            "build": "release",
+            "cert_fingerprint_sha256": "F0:70:7D:02:1C:0B:F3:E6:F8:DC:C1:1B:A3:F5:70:04:25:D5:97:DC:A3:01:A3:1E:21:05:56:93:4E:BB:1B:0A"
+          }
+        ]
+      }
+    },
+    {
+      "type": "android",
+      "info": {
+        "package_name": "eu.weblibre.gecko",
+        "signatures": [
+          {
+            "build": "release",
+            "cert_fingerprint_sha256": "BB:2A:97:F5:61:53:35:C9:E5:7C:86:6F:1C:30:ED:4F:D7:D7:BD:DC:BC:BC:06:68:FE:93:A5:79:17:3D:3D:2D"
+          }
+        ]
+      }
+    },
+    {
+      "type": "android",
+      "info": {
+        "package_name": "org.mozilla.fennec_fdroid",
+        "signatures": [
+          {
+            "build": "release",
+            "cert_fingerprint_sha256": "06:66:53:58:EF:D8:BA:05:BE:23:6A:47:A1:2C:B0:95:8D:7D:75:DD:93:9D:77:C2:B3:1F:53:98:53:7E:BD:C5"
+          }
+        ]
+      }
+    }
+  ]
+}
