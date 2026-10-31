@@ -302,6 +302,14 @@ dependencies {
     // platform CertPathValidator, so bcpkix is intentionally NOT included.
     implementation(libs.bouncycastle.bcprov)
 
+    // Credential Manager provider API for passkeys. On API 34+ this is a thin
+    // layer over android.service.credentials / android.credentials (framework,
+    // AOSP); below 34 nothing in it is used because the provider component is
+    // disabled by resource. Apache-2.0 AndroidX, zero Google Play code. The
+    // companion credentials-play-services-auth artifact must never be added:
+    // it would drag Play services into the fdroid flavour.
+    implementation(libs.androidx.credentials)
+
     // Testing - JUnit 4 for plain JVM tests of pure-Kotlin domain logic.
     // Robolectric is used by OtpAuthUriParser/Builder tests because both call
     // into android.net.Uri (a stub on the JVM unless Robolectric supplies it).
@@ -316,6 +324,11 @@ dependencies {
     // collapses Room invalidation bursts (counts emissions in a fixed
     // window without resorting to fragile sleep loops).
     testImplementation(libs.turbine)
+    // Independent, spec-complete WebAuthn relying-party verifier. The
+    // authenticator core (core/domain/webauthn) is checked against it so a
+    // CBOR / COSE / authenticator-data encoding slip fails here, not on a
+    // user's bank login. Test scope only - never in the APK.
+    testImplementation(libs.webauthn4j.core)
 
     // Custom lint rules. `lintChecks` puts the rules on this module's lint
     // classpath; AGP's lint task discovers them via the registry in the lint

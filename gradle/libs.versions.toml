@@ -35,6 +35,13 @@ bouncycastle = "1.84"
 # ext-junit, which both ship in lockstep.
 androidxTestRunner = "1.6.2"
 androidxTestExtJunit = "1.2.1"
+# Credential Manager provider API (passkeys). Framework-only on API 34+; the
+# Play-services companion artifact is deliberately NOT referenced anywhere.
+androidxCredentials = "1.6.0"
+# Server-side WebAuthn verifier used ONLY in JVM unit tests to prove that the
+# attestation objects and assertions our authenticator core emits parse and
+# verify under an independent, spec-complete implementation. Apache-2.0, Java.
+webauthn4j = "0.29.1.RELEASE"
 
 [libraries]
 # Core
@@ -121,6 +128,12 @@ room-testing = { group = "androidx.room", name = "room-testing", version.ref = "
 # AndroidX instrumented test harness for the migration test.
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
 androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+# Credential Manager - provider side (CredentialProviderService helpers,
+# CallingAppInfo.getOrigin, entry builders). Apache-2.0 AndroidX; pulls in no
+# Google Play code. credentials-play-services-auth is intentionally absent.
+androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "androidxCredentials" }
+# Independent WebAuthn verifier for unit tests only (never shipped).
+webauthn4j-core = { group = "com.webauthn4j", name = "webauthn4j-core", version.ref = "webauthn4j" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
