@@ -620,6 +620,8 @@ class SettingsKdfStrengthViewModelTest {
         override suspend fun setLastMasterPasswordTimestamp(timestamp: Long) = Unit
         override fun isShowFavourites(): Flow<Boolean> = showFavourites
         override suspend fun setShowFavourites(show: Boolean) { showFavourites.value = show }
+        override fun isShowPasskeys(): Flow<Boolean> = flowOf(false)
+        override suspend fun setShowPasskeys(show: Boolean) = Unit
         override fun getCredentialSortOrder(): Flow<CredentialSortOrder> = flowOf(CredentialSortOrder.ALPHABETICAL)
         override suspend fun setCredentialSortOrder(order: CredentialSortOrder) = Unit
         override fun isHideTopBarOnScroll(): Flow<Boolean> = hideTopBar

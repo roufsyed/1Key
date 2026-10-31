@@ -26,6 +26,9 @@ interface PasskeyRepository {
     /** Lean projection for the credential detail screen. Empty while the vault is locked. */
     fun observeForCredential(credentialId: String): Flow<List<PasskeySummary>>
 
+    /** Lean projection of every passkey whose credential is active, for the Passkeys tab. Empty while the vault is locked. */
+    fun observeAllActive(): Flow<List<PasskeySummary>>
+
     /**
      * Every passkey, recycle bin included, for backup and sync. Rows that fail
      * to decrypt are skipped and counted in [ExportBatch.skipped] rather than

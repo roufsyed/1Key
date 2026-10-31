@@ -31,6 +31,7 @@ import javax.inject.Singleton
 private val KEY_CREDENTIAL_SORT_ORDER = stringPreferencesKey("credential_sort_order")
 private val KEY_THEME_MODE = stringPreferencesKey("theme_mode")
 private val KEY_SHOW_FAVOURITES = booleanPreferencesKey("show_favourites")
+private val KEY_SHOW_PASSKEYS = booleanPreferencesKey("show_passkeys")
 private val KEY_BIOMETRIC_ENABLED = booleanPreferencesKey("biometric_enabled")
 private val KEY_SCREENSHOTS_ENABLED = booleanPreferencesKey("screenshots_enabled")
 private val KEY_LOCK_TIMEOUT = stringPreferencesKey("lock_timeout") // legacy (read-only for migration)
@@ -165,6 +166,13 @@ class AppPreferencesRepositoryImpl @Inject constructor(
 
     override suspend fun setShowFavourites(show: Boolean) {
         dataStore.edit { it[KEY_SHOW_FAVOURITES] = show }
+    }
+
+    override fun isShowPasskeys(): Flow<Boolean> =
+        prefs.map { it[KEY_SHOW_PASSKEYS] ?: false }.distinctUntilChanged()
+
+    override suspend fun setShowPasskeys(show: Boolean) {
+        dataStore.edit { it[KEY_SHOW_PASSKEYS] = show }
     }
 
     override fun getCredentialSortOrder(): Flow<CredentialSortOrder> =

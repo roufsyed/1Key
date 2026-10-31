@@ -41,6 +41,9 @@ class FakePasskeyRepository : PasskeyRepository {
     override fun observeForCredential(credentialId: String): Flow<List<PasskeySummary>> =
         store.map { m -> m.values.filter { it.credentialId == credentialId }.map { it.toSummary() } }
 
+    override fun observeAllActive(): Flow<List<PasskeySummary>> =
+        store.map { m -> m.values.map { it.toSummary() } }
+
     override suspend fun allForExport(): AppResult<PasskeyRepository.ExportBatch> =
         AppResult.Success(PasskeyRepository.ExportBatch(all, 0))
 

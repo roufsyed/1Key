@@ -32,6 +32,9 @@ interface AppPreferencesRepository {
     suspend fun setLastMasterPasswordTimestamp(timestamp: Long)
     fun isShowFavourites(): Flow<Boolean>
     suspend fun setShowFavourites(show: Boolean)
+    /** Whether the Passkeys tab appears in the bottom navigation bar. Off by default, like Favourites. */
+    fun isShowPasskeys(): Flow<Boolean>
+    suspend fun setShowPasskeys(show: Boolean)
     fun getCredentialSortOrder(): Flow<CredentialSortOrder>
     suspend fun setCredentialSortOrder(order: CredentialSortOrder)
     fun isHideTopBarOnScroll(): Flow<Boolean>

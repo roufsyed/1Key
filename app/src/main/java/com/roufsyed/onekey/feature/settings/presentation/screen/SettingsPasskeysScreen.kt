@@ -59,6 +59,7 @@ fun SettingsPasskeysScreen(
     viewModel: PasskeySettingsViewModel = hiltViewModel(),
 ) {
     val isEnabled by viewModel.isEnabled.collectAsStateWithLifecycle()
+    val isShowTab by viewModel.isShowTab.collectAsStateWithLifecycle()
     val systemStatus by viewModel.systemStatus.collectAsStateWithLifecycle()
     val trusted by viewModel.trustedBrowsers.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -145,16 +146,29 @@ fun SettingsPasskeysScreen(
 
             SectionHeader("In-app behaviour")
             Card(modifier = Modifier.fillMaxWidth()) {
-                ListItem(
-                    headlineContent = { Text("Act as a passkey provider") },
-                    supportingContent = {
-                        Text(
-                            if (isEnabled) "1Key answers passkey requests from browsers and apps"
-                            else "1Key stays silent even when enabled in Android settings",
-                        )
-                    },
-                    trailingContent = { Switch(checked = isEnabled, onCheckedChange = { viewModel.setEnabled(it) }) },
-                )
+                Column {
+                    ListItem(
+                        headlineContent = { Text("Act as a passkey provider") },
+                        supportingContent = {
+                            Text(
+                                if (isEnabled) "1Key answers passkey requests from browsers and apps"
+                                else "1Key stays silent even when enabled in Android settings",
+                            )
+                        },
+                        trailingContent = { Switch(checked = isEnabled, onCheckedChange = { viewModel.setEnabled(it) }) },
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                    ListItem(
+                        headlineContent = { Text("Show Passkeys tab") },
+                        supportingContent = {
+                            Text(
+                                if (isShowTab) "Passkeys visible in bottom navigation"
+                                else "Passkeys hidden from bottom navigation",
+                            )
+                        },
+                        trailingContent = { Switch(checked = isShowTab, onCheckedChange = { viewModel.setShowTab(it) }) },
+                    )
+                }
             }
 
             SectionHeader("Trusted browsers")

@@ -216,6 +216,8 @@ class PasskeyRepositoryImplTest {
             rows.values.filter { it.credentialId == credentialId }
         override fun observeForCredential(credentialId: String): Flow<List<PasskeyEntity>> =
             changes.map { rows.values.filter { it.credentialId == credentialId } }
+        override fun observeAllActive(): Flow<List<PasskeyEntity>> =
+            changes.map { rows.values.filter { it.credentialId !in deletedCredentialIds }.sortedBy { it.createdAt } }
         override fun observeCountForCredential(credentialId: String): Flow<Int> =
             changes.map { rows.values.count { it.credentialId == credentialId } }
         override suspend fun deleteById(id: String) { rows.remove(id); bump() }

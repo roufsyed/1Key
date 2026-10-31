@@ -370,6 +370,8 @@ class ImportExportViewModelExportPasswordTest {
         override suspend fun setLastMasterPasswordTimestamp(timestamp: Long) = error("unused")
         override fun isShowFavourites(): Flow<Boolean> = error("unused")
         override suspend fun setShowFavourites(show: Boolean) = error("unused")
+        override fun isShowPasskeys(): Flow<Boolean> = error("unused")
+        override suspend fun setShowPasskeys(show: Boolean) = error("unused")
         override fun getCredentialSortOrder(): Flow<CredentialSortOrder> = error("unused")
         override suspend fun setCredentialSortOrder(order: CredentialSortOrder) = error("unused")
         override fun isHideTopBarOnScroll(): Flow<Boolean> = error("unused")

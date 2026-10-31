@@ -33,6 +33,9 @@ class AppViewModel @Inject constructor(
     val isShowFavourites: StateFlow<Boolean> = appPrefs.isShowFavourites()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val isShowPasskeys: StateFlow<Boolean> = appPrefs.isShowPasskeys()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     val isRestoreLastScreenOnUnlock: StateFlow<Boolean> = appPrefs.isRestoreLastScreenOnUnlock()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

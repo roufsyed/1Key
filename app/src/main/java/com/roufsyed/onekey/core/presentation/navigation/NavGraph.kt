@@ -60,6 +60,7 @@ import com.roufsyed.onekey.feature.twofa.presentation.screen.QrScannerScreen
 import com.roufsyed.onekey.feature.twofa.presentation.screen.TwoFaListScreen
 import com.roufsyed.onekey.feature.vault.presentation.screen.CredentialDetailScreen
 import com.roufsyed.onekey.feature.vault.presentation.screen.FavouritesScreen
+import com.roufsyed.onekey.feature.vault.presentation.screen.passkey.PasskeyListScreen
 import com.roufsyed.onekey.feature.vault.presentation.screen.RecycleBinScreen
 import com.roufsyed.onekey.feature.vault.presentation.screen.TaggedCredentialListScreen
 import com.roufsyed.onekey.feature.vault.presentation.screen.VaultScreen
@@ -89,6 +90,7 @@ sealed class Screen(val route: String) {
             "credential/${id ?: "new"}?initialTag=${Uri.encode(initialTag)}&initialType=${Uri.encode(initialType)}"
     }
     data object TwoFaList : Screen("two_fa_list")
+    data object Passkeys : Screen("passkeys")
     data object Settings : Screen("settings")
     data object SetupPin : Screen("setup_pin")
     data object ChangePassword : Screen("change_password")
@@ -125,6 +127,7 @@ private val BOTTOM_NAV_ROUTES = setOf(
     Screen.Vault.route,
     Screen.Favourites.route,
     Screen.TwoFaList.route,
+    Screen.Passkeys.route,
     Screen.Settings.route,
 )
 
@@ -138,6 +141,7 @@ fun OneKeyNavGraph(
     val appViewModel: AppViewModel = hiltViewModel()
     val isUnlocked by appViewModel.isUnlocked.collectAsStateWithLifecycle()
     val isShowFavourites by appViewModel.isShowFavourites.collectAsStateWithLifecycle()
+    val isShowPasskeys by appViewModel.isShowPasskeys.collectAsStateWithLifecycle()
     val restoreLastScreenOnUnlock by appViewModel.isRestoreLastScreenOnUnlock.collectAsStateWithLifecycle()
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
@@ -184,6 +188,16 @@ fun OneKeyNavGraph(
         }
     }
 
+    // Same for the Passkeys tab.
+    LaunchedEffect(isShowPasskeys) {
+        if (!isShowPasskeys && currentRoute == Screen.Passkeys.route) {
+            navController.navigate(Screen.Vault.route) {
+                popUpTo(Screen.Vault.route) { inclusive = false }
+                launchSingleTop = true
+            }
+        }
+    }
+
     // The outer Box hosts an UnlockOverlay sibling above the Scaffold. Keeping the morph at
     // app root means the bottom-nav appearing and the NavHost cross-fade both happen
     // *under* the curtain, eliminating the layout pop the user would otherwise see when
@@ -205,6 +219,7 @@ fun OneKeyNavGraph(
                     OneKeyBottomNav(
                         currentRoute = currentRoute,
                         showFavourites = isShowFavourites,
+                        showPasskeys = isShowPasskeys,
                         onNavigate = { navController.navigateToTab(it) },
                     )
                 }
@@ -351,6 +366,14 @@ fun OneKeyNavGraph(
                         onBack = { navController.popBackStack() },
                         showBack = false,
                         onScanQr = { navController.navigate(Screen.QrScanner.route) },
+                    )
+                }
+
+                composable(Screen.Passkeys.route) {
+                    PasskeyListScreen(
+                        onCredentialClick = { id ->
+                            navController.navigate(Screen.CredentialDetail.createRoute(id))
+                        },
                     )
                 }
 
@@ -601,6 +624,7 @@ fun OneKeyNavGraph(
 private fun OneKeyBottomNav(
     currentRoute: String?,
     showFavourites: Boolean,
+    showPasskeys: Boolean,
     onNavigate: (String) -> Unit,
 ) {
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -631,6 +655,15 @@ private fun OneKeyBottomNav(
             label = { Text("2FA") },
             alwaysShowLabel = false,
         )
+        if (showPasskeys) {
+            NavigationBarItem(
+                selected = currentRoute == Screen.Passkeys.route,
+                onClick = { onNavigate(Screen.Passkeys.route) },
+                icon = { Icon(Icons.Default.Key, contentDescription = "Passkeys") },
+                label = { Text("Passkeys") },
+                alwaysShowLabel = false,
+            )
+        }
         NavigationBarItem(
             selected = currentRoute == Screen.Settings.route,
             onClick = { onNavigate(Screen.Settings.route) },

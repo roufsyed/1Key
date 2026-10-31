@@ -254,6 +254,13 @@ internal fun buildSettingsIndex(): List<SettingsEntry> = listOf(
         keywords = listOf("passkey", "passkeys", "webauthn", "fido", "credential manager", "trusted browsers", "sign in without password"),
         action = SettingsAction.Navigate(SettingsDestination.Passkeys),
     ),
+    SettingsEntry(
+        title = "Show Passkeys tab",
+        subtitle = "Show or hide Passkeys in bottom navigation",
+        sectionLabel = "Passkeys",
+        keywords = listOf("passkey", "passkeys", "nav", "bottom bar", "tab"),
+        action = SettingsAction.Navigate(SettingsDestination.Passkeys),
+    ),
 
     // ── Backup ───────────────────────────────────────────────────────────────
     SettingsEntry(

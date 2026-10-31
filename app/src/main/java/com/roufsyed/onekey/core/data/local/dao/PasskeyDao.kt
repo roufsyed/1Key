@@ -34,6 +34,15 @@ interface PasskeyDao {
     )
     suspend fun getAllActive(): List<PasskeyEntity>
 
+    /** Live form of [getAllActive]; Room re-emits when either table changes. Feeds the Passkeys tab. */
+    @Query(
+        """SELECT p.* FROM passkeys p
+           INNER JOIN credentials c ON c.id = p.credential_id
+           WHERE c.deleted_at IS NULL
+           ORDER BY p.created_at ASC"""
+    )
+    fun observeAllActive(): Flow<List<PasskeyEntity>>
+
     @Query("SELECT * FROM passkeys WHERE credential_id = :credentialId ORDER BY created_at ASC")
     suspend fun getForCredential(credentialId: String): List<PasskeyEntity>
 

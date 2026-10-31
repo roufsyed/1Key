@@ -72,6 +72,15 @@ class PasskeyRepositoryImpl @Inject constructor(
             }
         }.flowOn(Dispatchers.Default)
 
+    override fun observeAllActive(): Flow<List<PasskeySummary>> =
+        keyHolder.isUnlocked.flatMapLatest { unlocked ->
+            if (!unlocked) flowOf(emptyList())
+            else dao.observeAllActive().map { list ->
+                val key = fieldKey()
+                list.mapNotNull { entity -> runCatching { entity.toSummary(key) }.getOrNull() }
+            }
+        }.flowOn(Dispatchers.Default)
+
     override suspend fun allForExport(): AppResult<PasskeyRepository.ExportBatch> = runCatchingResult {
         val key = fieldKey()
         var skipped = 0

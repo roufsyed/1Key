@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.roufsyed.onekey.core.domain.passkey.AllowlistSnapshotMeta
 import com.roufsyed.onekey.core.domain.passkey.CallerPolicy
 import com.roufsyed.onekey.core.domain.passkey.PrivilegedAppList
+import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
 import com.roufsyed.onekey.feature.passkey.data.PasskeyPreferences
 import com.roufsyed.onekey.feature.passkey.service.OneKeyCredentialProviderService
 import com.roufsyed.onekey.feature.passkey.verify.PrivilegedAllowlist
@@ -41,6 +42,7 @@ class PasskeySettingsViewModel @Inject constructor(
     private val prefs: PasskeyPreferences,
     private val allowlist: PrivilegedAllowlist,
     private val application: Application,
+    private val appPrefs: AppPreferencesRepository,
 ) : ViewModel() {
 
     enum class SystemStatus {
@@ -63,6 +65,10 @@ class PasskeySettingsViewModel @Inject constructor(
 
     val isEnabled: StateFlow<Boolean> = prefs.isProviderEnabled()
         .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+
+    /** Passkeys tab in the bottom navigation bar; the same switch Favourites has in General. */
+    val isShowTab: StateFlow<Boolean> = appPrefs.isShowPasskeys()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     val trustedBrowsers: StateFlow<List<TrustedBrowser>> = prefs.trustedBrowsersJson()
         .map { json -> parseTrusted(json) }
@@ -87,6 +93,10 @@ class PasskeySettingsViewModel @Inject constructor(
 
     fun setEnabled(enabled: Boolean) {
         viewModelScope.launch { prefs.setProviderEnabled(enabled) }
+    }
+
+    fun setShowTab(show: Boolean) {
+        viewModelScope.launch { appPrefs.setShowPasskeys(show) }
     }
 
     /** Re-reads the OS-level provider status; the screen calls it on every resume. */

@@ -607,6 +607,8 @@ class TaggedCredentialListViewModelTest {
         override suspend fun setLastMasterPasswordTimestamp(timestamp: Long) = error("unused")
         override fun isShowFavourites(): Flow<Boolean> = error("unused")
         override suspend fun setShowFavourites(show: Boolean) = error("unused")
+        override fun isShowPasskeys(): Flow<Boolean> = error("unused")
+        override suspend fun setShowPasskeys(show: Boolean) = error("unused")
         override fun getRecycleBinRetention(): Flow<RecycleBinRetention> = error("unused")
         override suspend fun setRecycleBinRetention(retention: RecycleBinRetention) = error("unused")
         override fun isRestoreLastScreenOnUnlock(): Flow<Boolean> = error("unused")
