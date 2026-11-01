@@ -19,6 +19,7 @@ import com.roufsyed.onekey.core.domain.repository.CredentialRepository
 import com.roufsyed.onekey.core.domain.repository.PasskeyRepository
 import com.roufsyed.onekey.core.domain.webauthn.ClientData
 import com.roufsyed.onekey.core.domain.webauthn.CreationOptions
+import com.roufsyed.onekey.core.domain.webauthn.PasskeyAlgorithm
 import com.roufsyed.onekey.core.domain.webauthn.RequestOptions
 import com.roufsyed.onekey.core.domain.webauthn.RpId
 import com.roufsyed.onekey.core.domain.webauthn.WebAuthnAuthenticator
@@ -100,6 +101,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         val options: CreationOptions,
         val caller: CallerKind,
         val rpId: String,
+        val algorithm: PasskeyAlgorithm,
         val preVerified: Boolean,
     ) {
         var targetCredentialId: String? = null
@@ -150,9 +152,8 @@ class PasskeyCeremonyViewModel @Inject constructor(
                 ?: return@launch fail("Only passkeys can be saved here.", FailureKind.NOT_SUPPORTED)
             val options = runCatching { WebAuthnJson.parseCreationOptions(callingRequest.requestJson) }.getOrNull()
                 ?: return@launch fail("The registration request could not be read.")
-            if (!options.supportsEs256) {
-                return@launch fail("This site requires a key type 1Key does not support.", FailureKind.NOT_SUPPORTED)
-            }
+            val algorithm = options.algorithm
+                ?: return@launch fail("This site requires a key type 1Key does not support.", FailureKind.NOT_SUPPORTED)
             val caller = callerVerifier.resolve(request.callingAppInfo)
             if (caller is CallerKind.Refused) { _step.value = Step.Explain(ExplainTopic.of(caller.reason)); return@launch }
             val rpId = options.rpId ?: originHost(caller)
@@ -161,7 +162,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
                 return@launch fail("The app asked for a passkey with an invalid site name.", FailureKind.NOT_ALLOWED)
             }
             target = rpId
-            create = CreateJob(callingRequest, options, caller, rpId, preVerified = request.biometricPromptResult?.isSuccessful == true)
+            create = CreateJob(callingRequest, options, caller, rpId, algorithm, preVerified = request.biometricPromptResult?.isSuccessful == true)
             proceed()
         }
     }
@@ -358,7 +359,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
 
         val credentialId = job.targetCredentialId ?: createCredential(job) ?: return fail("The vault entry could not be saved.")
         val uv = userVerified(job.preVerified)
-        val registration = WebAuthnAuthenticator.register(rpId = job.rpId, userVerified = uv, backupState = false)
+        val registration = WebAuthnAuthenticator.register(rpId = job.rpId, userVerified = uv, backupState = false, algorithm = job.algorithm)
         val now = System.currentTimeMillis()
         val saved = try {
             passkeyRepository.save(
@@ -393,6 +394,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
                 attestationObject = registration.attestationObject,
                 authenticatorData = registration.authenticatorData,
                 publicKeySpki = registration.publicKeySpki,
+                publicKeyAlgorithm = registration.algorithm.coseId,
                 credProps = true,
             ),
         )

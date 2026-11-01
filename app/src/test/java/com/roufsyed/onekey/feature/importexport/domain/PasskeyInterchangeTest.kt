@@ -10,6 +10,9 @@ import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
 import com.roufsyed.onekey.core.domain.webauthn.Base64Url
 import com.roufsyed.onekey.core.domain.webauthn.Es256
+import com.roufsyed.onekey.core.domain.webauthn.PasskeyAlgorithm
+import com.roufsyed.onekey.core.domain.webauthn.PasskeyKeys
+import com.roufsyed.onekey.core.domain.webauthn.Pkcs8Pem
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.core.security.SecretKeyHolder
 import kotlinx.coroutines.runBlocking
@@ -130,6 +133,28 @@ class PasskeyInterchangeTest {
         assertEquals(PasskeyOrigin.Browser("https://example.com"), pk.origin)   // no binding: browser only
         assertNotNull(pk.backedUpAt)                             // came from a backup
         assertTrue(cred.customFields.isEmpty())
+    }
+
+    @Test fun importer_accepts_every_supported_key_type_and_rejects_others() = runBlocking {
+        fun entry(pem: String, id: String) = mapOf(
+            "rp_id" to "example.com", "user_handle" to "AQID", "credential_id" to id, "private_key_pem" to pem,
+        )
+        val p384 = java.security.KeyPairGenerator.getInstance("EC")
+            .apply { initialize(java.security.spec.ECGenParameterSpec("secp384r1")) }.generateKeyPair()
+        val entries = listOf(
+            entry(Pkcs8Pem.encode(PasskeyKeys.generate(PasskeyAlgorithm.ES256).privateKeyPkcs8), "AQ"),
+            entry(Pkcs8Pem.encode(PasskeyKeys.generate(PasskeyAlgorithm.EDDSA).privateKeyPkcs8), "Ag"),
+            entry(Pkcs8Pem.encode(PasskeyKeys.generate(PasskeyAlgorithm.RS256).privateKeyPkcs8), "Aw"),
+            entry(Pkcs8Pem.encode(p384.private.encoded), "BA"),
+        )
+        val json = gson.toJson(listOf(mapOf("id" to "c", "title" to "Example", "passkeys" to entries)))
+        val file = tmp.newFile("mixed.json").also { it.writeText(json) }
+        val cred = (importer.parse(file.path) as AppResult.Success).data.credentials.single()
+        assertEquals("the P-384 key is dropped, the three supported types survive", 3, cred.passkeys.size)
+        assertEquals(
+            listOf(PasskeyAlgorithm.ES256, PasskeyAlgorithm.EDDSA, PasskeyAlgorithm.RS256),
+            cred.passkeys.map { PasskeyAlgorithm.ofPkcs8(it.privateKeyPkcs8) },
+        )
     }
 
     @Test fun plain_file_write_omits_nothing_the_dto_has_but_csv_never_carries_passkeys() = runBlocking {

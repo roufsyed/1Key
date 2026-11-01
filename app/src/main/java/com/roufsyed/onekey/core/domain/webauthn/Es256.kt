@@ -9,7 +9,6 @@ import java.security.Signature
 import java.security.interfaces.ECPublicKey
 import java.security.spec.ECGenParameterSpec
 import java.security.spec.PKCS8EncodedKeySpec
-import java.util.Base64
 
 /**
  * ES256 (ECDSA over P-256 with SHA-256) primitives for passkeys, on the
@@ -20,13 +19,12 @@ import java.util.Base64
  *
  * Private keys are handled as PKCS#8 DER so the same bytes serve the Room
  * row, the encrypted backup, and the KeePassXC interchange format (which
- * carries the PEM form of exactly these bytes).
+ * carries the PEM form of exactly these bytes). The other algorithms live in
+ * [PasskeyKeys]; this object stays ES256-specific.
  */
 object Es256 {
     private const val CURVE = "secp256r1"
     private const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
-    private const val PEM_HEADER = "-----BEGIN PRIVATE KEY-----"
-    private const val PEM_FOOTER = "-----END PRIVATE KEY-----"
     private val secureRandom = SecureRandom()
 
     fun generateKeyPair(): KeyPair {
@@ -64,16 +62,8 @@ object Es256 {
         return signature.verify(derSignature)
     }
 
-    /** PKCS#8 PEM, 64-column base64 body, as KeePassXC writes `KPEX_PASSKEY_PRIVATE_KEY_PEM`. */
-    fun toPem(pkcs8: ByteArray): String {
-        val body = Base64.getMimeEncoder(64, "\n".toByteArray()).encodeToString(pkcs8)
-        return "$PEM_HEADER\n$body\n$PEM_FOOTER\n"
-    }
+    /** Kept for callers that predate [Pkcs8Pem]; same bytes for every algorithm. */
+    fun toPem(pkcs8: ByteArray): String = Pkcs8Pem.encode(pkcs8)
 
-    /** Accepts the PEM form with or without the surrounding armour and any line breaks. */
-    fun fromPem(pem: String): ByteArray {
-        val body = pem.replace(PEM_HEADER, "").replace(PEM_FOOTER, "").filterNot { it.isWhitespace() }
-        require(body.isNotEmpty()) { "empty PEM body" }
-        return Base64.getDecoder().decode(body)
-    }
+    fun fromPem(pem: String): ByteArray = Pkcs8Pem.decode(pem)
 }

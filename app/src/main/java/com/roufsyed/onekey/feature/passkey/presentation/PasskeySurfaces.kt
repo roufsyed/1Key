@@ -205,9 +205,9 @@ internal fun ExplainSurface(topic: ExplainTopic, onClose: () -> Unit) {
                 "The app is signed by several keys at once, so 1Key cannot pin a single identity to a passkey. Sign in through your browser instead."
         ExplainTopic.UNSUPPORTED_ALGORITHM ->
             "This site wants a key type 1Key doesn't make" to
-                "1Key creates ES256 passkeys, the standard type every major site and passkey manager uses. " +
-                "This site's request left ES256 out, so there is nothing 1Key can offer it. Your vault is fine. " +
-                "Sign in another way, or ask the site to accept ES256."
+                "1Key creates ES256, Ed25519 and RS256 passkeys, which between them cover every mainstream site. " +
+                "This site's request listed none of them, so there is nothing 1Key can offer it. Your vault is fine. " +
+                "Sign in another way, or ask the site to accept one of those."
     }
     CeremonyScaffold(headline = title, target = null, icon = Icons.Default.Lock) {
         Text(body, style = MaterialTheme.typography.bodyMedium)

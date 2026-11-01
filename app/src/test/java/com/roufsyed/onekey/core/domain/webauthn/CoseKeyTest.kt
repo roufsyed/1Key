@@ -39,6 +39,39 @@ class CoseKeyTest {
         assertEquals(0x02.toByte(), padded[31])
     }
 
+    @Test fun ed25519_layout_is_kty_alg_crv_x() {
+        val x = ByteArray(32) { 0x33 }
+        val expected = byteArrayOf(
+            0xA4.toByte(),                 // map(4)
+            0x01, 0x01,                    // 1: 1 (kty OKP)
+            0x03, 0x27,                    // 3: -8 (alg EdDSA)
+            0x20, 0x06,                    // -1: 6 (crv Ed25519)
+            0x21, 0x58, 0x20,              // -2: bytes(32)
+        ) + x
+        assertArrayEquals(expected, CoseKey.ed25519(x))
+        assertThrows(IllegalArgumentException::class.java) { CoseKey.ed25519(ByteArray(31)) }
+    }
+
+    @Test fun rs256_layout_is_kty_alg_n_e_with_unsigned_integers() {
+        val n = ByteArray(256) { 0x44 }
+        val e = byteArrayOf(0x01, 0x00, 0x01)
+        val expected = byteArrayOf(
+            0xA4.toByte(),                        // map(4)
+            0x01, 0x03,                           // 1: 3 (kty RSA)
+            0x03, 0x39, 0x01, 0x00,               // 3: -257 (alg RS256)
+            0x20, 0x59, 0x01, 0x00,               // -1: bytes(256)
+        ) + n + byteArrayOf(0x21, 0x43) + e       // -2: bytes(3)
+        assertArrayEquals(expected, CoseKey.rs256(n, e))
+        assertArrayEquals(byteArrayOf(0x01, 0x00, 0x01), CoseKey.unsigned(BigInteger.valueOf(65537)))
+        assertEquals(256, CoseKey.unsigned(BigInteger(1, ByteArray(256) { 0xFF.toByte() })).size)
+    }
+
+    @Test fun real_rsa_key_has_a_256_byte_modulus_in_cose() {
+        val cose = PasskeyKeys.generate(PasskeyAlgorithm.RS256).cosePublicKey
+        // 1 (map head) + 2 (kty) + 4 (alg) + 4 (n head) + 256 + 2 (e head) + 3
+        assertEquals(272, cose.size)
+    }
+
     @Test fun real_key_encodes_to_77_bytes() {
         val kp = Es256.generateKeyPair()
         assertEquals(77, CoseKey.es256(Es256.publicKeyOf(kp)).size)

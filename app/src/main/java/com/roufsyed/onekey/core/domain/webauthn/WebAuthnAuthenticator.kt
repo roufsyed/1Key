@@ -1,7 +1,5 @@
 package com.roufsyed.onekey.core.domain.webauthn
 
-import java.security.KeyPair
-
 /**
  * The authenticator-side ceremonies, composed from the primitives in this
  * package. Pure functions: no Android, no I/O, no state. The Credential
@@ -13,6 +11,7 @@ object WebAuthnAuthenticator {
 
     /** Everything a registration produces. [privateKeyPkcs8] is the only secret. */
     class Registration(
+        val algorithm: PasskeyAlgorithm,
         val credentialId: ByteArray,
         val privateKeyPkcs8: ByteArray,
         val cosePublicKey: ByteArray,
@@ -28,7 +27,8 @@ object WebAuthnAuthenticator {
     )
 
     /**
-     * Registers a new discoverable ES256 credential for [rpId].
+     * Registers a new discoverable credential for [rpId] with [algorithm], the
+     * first entry of the site's `pubKeyCredParams` that 1Key supports.
      *
      * @param backupState honest BS flag: true only when a backup containing this
      *   credential already exists, which for a brand-new credential is false.
@@ -37,30 +37,31 @@ object WebAuthnAuthenticator {
         rpId: String,
         userVerified: Boolean,
         backupState: Boolean = false,
+        algorithm: PasskeyAlgorithm = PasskeyAlgorithm.ES256,
         credentialId: ByteArray = Es256.newCredentialId(),
-        keyPair: KeyPair = Es256.generateKeyPair(),
+        keys: PasskeyKeys.Generated = PasskeyKeys.generate(algorithm),
         extensions: ByteArray? = null,
     ): Registration {
-        val cosePublicKey = CoseKey.es256(Es256.publicKeyOf(keyPair))
         val authenticatorData = AuthenticatorData.registration(
             rpId = rpId,
             credentialId = credentialId,
-            cosePublicKey = cosePublicKey,
+            cosePublicKey = keys.cosePublicKey,
             userVerified = userVerified,
             backupState = backupState,
             extensions = extensions,
         )
         return Registration(
+            algorithm = keys.algorithm,
             credentialId = credentialId,
-            privateKeyPkcs8 = Es256.privateKeyPkcs8(keyPair),
-            cosePublicKey = cosePublicKey,
-            publicKeySpki = keyPair.public.encoded,
+            privateKeyPkcs8 = keys.privateKeyPkcs8,
+            cosePublicKey = keys.cosePublicKey,
+            publicKeySpki = keys.publicKeySpki,
             authenticatorData = authenticatorData,
             attestationObject = AttestationObject.none(authenticatorData),
         )
     }
 
-    /** Signs an assertion for an existing credential. The caller zeroes [privateKeyPkcs8] afterwards. */
+    /** Signs an assertion for an existing credential of any supported algorithm. The caller zeroes [privateKeyPkcs8] afterwards. */
     fun assert(
         rpId: String,
         privateKeyPkcs8: ByteArray,
@@ -77,7 +78,7 @@ object WebAuthnAuthenticator {
         )
         return Assertion(
             authenticatorData = authenticatorData,
-            signature = Es256.signAssertion(privateKeyPkcs8, authenticatorData, clientDataHash),
+            signature = PasskeyKeys.signAssertion(privateKeyPkcs8, authenticatorData, clientDataHash),
         )
     }
 }

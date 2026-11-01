@@ -42,8 +42,8 @@ class CreationOptions(
     val attestation: String,
     val wantsCredProps: Boolean,
 ) {
-    /** ES256 is the only algorithm 1Key produces. An empty list means "anything". */
-    val supportsEs256: Boolean get() = algorithms.isEmpty() || CoseKey.ALG_ES256 in algorithms
+    /** The algorithm 1Key will use: the first of the site's list it supports, or null when it supports none. An empty list means the spec defaults. */
+    val algorithm: PasskeyAlgorithm? get() = PasskeyAlgorithm.firstSupported(algorithms)
 }
 
 /** The parts of `PublicKeyCredentialRequestOptions` (section 5.5) the provider acts on. */
@@ -113,13 +113,14 @@ object WebAuthnJson {
         attestationObject: ByteArray,
         authenticatorData: ByteArray,
         publicKeySpki: ByteArray,
+        publicKeyAlgorithm: Int,
         credProps: Boolean,
     ): String {
         val response = JsonObject().apply {
             addProperty("clientDataJSON", clientDataJson?.let(Base64Url::encode) ?: "")
             addProperty("attestationObject", Base64Url.encode(attestationObject))
             add("transports", JsonArray().apply { add("internal"); add("hybrid") })
-            addProperty("publicKeyAlgorithm", CoseKey.ALG_ES256)
+            addProperty("publicKeyAlgorithm", publicKeyAlgorithm)
             addProperty("publicKey", Base64Url.encode(publicKeySpki))
             addProperty("authenticatorData", Base64Url.encode(authenticatorData))
         }

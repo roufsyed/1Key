@@ -10,7 +10,7 @@ import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.model.runCatchingResult
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
 import com.roufsyed.onekey.core.domain.webauthn.Base64Url
-import com.roufsyed.onekey.core.domain.webauthn.Es256
+import com.roufsyed.onekey.core.domain.webauthn.Pkcs8Pem
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.core.security.SecretKeyHolder
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriBuilder
@@ -182,7 +182,7 @@ class VaultExporterImpl @Inject constructor(
             "user_display_name" to userDisplayName,
             "user_handle" to Base64Url.encode(userHandle),
             "credential_id" to Base64Url.encode(webauthnCredentialId),
-            "private_key_pem" to Es256.toPem(privateKeyPkcs8),
+            "private_key_pem" to Pkcs8Pem.encode(privateKeyPkcs8),
             "origin" to when (val o = origin) {
                 is PasskeyOrigin.Browser -> mapOf("type" to "browser", "origin" to o.origin)
                 is PasskeyOrigin.App -> mapOf("type" to "app", "package" to o.packageName, "cert_sha256" to o.certSha256)

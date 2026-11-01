@@ -31,7 +31,7 @@ class WebAuthnJsonTest {
         assertEquals("Rouf Syed", o.userDisplayName)
         assertEquals("AQIDBA", o.challenge)
         assertEquals(listOf(-7, -257), o.algorithms)
-        assertTrue(o.supportsEs256)
+        assertEquals(PasskeyAlgorithm.ES256, o.algorithm)
         assertEquals(1, o.excludeCredentials.size)
         assertTrue(o.excludeCredentials[0].matches(byteArrayOf(9, 9, 9)))
         assertEquals(UserVerificationRequirement.REQUIRED, o.userVerification)
@@ -44,15 +44,19 @@ class WebAuthnJsonTest {
         val o = WebAuthnJson.parseCreationOptions("""{"rp":{"name":"X"},"user":{"id":"AA","name":"u","displayName":"U"},"challenge":"Zg"}""")
         assertNull(o.rpId)
         assertTrue(o.algorithms.isEmpty())
-        assertTrue(o.supportsEs256)
+        assertEquals("no list means the spec default", PasskeyAlgorithm.ES256, o.algorithm)
         assertEquals(UserVerificationRequirement.PREFERRED, o.userVerification)
         assertEquals("none", o.attestation)
         assertFalse(o.wantsCredProps)
     }
 
-    @Test fun creation_options_without_es256_are_flagged() {
-        val o = WebAuthnJson.parseCreationOptions("""{"rp":{"id":"a.com"},"user":{"id":"AA","name":"u","displayName":"U"},"challenge":"Zg","pubKeyCredParams":[{"type":"public-key","alg":-257}]}""")
-        assertFalse(o.supportsEs256)
+    @Test fun creation_options_follow_the_sites_algorithm_order() {
+        val rsaOnly = WebAuthnJson.parseCreationOptions("""{"rp":{"id":"a.com"},"user":{"id":"AA","name":"u","displayName":"U"},"challenge":"Zg","pubKeyCredParams":[{"type":"public-key","alg":-257}]}""")
+        assertEquals(PasskeyAlgorithm.RS256, rsaOnly.algorithm)
+        val edFirst = WebAuthnJson.parseCreationOptions("""{"rp":{"id":"a.com"},"user":{"id":"AA","name":"u","displayName":"U"},"challenge":"Zg","pubKeyCredParams":[{"type":"public-key","alg":-8},{"type":"public-key","alg":-7}]}""")
+        assertEquals(PasskeyAlgorithm.EDDSA, edFirst.algorithm)
+        val unknownOnly = WebAuthnJson.parseCreationOptions("""{"rp":{"id":"a.com"},"user":{"id":"AA","name":"u","displayName":"U"},"challenge":"Zg","pubKeyCredParams":[{"type":"public-key","alg":-48}]}""")
+        assertNull(unknownOnly.algorithm)
     }
 
     @Test fun malformed_requests_throw_illegal_argument() {
@@ -80,6 +84,7 @@ class WebAuthnJsonTest {
             attestationObject = byteArrayOf(0xA3.toByte()),
             authenticatorData = byteArrayOf(7),
             publicKeySpki = byteArrayOf(8),
+            publicKeyAlgorithm = PasskeyAlgorithm.EDDSA.coseId,
             credProps = true,
         )
         val o = JsonParser.parseString(json).asJsonObject
@@ -90,7 +95,7 @@ class WebAuthnJsonTest {
         val r = o["response"].asJsonObject
         assertEquals("e30", r["clientDataJSON"].asString)
         assertEquals("ow", r["attestationObject"].asString)
-        assertEquals(-7, r["publicKeyAlgorithm"].asInt)
+        assertEquals("follows the key that was made, not a constant", -8, r["publicKeyAlgorithm"].asInt)
         assertEquals("CA", r["publicKey"].asString)
         assertEquals("Bw", r["authenticatorData"].asString)
         assertEquals(listOf("internal", "hybrid"), r["transports"].asJsonArray.map { it.asString })

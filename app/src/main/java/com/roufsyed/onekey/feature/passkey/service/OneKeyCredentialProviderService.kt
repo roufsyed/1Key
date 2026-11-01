@@ -125,7 +125,7 @@ class OneKeyCredentialProviderService : CredentialProviderService() {
         if (caller is CallerKind.Refused) {
             return builder.addCreateEntry(entry.entries().explainCreateEntry(ExplainTopic.of(caller.reason), siteLabel = null)).build()
         }
-        if (!options.supportsEs256) {
+        if (options.algorithm == null) {
             val site = options.rpId ?: planner.originHost(caller)
             return builder.addCreateEntry(entry.entries().explainCreateEntry(ExplainTopic.UNSUPPORTED_ALGORITHM, siteLabel = site)).build()
         }

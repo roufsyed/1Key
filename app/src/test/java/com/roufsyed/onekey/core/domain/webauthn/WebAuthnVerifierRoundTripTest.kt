@@ -33,18 +33,48 @@ class WebAuthnVerifierRoundTripTest {
     private val origin = "https://example.com"
     private val es256Only = listOf(PublicKeyCredentialParameters(PublicKeyCredentialType.PUBLIC_KEY, COSEAlgorithmIdentifier.ES256))
 
+    private fun serverAccepts(algorithm: PasskeyAlgorithm) = listOf(
+        PublicKeyCredentialParameters(
+            PublicKeyCredentialType.PUBLIC_KEY,
+            when (algorithm) {
+                PasskeyAlgorithm.ES256 -> COSEAlgorithmIdentifier.ES256
+                PasskeyAlgorithm.EDDSA -> COSEAlgorithmIdentifier.EdDSA
+                PasskeyAlgorithm.RS256 -> COSEAlgorithmIdentifier.RS256
+            },
+        ),
+    )
+
     private fun serverProperty(challenge: ByteArray, originValue: String = origin) =
         ServerProperty(Origin.create(originValue), rpId, DefaultChallenge(challenge))
 
-    @Test fun registration_then_assertion_verify_under_webauthn4j() {
+    @Test fun es256_registration_then_assertion_verify_under_webauthn4j() = roundTrip(PasskeyAlgorithm.ES256)
+
+    @Test fun ed25519_registration_then_assertion_verify_under_webauthn4j() = roundTrip(PasskeyAlgorithm.EDDSA)
+
+    @Test fun rs256_registration_then_assertion_verify_under_webauthn4j() = roundTrip(PasskeyAlgorithm.RS256)
+
+    @Test fun a_server_that_accepts_only_rs256_rejects_an_es256_registration() {
+        val challenge = ByteArray(32) { 4 }
+        val clientData = ClientData.json(ClientData.TYPE_CREATE, Base64Url.encode(challenge), origin)
+        val registration = WebAuthnAuthenticator.register(rpId = rpId, userVerified = true, algorithm = PasskeyAlgorithm.ES256)
+        assertThrows(Exception::class.java) {
+            manager.verify(
+                RegistrationRequest(registration.attestationObject, clientData.toByteArray(Charsets.UTF_8)),
+                RegistrationParameters(serverProperty(challenge), serverAccepts(PasskeyAlgorithm.RS256), true),
+            )
+        }
+    }
+
+    private fun roundTrip(algorithm: PasskeyAlgorithm) {
         // ── Registration ──────────────────────────────────────────────────
         val regChallenge = ByteArray(32) { it.toByte() }
         val regClientData = ClientData.json(ClientData.TYPE_CREATE, Base64Url.encode(regChallenge), origin)
-        val registration = WebAuthnAuthenticator.register(rpId = rpId, userVerified = true)
+        val registration = WebAuthnAuthenticator.register(rpId = rpId, userVerified = true, algorithm = algorithm)
+        assertEquals(algorithm, registration.algorithm)
 
         val regData = manager.verify(
             RegistrationRequest(registration.attestationObject, regClientData.toByteArray(Charsets.UTF_8)),
-            RegistrationParameters(serverProperty(regChallenge), es256Only, /* userVerificationRequired = */ true),
+            RegistrationParameters(serverProperty(regChallenge), serverAccepts(algorithm), /* userVerificationRequired = */ true),
         )
         val attestationObject = regData.attestationObject
         assertNotNull(attestationObject)

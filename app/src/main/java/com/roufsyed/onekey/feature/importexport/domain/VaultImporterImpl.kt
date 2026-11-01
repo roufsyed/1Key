@@ -16,7 +16,8 @@ import com.roufsyed.onekey.core.domain.model.runCatchingResult
 import com.roufsyed.onekey.core.domain.notes.notesNormalize
 import com.roufsyed.onekey.core.domain.usecase.ExportFormat
 import com.roufsyed.onekey.core.domain.webauthn.Base64Url
-import com.roufsyed.onekey.core.domain.webauthn.Es256
+import com.roufsyed.onekey.core.domain.webauthn.PasskeyAlgorithm
+import com.roufsyed.onekey.core.domain.webauthn.Pkcs8Pem
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriParser
 import java.io.ByteArrayInputStream
@@ -221,8 +222,9 @@ class VaultImporterImpl @Inject constructor(
                     // served to browsers only until an app of its own creates one.
                     else -> PasskeyOrigin.Browser((originMap?.get("origin") as? String) ?: "https://$rpId")
                 }
-                val privateKey = Es256.fromPem(pk["private_key_pem"] as? String ?: error("private_key_pem missing"))
-                Es256.decodePrivateKey(privateKey) // rejects anything that is not a valid EC key up front
+                val privateKey = Pkcs8Pem.decode(pk["private_key_pem"] as? String ?: error("private_key_pem missing"))
+                // Rejects anything 1Key could not sign with (unknown algorithm, EC curve other than P-256) up front.
+                requireNotNull(PasskeyAlgorithm.ofPkcs8(privateKey)) { "unsupported private key" }
                 Passkey(
                     id = "",
                     credentialId = credentialId,
