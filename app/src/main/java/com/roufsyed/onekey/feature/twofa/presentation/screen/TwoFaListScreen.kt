@@ -11,6 +11,11 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.roufsyed.onekey.core.presentation.monogram.SiteMonogram
 import androidx.compose.material3.*
 import com.roufsyed.onekey.core.presentation.util.oneKeyTopBarColors
 import androidx.compose.runtime.*
@@ -231,61 +236,39 @@ private fun RotatingOtpRow(
     onLongClick: () -> Unit,
     onCopyCode: (String) -> Unit,
 ) {
-    // Card-style row to match the recycle-bin list. The OTP code stays the visual
-    // hero - same monospace + countdown ring - now sitting on the `surface` tier
-    // with a 1 dp tonal lift above the screen body. Steam entries (5 alphanumerics)
-    // render as a single block via formatOtpCode; 6/7/8-digit codes get chunked.
+    // Same card language as the Passkeys tab: monogram tile, title, account,
+    // linked-entry badge, then the code and its timer on the right. Steam
+    // entries (5 alphanumerics) render as a single block via formatOtpCode;
+    // 6/7/8-digit codes get chunked.
     val params = entry.credential.otpParams
     val displayCode = if (params != null) formatOtpCode(params, entry.code) else entry.code
-    val shape = MaterialTheme.shapes.medium
-    Surface(
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .combinedClickable(onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick),
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            EntryHeader(entry)
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = displayCode,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 32.sp,
-                        letterSpacing = 4.sp,
-                    ),
-                    color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(
-                        progress = { entry.progress },
-                        modifier = Modifier.size(36.dp),
-                        strokeWidth = 3.dp,
-                        color = if (entry.remainingSeconds <= 5) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.primary,
-                    )
-                    Text("${entry.remainingSeconds}s", style = MaterialTheme.typography.labelSmall)
-                }
-            }
+    val expiring = entry.remainingSeconds <= 5
+    OtpCard(entry = entry, onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick) {
+        OtpCode(displayCode, color = if (expiring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+        Spacer(Modifier.width(12.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator(
+                progress = { entry.progress },
+                modifier = Modifier.size(30.dp),
+                strokeWidth = 3.dp,
+                color = if (expiring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "${entry.remainingSeconds}s",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (expiring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
 
 /**
- * HOTP row variant. Mirrors [RotatingOtpRow]'s visual rhythm - same title /
- * username / linked-badge header - but trades the timer ring for a
- * "Generate next code" affordance. The body shows the most-recently-generated
- * code or a placeholder dash sequence until the user taps generate.
- *
- * Tapping the entire row (anywhere outside the button) copies the last code, the
- * same gesture rotating rows use. Tapping the button triggers the atomic counter
- * advance via the VM. Long-press still routes to the delete dialog.
+ * HOTP row variant: the same card, with a "Generate next code" button where the
+ * timer would be. The code is the most recently generated one, or a dash
+ * placeholder until the user taps generate. Tapping the row copies the last
+ * code, or generates one when there is none yet; long-press still deletes.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -299,90 +282,108 @@ private fun HotpRow(
     val displayCode = entry.code?.let { code ->
         if (params != null) formatOtpCode(params, code) else code
     } ?: "- - -"
-    val shape = MaterialTheme.shapes.medium
-    Surface(
-        shape = shape,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .combinedClickable(
-                // Row-tap copies the last generated code; if no code exists yet we
-                // bounce the tap to the generate flow so the row isn't dead.
-                onClick = {
-                    val code = entry.code
-                    if (code != null) onCopyCode(code) else onGenerate()
-                },
-                onLongClick = onLongClick,
-            ),
+    OtpCard(
+        entry = entry,
+        onClick = {
+            val code = entry.code
+            if (code != null) onCopyCode(code) else onGenerate()
+        },
+        onLongClick = onLongClick,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            EntryHeader(entry)
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = displayCode,
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 32.sp,
-                        letterSpacing = 4.sp,
-                    ),
-                    color = if (entry.code != null) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
+        OtpCode(displayCode, color = if (entry.code != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(12.dp))
+        FilledIconButton(
+            onClick = onGenerate,
+            enabled = !entry.generating,
+            modifier = Modifier.size(40.dp),
+        ) {
+            if (entry.generating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
                 )
-                FilledIconButton(
-                    onClick = onGenerate,
-                    enabled = !entry.generating,
-                    modifier = Modifier.size(44.dp),
-                ) {
-                    if (entry.generating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Refresh,
-                            contentDescription = "Generate next code",
-                        )
-                    }
-                }
+            } else {
+                Icon(Icons.Default.Refresh, contentDescription = "Generate next code")
             }
         }
     }
 }
 
+/**
+ * Shell shared by both row kinds: the monogram tile, the title, the account,
+ * the linked-entry badge, then [trailing] (code plus timer, or code plus
+ * button). One row, so the code reads as part of the account rather than as a
+ * second block beneath it.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun EntryHeader(entry: TwoFaListEntry) {
-    Text(entry.credential.title, style = MaterialTheme.typography.titleMedium)
-    if (entry.credential.username.isNotEmpty()) {
-        Text(
-            entry.credential.username,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-    if (entry.isLinkedCredential) {
-        val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
-        Spacer(Modifier.height(4.dp))
+private fun OtpCard(
+    entry: TwoFaListEntry,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    trailing: @Composable RowScope.() -> Unit,
+) {
+    val shape = MaterialTheme.shapes.medium
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+    ) {
         Row(
+            modifier = Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(
-                Icons.Default.Lock,
-                contentDescription = null,
-                modifier = Modifier.size(11.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                categoryLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            SiteMonogram(label = entry.credential.title, fallbackIcon = Icons.Default.Security)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    entry.credential.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (entry.credential.username.isNotEmpty()) {
+                    Text(
+                        entry.credential.username,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (entry.isLinkedCredential) {
+                    val categoryLabel = (entry.credential.tags.firstOrNull() ?: "Login") + " credential"
+                    Spacer(Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(11.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text(categoryLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            trailing()
         }
     }
+}
+
+/** The code itself: monospace, sized to share a line with the account column. */
+@Composable
+private fun OtpCode(text: String, color: Color) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.headlineSmall.copy(
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Medium,
+            fontSize = 26.sp,
+            letterSpacing = 2.sp,
+        ),
+        color = color,
+        maxLines = 1,
+        softWrap = false,
+    )
 }
