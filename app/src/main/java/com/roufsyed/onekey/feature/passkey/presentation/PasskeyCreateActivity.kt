@@ -29,9 +29,26 @@ class PasskeyCreateActivity : PasskeyCeremonyActivity() {
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     override fun begin(): Boolean {
+        intent.getStringExtra(EXTRA_EXPLAIN)?.let { topic ->
+            // Explanatory entry picked in the save sheet: no request to serve, only something to say.
+            ceremony.showExplanation(ExplainTopic.parse(topic))
+            return true
+        }
         val request = PendingIntentHandler.retrieveProviderCreateCredentialRequest(intent) ?: return false
         ceremony.startCreate(request)
         return true
+    }
+
+    /**
+     * A site that cannot take ES256 gets a NotSupportedError, which it can show
+     * as such; a refused caller gets the same cancellation the sign-in side returns.
+     */
+    override fun finishExplained(topic: ExplainTopic) {
+        when (topic) {
+            ExplainTopic.UNSUPPORTED_ALGORITHM ->
+                deliver(Step.Failed("This site requires a key type 1Key does not support.", FailureKind.NOT_SUPPORTED))
+            ExplainTopic.UNKNOWN_BROWSER, ExplainTopic.MULTIPLE_SIGNERS -> finishCancelled()
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
@@ -69,5 +86,10 @@ class PasskeyCreateActivity : PasskeyCeremonyActivity() {
             setResult(RESULT_CANCELED)
         }
         finish()
+    }
+
+    companion object {
+        /** Name of an [ExplainTopic]; present only on the explanatory create entry's intent. */
+        const val EXTRA_EXPLAIN = "com.roufsyed.onekey.passkey.EXPLAIN"
     }
 }

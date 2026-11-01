@@ -15,6 +15,7 @@ import androidx.credentials.provider.PublicKeyCredentialEntry
 import com.roufsyed.onekey.R
 import com.roufsyed.onekey.core.domain.model.PasskeySummary
 import com.roufsyed.onekey.core.domain.passkey.CallerKind
+import com.roufsyed.onekey.feature.passkey.presentation.ExplainTopic
 import com.roufsyed.onekey.feature.passkey.presentation.PasskeyCreateActivity
 import com.roufsyed.onekey.feature.passkey.presentation.PasskeyGetActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -85,6 +86,27 @@ class PasskeyEntries @Inject constructor(
             )
         }
         return builder.build()
+    }
+
+    /**
+     * Save-sheet counterpart of [explainAction]. The create response has no
+     * action slot, so the explanation is itself a create entry: picking it opens
+     * the create activity on the explanatory screen, which then returns a
+     * precise error to the site instead of leaving 1Key silently absent.
+     * [siteLabel] is shown only for a verified caller; refusals name no site.
+     */
+    fun explainCreateEntry(topic: ExplainTopic, siteLabel: String?): CreateEntry {
+        val intent = Intent(context, PasskeyCreateActivity::class.java)
+            .putExtra(PasskeyCreateActivity.EXTRA_EXPLAIN, topic.name)
+        val description = when (topic) {
+            ExplainTopic.UNSUPPORTED_ALGORITHM -> "${siteLabel ?: "This site"} asks for a key type 1Key doesn't make. Tap for details."
+            ExplainTopic.UNKNOWN_BROWSER -> "This browser isn't recognised. Tap for details."
+            ExplainTopic.MULTIPLE_SIGNERS -> "This app can't be verified. Tap for details."
+        }
+        return CreateEntry.Builder("1Key can't save this passkey", pendingIntent(intent))
+            .setDescription(description)
+            .setIcon(Icon.createWithResource(context, R.mipmap.ic_launcher))
+            .build()
     }
 
     fun createEntry(rpId: String, existingForRp: Int): CreateEntry {

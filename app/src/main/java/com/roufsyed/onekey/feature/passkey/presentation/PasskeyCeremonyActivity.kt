@@ -69,6 +69,9 @@ abstract class PasskeyCeremonyActivity : FragmentActivity() {
     /** Puts a cancellation result on the intent, then finishes. */
     protected abstract fun finishCancelled()
 
+    /** Closes an explanatory screen. Cancellation by default; the create side maps some topics to a precise error. */
+    protected open fun finishExplained(topic: ExplainTopic) = finishCancelled()
+
     override fun onUserInteraction() {
         super.onUserInteraction()
         autoLockManager.onUserActivity()
@@ -179,7 +182,7 @@ abstract class PasskeyCeremonyActivity : FragmentActivity() {
                 onConfirm = { ceremony.confirmCreate() },
                 onCancel = { finishCancelled() },
             )
-            is Step.Explain -> ExplainSurface(reason = s.reason, onClose = { finishCancelled() })
+            is Step.Explain -> ExplainSurface(topic = s.topic, onClose = { finishExplained(s.topic) })
             is Step.Failed -> if (s.kind == PasskeyCeremonyViewModel.FailureKind.CANCELLED) {
                 LaunchedEffect(s) { finishCancelled() }
             } else {

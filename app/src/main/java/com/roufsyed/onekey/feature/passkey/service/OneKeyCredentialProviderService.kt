@@ -18,6 +18,7 @@ import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.passkey.CallerKind
 import com.roufsyed.onekey.core.domain.webauthn.RpId
 import com.roufsyed.onekey.core.domain.webauthn.WebAuthnJson
+import com.roufsyed.onekey.feature.passkey.presentation.ExplainTopic
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineName
 import kotlinx.coroutines.CoroutineScope
@@ -116,11 +117,18 @@ class OneKeyCredentialProviderService : CredentialProviderService() {
         val passkeyRequest = request as? BeginCreatePublicKeyCredentialRequest ?: return builder.build()
         val callingAppInfo = request.callingAppInfo ?: return builder.build()
         val options = runCatching { WebAuthnJson.parseCreationOptions(passkeyRequest.requestJson) }.getOrNull() ?: return builder.build()
-        if (!options.supportsEs256) return builder.build()
 
         val planner = entry.planner()
         val caller = planner.callerVerifier.resolve(callingAppInfo)
-        if (caller is CallerKind.Refused) return builder.build()
+        // The save sheet has no action slot, so "why isn't 1Key here" is itself a
+        // create entry (plan section 8.4). A refused caller gets no site name.
+        if (caller is CallerKind.Refused) {
+            return builder.addCreateEntry(entry.entries().explainCreateEntry(ExplainTopic.of(caller.reason), siteLabel = null)).build()
+        }
+        if (!options.supportsEs256) {
+            val site = options.rpId ?: planner.originHost(caller)
+            return builder.addCreateEntry(entry.entries().explainCreateEntry(ExplainTopic.UNSUPPORTED_ALGORITHM, siteLabel = site)).build()
+        }
         val rpId = options.rpId ?: planner.originHost(caller) ?: return builder.build()
         // A native app's RP ID is its own claim; refuse shapes no legitimate RP could have.
         if (caller is CallerKind.App && !RpId.isValid(rpId)) return builder.build()

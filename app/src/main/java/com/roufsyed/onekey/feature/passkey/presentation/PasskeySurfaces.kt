@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.roufsyed.onekey.core.domain.passkey.CallerKind
 import com.roufsyed.onekey.core.presentation.lockaware.PasswordUnlockSection
 import com.roufsyed.onekey.core.presentation.lockaware.PinUnlockSection
 import com.roufsyed.onekey.core.presentation.util.rememberCanUseBiometric
@@ -194,16 +193,21 @@ internal fun CreatePasskeySurface(
 }
 
 @Composable
-internal fun ExplainSurface(reason: CallerKind.Reason, onClose: () -> Unit) {
-    val (title, body) = when (reason) {
-        CallerKind.Reason.UNKNOWN_BROWSER ->
+internal fun ExplainSurface(topic: ExplainTopic, onClose: () -> Unit) {
+    val (title, body) = when (topic) {
+        ExplainTopic.UNKNOWN_BROWSER ->
             "This browser isn't recognised" to
                 "1Key only answers passkey requests from browsers it can identify, because a browser vouches for which website is asking. " +
                 "If you installed this browser on purpose, add it under Settings, Passkeys, Trusted browsers. " +
                 "1Key never connects to the internet, so it cannot look this up for you."
-        CallerKind.Reason.MULTIPLE_SIGNERS ->
+        ExplainTopic.MULTIPLE_SIGNERS ->
             "This app can't be verified" to
                 "The app is signed by several keys at once, so 1Key cannot pin a single identity to a passkey. Sign in through your browser instead."
+        ExplainTopic.UNSUPPORTED_ALGORITHM ->
+            "This site wants a key type 1Key doesn't make" to
+                "1Key creates ES256 passkeys, the standard type every major site and passkey manager uses. " +
+                "This site's request left ES256 out, so there is nothing 1Key can offer it. Your vault is fine. " +
+                "Sign in another way, or ask the site to accept ES256."
     }
     CeremonyScaffold(headline = title, target = null, icon = Icons.Default.Lock) {
         Text(body, style = MaterialTheme.typography.bodyMedium)

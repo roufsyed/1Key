@@ -79,7 +79,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
         data class Unlock(val target: String, val headline: String) : Step
         data class Verify(val target: String, val error: String?, val busy: Boolean) : Step
         data class Create(val form: CreateForm) : Step
-        data class Explain(val reason: CallerKind.Reason) : Step
+        data class Explain(val topic: ExplainTopic) : Step
         data class Failed(val message: String, val kind: FailureKind) : Step
         data class SignDone(val responseJson: String) : Step
         data class CreateDone(val responseJson: String) : Step
@@ -135,7 +135,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
             val options = runCatching { WebAuthnJson.parseRequestOptions(option.requestJson) }.getOrNull()
                 ?: return@launch fail("The sign-in request could not be read.")
             val caller = callerVerifier.resolve(request.callingAppInfo)
-            if (caller is CallerKind.Refused) { _step.value = Step.Explain(caller.reason); return@launch }
+            if (caller is CallerKind.Refused) { _step.value = Step.Explain(ExplainTopic.of(caller.reason)); return@launch }
             target = options.rpId ?: requesterLabel(caller)
             sign = SignJob(passkeyId, option, options, caller, preVerified = grantHonoured || request.biometricPromptResult?.isSuccessful == true)
             proceed()
@@ -154,7 +154,7 @@ class PasskeyCeremonyViewModel @Inject constructor(
                 return@launch fail("This site requires a key type 1Key does not support.", FailureKind.NOT_SUPPORTED)
             }
             val caller = callerVerifier.resolve(request.callingAppInfo)
-            if (caller is CallerKind.Refused) { _step.value = Step.Explain(caller.reason); return@launch }
+            if (caller is CallerKind.Refused) { _step.value = Step.Explain(ExplainTopic.of(caller.reason)); return@launch }
             val rpId = options.rpId ?: originHost(caller)
                 ?: return@launch fail("The site did not say which domain the passkey is for.")
             if (caller is CallerKind.App && !RpId.isValid(rpId)) {
@@ -174,9 +174,9 @@ class PasskeyCeremonyViewModel @Inject constructor(
         viewModelScope.launch { proceed() }
     }
 
-    fun showExplanation(reason: CallerKind.Reason) {
+    fun showExplanation(topic: ExplainTopic) {
         started = true
-        _step.value = Step.Explain(reason)
+        _step.value = Step.Explain(topic)
     }
 
     // ── events from the UI ───────────────────────────────────────────────────

@@ -13,7 +13,6 @@ import androidx.credentials.provider.BeginGetCredentialRequest
 import androidx.credentials.provider.BeginGetCredentialResponse
 import androidx.credentials.provider.PendingIntentHandler
 import androidx.lifecycle.lifecycleScope
-import com.roufsyed.onekey.core.domain.passkey.CallerKind
 import com.roufsyed.onekey.feature.passkey.presentation.PasskeyCeremonyViewModel.FailureKind
 import com.roufsyed.onekey.feature.passkey.presentation.PasskeyCeremonyViewModel.Step
 import com.roufsyed.onekey.feature.passkey.service.PasskeyEntries
@@ -57,11 +56,7 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
                 beginRequest = PendingIntentHandler.retrieveBeginGetCredentialRequest(intent) ?: return false
                 ceremony.startUnlockAndList(label = "your passkeys")
             }
-            MODE_EXPLAIN -> {
-                val reason = runCatching { CallerKind.Reason.valueOf(intent.getStringExtra(EXTRA_REFUSAL).orEmpty()) }
-                    .getOrDefault(CallerKind.Reason.UNKNOWN_BROWSER)
-                ceremony.showExplanation(reason)
-            }
+            MODE_EXPLAIN -> ceremony.showExplanation(ExplainTopic.parse(intent.getStringExtra(EXTRA_REFUSAL)))
             else -> return false
         }
         return true
