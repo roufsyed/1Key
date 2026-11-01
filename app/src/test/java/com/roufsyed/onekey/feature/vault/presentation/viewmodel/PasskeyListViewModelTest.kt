@@ -1,10 +1,7 @@
 package com.roufsyed.onekey.feature.vault.presentation.viewmodel
 
-import com.roufsyed.onekey.core.data.snapshot.SnapshotCredential
-import com.roufsyed.onekey.core.data.snapshot.SnapshotState
 import com.roufsyed.onekey.core.domain.model.BackgroundLockTimeout
 import com.roufsyed.onekey.core.domain.model.CredentialSortOrder
-import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.InactivityLockTimeout
 import com.roufsyed.onekey.core.domain.model.MasterPasswordInterval
 import com.roufsyed.onekey.core.domain.model.Passkey
@@ -19,7 +16,6 @@ import com.roufsyed.onekey.feature.vault.presentation.viewmodel.PasskeyListViewM
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -34,28 +30,25 @@ import org.junit.Before
 import org.junit.Test
 
 /**
- * The Passkeys tab's list: sorted by site then account, labelled with the
- * owning entry's title from the snapshot (falling back to the site when the
- * snapshot cannot say), and live across deletes.
+ * The Passkeys tab's list: sorted by site then account, and live across
+ * deletions made elsewhere.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PasskeyListViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
     private lateinit var passkeys: FakePasskeyRepository
-    private lateinit var snapshot: MutableStateFlow<SnapshotState>
 
     @Before fun setUp() {
         Dispatchers.setMain(dispatcher)
         passkeys = FakePasskeyRepository()
-        snapshot = MutableStateFlow(SnapshotState.Loaded(emptyList()))
     }
 
     @After fun tearDown() {
         Dispatchers.resetMain()
     }
 
-    private fun vm() = PasskeyListViewModel(passkeys, PrefsForPasskeyTab(), snapshot, dispatcher)
+    private fun vm() = PasskeyListViewModel(passkeys, PrefsForPasskeyTab(), dispatcher)
 
     private fun passkey(id: String, credentialId: String, rpId: String, rpName: String = "", userName: String = "") = Passkey(
         id = id, credentialId = credentialId, rpId = rpId, rpName = rpName, userName = userName, userDisplayName = "",
@@ -63,46 +56,27 @@ class PasskeyListViewModelTest {
         prfSecret = null, origin = PasskeyOrigin.Browser("https://$rpId"), createdAt = 0L, lastUsedAt = null, backedUpAt = null,
     )
 
-    private fun snap(id: String, title: String) = SnapshotCredential(
-        id = id, title = title, username = "u", url = "", tags = emptyList(), isFavorite = false, type = CredentialType.LOGIN,
-        createdAt = 0L, updatedAt = 0L, accessedAt = null, hasOtp = false,
-    )
-
-    @Test fun lists_sorted_by_site_then_account_with_owning_entry_titles() = runTest(dispatcher) {
+    @Test fun starts_loading_then_lists_sorted_by_site_then_account() = runTest(dispatcher) {
         passkeys.save(passkey("b", "c2", "github.com", rpName = "GitHub", userName = "zed"))
         passkeys.save(passkey("a", "c1", "github.com", rpName = "GitHub", userName = "amy"))
         passkeys.save(passkey("c", "c3", "example.org", userName = "amy"))
-        snapshot.value = SnapshotState.Loaded(listOf(snap("c1", "GitHub personal"), snap("c2", "GitHub work")))
         val vm = vm()
         assertEquals(ListState.Loading, vm.listState.value)
         val subscriber = launch { vm.listState.collect {} }
         advanceUntilIdle()
-        val rows = (vm.listState.value as ListState.Loaded).rows
-        assertEquals(listOf("c", "a", "b"), rows.map { it.passkey.id })
-        assertEquals("entry without a snapshot row falls back to the site", listOf("example.org", "GitHub personal", "GitHub work"), rows.map { it.credentialTitle })
+        assertEquals(listOf("c", "a", "b"), (vm.listState.value as ListState.Loaded).passkeys.map { it.id })
         subscriber.cancel()
     }
 
-    @Test fun titles_fall_back_to_the_site_while_the_snapshot_is_bypassed() = runTest(dispatcher) {
-        passkeys.save(passkey("a", "c1", "github.com", rpName = "GitHub"))
-        snapshot.value = SnapshotState.Bypassed
-        val vm = vm()
-        val subscriber = launch { vm.listState.collect {} }
-        advanceUntilIdle()
-        assertEquals("GitHub", (vm.listState.value as ListState.Loaded).rows.single().credentialTitle)
-        subscriber.cancel()
-    }
-
-    @Test fun delete_removes_the_row() = runTest(dispatcher) {
+    @Test fun a_deletion_elsewhere_drops_the_row() = runTest(dispatcher) {
         passkeys.save(passkey("a", "c1", "github.com"))
         val vm = vm()
         val subscriber = launch { vm.listState.collect {} }
         advanceUntilIdle()
-        assertEquals(1, (vm.listState.value as ListState.Loaded).rows.size)
-        vm.deletePasskey("a")
+        assertEquals(1, (vm.listState.value as ListState.Loaded).passkeys.size)
+        passkeys.deleteById("a")
         advanceUntilIdle()
-        assertTrue((vm.listState.value as ListState.Loaded).rows.isEmpty())
-        assertTrue(passkeys.all.isEmpty())
+        assertTrue((vm.listState.value as ListState.Loaded).passkeys.isEmpty())
         subscriber.cancel()
     }
 

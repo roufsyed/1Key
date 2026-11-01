@@ -1,6 +1,5 @@
 package com.roufsyed.onekey.feature.vault.presentation.screen.passkey
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,10 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Key
@@ -20,20 +16,15 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Smartphone
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -42,29 +33,26 @@ import androidx.compose.ui.unit.dp
 import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.model.PasskeySummary
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDialog
-import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDropdownMenu
+import com.roufsyed.onekey.core.presentation.monogram.SiteMonogram
 import com.roufsyed.onekey.core.presentation.util.toFormattedDate
 import com.roufsyed.onekey.core.presentation.util.toFormattedDateTime
 
 /**
- * One passkey, compact: the site, the account, and one line of context (when
- * it was made and where it works). Everything else about a passkey lives in
- * the vault entry it belongs to, which the overflow menu opens; the menu also
- * holds delete, confirmed through [DeletePasskeyDialog]. Nothing is revealed
- * or copied, because a passkey has no value a user could use by hand.
+ * One passkey: the site, the account, and context (when it was made and where
+ * it works). Nothing is revealed or copied, because a passkey has no value a
+ * user could use by hand.
  *
- * Shared by the Passkeys tab (compact: one context line) and the credential
- * detail section ([detailed]: created, last used and where it works on their
- * own lines, since that screen is where the full record belongs).
+ * Shared by the Passkeys tab (compact: one context line, no actions; the row's
+ * container opens the vault entry) and the credential detail section
+ * ([detailed]: created, last used and where it works on their own lines, with
+ * a delete button that the caller confirms through [DeletePasskeyDialog]).
+ * The button appears only when [onDelete] is supplied.
  */
 @Composable
 internal fun PasskeyRow(
     passkey: PasskeySummary,
-    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
-    /** Title of the owning vault entry, named in the menu's open action. */
-    entryTitle: String? = null,
-    onOpen: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
     detailed: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -85,11 +73,9 @@ internal fun PasskeyRow(
             Icons.Outlined.Smartphone to "Browsers and $label"
         }
     }
-    var menuOpen by remember { mutableStateOf(false) }
-
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SiteMonogram(site)
+            SiteMonogram(label = site)
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(site, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -97,29 +83,9 @@ internal fun PasskeyRow(
                     Text(passkey.rpId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "More options for ${passkey.rpId}")
-                }
-                LockAwareDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    if (onOpen != null) {
-                        DropdownMenuItem(
-                            text = { Text(entryTitle?.takeIf { it.isNotBlank() }?.let { "Open \"$it\"" } ?: "Open vault entry") },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
-                            onClick = {
-                                menuOpen = false
-                                onOpen()
-                            },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text("Delete passkey", color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-                        onClick = {
-                            menuOpen = false
-                            onDelete()
-                        },
-                    )
+            if (onDelete != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Outlined.Delete, contentDescription = "Delete passkey for ${passkey.rpId}", tint = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -141,25 +107,6 @@ internal fun PasskeyRow(
                 Spacer(Modifier.width(14.dp))
                 MetaLine(icon = scopeIcon, text = scopeText, modifier = Modifier.weight(1f, fill = false))
             }
-        }
-    }
-}
-
-/** First letter of the site in a tinted tile: a stable per-site anchor without fetching favicons, which 1Key never does. */
-@Composable
-private fun SiteMonogram(site: String) {
-    val letter = site.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.primaryContainer),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (letter == "?") {
-            Icon(Icons.Outlined.Key, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
-        } else {
-            Text(letter, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

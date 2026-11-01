@@ -28,9 +28,6 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -46,8 +43,8 @@ import com.roufsyed.onekey.feature.vault.presentation.viewmodel.PasskeyListViewM
 /**
  * Bottom-navigation tab listing every passkey in the vault, the way the 2FA
  * tab lists every OTP account. Tapping a row opens the vault entry that owns
- * the passkey; the trailing bin deletes the passkey after confirmation. The
- * tab is shown only while "Show Passkeys tab" is on in Settings > Passkeys.
+ * the passkey, where the passkey can be deleted. The tab is shown only while
+ * "Show Passkeys tab" is on in Settings > Passkeys.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,7 +54,6 @@ fun PasskeyListScreen(
 ) {
     val state by viewModel.listState.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
-    var pendingDelete by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Same collapsing top bar as the other tabs; see TwoFaListScreen for why the
     // offset is pre-seeded and clamped to the 56 dp bar height.
@@ -97,7 +93,7 @@ fun PasskeyListScreen(
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator() }
 
-            is ListState.Loaded -> if (s.rows.isEmpty()) {
+            is ListState.Loaded -> if (s.passkeys.isEmpty()) {
                 EmptyPasskeys(modifier = Modifier.fillMaxSize().padding(padding))
             } else {
                 LazyColumn(
@@ -105,36 +101,21 @@ fun PasskeyListScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(s.rows, key = { it.passkey.id }) { row ->
+                    items(s.passkeys, key = { it.id }) { passkey ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onCredentialClick(row.passkey.credentialId) },
+                                .clickable { onCredentialClick(passkey.credentialId) },
                         ) {
                             PasskeyRow(
-                                passkey = row.passkey,
-                                entryTitle = row.credentialTitle,
-                                onOpen = { onCredentialClick(row.passkey.credentialId) },
-                                onDelete = { pendingDelete = row.passkey.id },
-                                modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
+                                passkey = passkey,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                             )
                         }
                     }
                 }
             }
         }
-    }
-
-    pendingDelete?.let { id ->
-        val rows = (state as? ListState.Loaded)?.rows.orEmpty()
-        DeletePasskeyDialog(
-            target = rows.firstOrNull { it.passkey.id == id }?.passkey,
-            onConfirm = {
-                pendingDelete = null
-                viewModel.deletePasskey(id)
-            },
-            onDismiss = { pendingDelete = null },
-        )
     }
 }
 
