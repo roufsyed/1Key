@@ -33,20 +33,48 @@ class PasskeyGetPlanner @Inject constructor(
     /** Requires an unlocked vault; the service checks that before calling. */
     suspend fun plan(request: BeginGetCredentialRequest): Plan {
         val options = request.beginGetCredentialOptions.filterIsInstance<BeginGetPublicKeyCredentialOption>()
+        PasskeyDebugLog.d { "plan: passkeyOptions=${options.size} callingAppInfo=${request.callingAppInfo != null}" }
         if (options.isEmpty()) return Plan.Nothing
         val callingAppInfo = request.callingAppInfo ?: return Plan.Nothing
         val caller = callerVerifier.resolve(callingAppInfo)
+        PasskeyDebugLog.d { "plan: caller=${caller.javaClass.simpleName}" }
         if (caller is CallerKind.Refused) return Plan.Refused(caller.reason)
 
         val entries = ArrayList<Pair<BeginGetPublicKeyCredentialOption, PasskeySummary>>()
         for (option in options) {
-            val parsed = runCatching { WebAuthnJson.parseRequestOptions(option.requestJson) }.getOrNull() ?: continue
-            val rpId = parsed.rpId ?: originHost(caller) ?: continue
-            val summaries = (passkeyRepository.listActiveForRpId(rpId) as? AppResult.Success)?.data ?: continue
-            summaries
-                .filter { CallerPolicy.mayUse(it.origin, caller) && parsed.allows(it.webauthnCredentialId) }
-                .forEach { entries += option to it }
+            val parsed = runCatching { WebAuthnJson.parseRequestOptions(option.requestJson) }
+                .onFailure { PasskeyDebugLog.d { "plan: request JSON rejected: ${it.javaClass.simpleName}: ${it.message}" } }
+                .getOrNull() ?: continue
+            val rpId = parsed.rpId ?: originHost(caller)
+            PasskeyDebugLog.d {
+                "plan: rpIdInRequest=${parsed.rpId != null} rpIdResolved=${rpId != null} " +
+                    "rpIdMatchesOriginHost=${parsed.rpId == null || parsed.rpId == originHost(caller)} allowList=${parsed.allowCredentials.size}"
+            }
+            PasskeyDebugLog.d {
+                // Shape only, never the identifiers: how the relying party encoded its allow list.
+                val raw = runCatching {
+                    com.google.gson.JsonParser.parseString(option.requestJson).asJsonObject.getAsJsonArray("allowCredentials")
+                        .map { it.asJsonObject }
+                }.getOrNull().orEmpty()
+                val ids = raw.mapNotNull { it.get("id")?.takeIf { v -> v.isJsonPrimitive }?.asString }
+                "plan: allowCredentials raw=${raw.size} ids=${ids.size} rawLengths=${ids.map { it.length }} " +
+                    "nonUrlSafe=${ids.count { v -> v.any { c -> c == '+' || c == '/' } }} padded=${ids.count { it.endsWith("=") }} " +
+                    "types=${raw.map { it.get("type")?.takeIf { v -> v.isJsonPrimitive }?.asString }} " +
+                    "transports=${raw.map { it.get("transports")?.toString() }} decodedBytes=${parsed.allowCredentials.map { it.id.size }}"
+            }
+            rpId ?: continue
+            val listed = passkeyRepository.listActiveForRpId(rpId)
+            val summaries = (listed as? AppResult.Success)?.data
+            PasskeyDebugLog.d { "plan: lookup=${listed.javaClass.simpleName} forRpId=${summaries?.size}" }
+            summaries ?: continue
+            summaries.forEach {
+                val usable = CallerPolicy.mayUse(it.origin, caller)
+                val allowed = parsed.allows(it.webauthnCredentialId)
+                PasskeyDebugLog.d { "plan: candidate origin=${it.origin.javaClass.simpleName} storedIdBytes=${it.webauthnCredentialId.size} mayUse=$usable inAllowList=$allowed" }
+                if (usable && allowed) entries += option to it
+            }
         }
+        PasskeyDebugLog.d { "plan: entries=${entries.size}" }
         return Plan.Candidates(caller, entries)
     }
 

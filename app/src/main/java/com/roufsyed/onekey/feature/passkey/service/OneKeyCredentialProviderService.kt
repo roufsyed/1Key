@@ -83,6 +83,7 @@ class OneKeyCredentialProviderService : CredentialProviderService() {
         if (!entry.authRepository().isUnlocked().first()) {
             // Locked: the activity behind this action unlocks, then rebuilds the
             // entries through the same planner and hands them back to the selector.
+            PasskeyDebugLog.d { "get: vault locked, offering unlock entry to ${request.callingAppInfo?.packageName}" }
             return builder.addAuthenticationAction(entry.entries().unlockAction()).build()
         }
         return when (val plan = entry.planner().plan(request)) {

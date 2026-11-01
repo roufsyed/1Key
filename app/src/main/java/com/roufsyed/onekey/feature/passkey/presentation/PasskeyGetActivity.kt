@@ -15,6 +15,7 @@ import androidx.credentials.provider.PendingIntentHandler
 import androidx.lifecycle.lifecycleScope
 import com.roufsyed.onekey.feature.passkey.presentation.PasskeyCeremonyViewModel.FailureKind
 import com.roufsyed.onekey.feature.passkey.presentation.PasskeyCeremonyViewModel.Step
+import com.roufsyed.onekey.feature.passkey.service.PasskeyDebugLog
 import com.roufsyed.onekey.feature.passkey.service.PasskeyEntries
 import com.roufsyed.onekey.feature.passkey.service.PasskeyGetPlanner
 import dagger.hilt.android.AndroidEntryPoint
@@ -75,7 +76,11 @@ class PasskeyGetActivity : PasskeyCeremonyActivity() {
                 val request = beginRequest ?: return finishCancelled()
                 lifecycleScope.launch {
                     val builder = BeginGetCredentialResponse.Builder()
-                    when (val plan = runCatching { planner.plan(request) }.getOrNull()) {
+                    val plan = runCatching { planner.plan(request) }
+                        .onFailure { PasskeyDebugLog.d { "unlock-and-list: plan failed: ${it.javaClass.simpleName}: ${it.message}" } }
+                        .getOrNull()
+                    PasskeyDebugLog.d { "unlock-and-list: plan=${plan?.javaClass?.simpleName}" }
+                    when (plan) {
                         is PasskeyGetPlanner.Plan.Candidates -> {
                             // The user just unlocked for this request. Let that unlock be the
                             // verification for the entry they pick next (one-shot grant) and keep

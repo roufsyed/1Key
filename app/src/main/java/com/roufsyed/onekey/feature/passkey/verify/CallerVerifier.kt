@@ -4,6 +4,7 @@ import androidx.credentials.provider.CallingAppInfo
 import com.roufsyed.onekey.core.domain.passkey.CallerIdentity
 import com.roufsyed.onekey.core.domain.passkey.CallerKind
 import com.roufsyed.onekey.core.domain.passkey.CallerPolicy
+import com.roufsyed.onekey.feature.passkey.service.PasskeyDebugLog
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,11 +28,17 @@ class CallerVerifier @Inject constructor(
         val certificates = if (signing.hasPastSigningCertificates) signing.signingCertificateHistory else signing.apkContentsSigners
         val lineage = certificates.map { CallerPolicy.certificateSha256Hex(it.toByteArray()) }
         val claimedOrigin = info.isOriginPopulated()
+        var originFailure: Throwable? = null
         val privilegedOrigin = if (claimedOrigin) {
             // Throws IllegalStateException when the caller set an origin but is
             // not privileged; a malformed allowlist would throw IllegalArgumentException.
-            runCatching { info.getOrigin(allowlistJson) }.getOrNull()
+            runCatching { info.getOrigin(allowlistJson) }.onFailure { originFailure = it }.getOrNull()
         } else null
+        PasskeyDebugLog.d {
+            "caller ${info.packageName}: originPopulated=$claimedOrigin privilegedOrigin=${privilegedOrigin != null} " +
+                "lineage=${lineage.size} multipleSigners=${signing.hasMultipleSigners}" +
+                (originFailure?.let { " originFailure=${it.javaClass.simpleName}: ${it.message}" } ?: "")
+        }
         return CallerIdentity(
             packageName = info.packageName,
             currentCertSha256 = lineage.lastOrNull().orEmpty(),
