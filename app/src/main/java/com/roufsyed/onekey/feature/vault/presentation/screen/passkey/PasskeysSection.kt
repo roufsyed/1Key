@@ -1,8 +1,11 @@
 package com.roufsyed.onekey.feature.vault.presentation.screen.passkey
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -16,8 +19,9 @@ import com.roufsyed.onekey.core.domain.model.PasskeySummary
 
 /**
  * Read-only list of the passkeys attached to a credential, in view mode of the
- * detail screen. Rows and the delete confirmation are shared with the Passkeys
- * tab ([PasskeyRow], [DeletePasskeyDialog]).
+ * detail screen: one card per passkey with the full record laid out line by
+ * line. Rows and the delete confirmation are shared with the Passkeys tab
+ * ([PasskeyRow], [DeletePasskeyDialog]).
  */
 @Composable
 internal fun PasskeysSection(
@@ -33,11 +37,15 @@ internal fun PasskeysSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         passkeys.forEach { passkey ->
-            PasskeyRow(
-                passkey = passkey,
-                onDelete = { pendingDelete = passkey.id },
-                modifier = Modifier.padding(top = 10.dp),
-            )
+            Spacer(Modifier.height(10.dp))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                PasskeyRow(
+                    passkey = passkey,
+                    onDelete = { pendingDelete = passkey.id },
+                    detailed = true,
+                    modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 14.dp, bottom = 16.dp),
+                )
+            }
         }
     }
 

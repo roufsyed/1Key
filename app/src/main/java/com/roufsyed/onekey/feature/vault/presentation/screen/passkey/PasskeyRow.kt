@@ -1,80 +1,181 @@
 package com.roufsyed.onekey.feature.vault.presentation.screen.passkey
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Smartphone
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.model.PasskeySummary
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDialog
+import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDropdownMenu
+import com.roufsyed.onekey.core.presentation.util.toFormattedDate
 import com.roufsyed.onekey.core.presentation.util.toFormattedDateTime
 
 /**
- * One passkey, as the credential detail section and the Passkeys tab both
- * show it. Nothing is revealed or copied: a passkey has no value a user could
- * use by hand. The only action is delete, which the caller confirms through
- * [DeletePasskeyDialog].
+ * One passkey, compact: the site, the account, and one line of context (when
+ * it was made and where it works). Everything else about a passkey lives in
+ * the vault entry it belongs to, which the overflow menu opens; the menu also
+ * holds delete, confirmed through [DeletePasskeyDialog]. Nothing is revealed
+ * or copied, because a passkey has no value a user could use by hand.
  *
- * [credentialTitle] names the vault entry that owns the passkey. The tab passes
- * it because rows from many entries sit together there; it is shown only when
- * it adds information beyond the site name.
+ * Shared by the Passkeys tab (compact: one context line) and the credential
+ * detail section ([detailed]: created, last used and where it works on their
+ * own lines, since that screen is where the full record belongs).
  */
 @Composable
 internal fun PasskeyRow(
     passkey: PasskeySummary,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
-    credentialTitle: String? = null,
+    /** Title of the owning vault entry, named in the menu's open action. */
+    entryTitle: String? = null,
+    onOpen: (() -> Unit)? = null,
+    detailed: Boolean = false,
 ) {
-    val created = remember(passkey.createdAt) { passkey.createdAt.toFormattedDateTime() }
-    val lastUsed = remember(passkey.lastUsedAt) { passkey.lastUsedAt?.toFormattedDateTime() }
-    val scope = when (val o = passkey.origin) {
-        is PasskeyOrigin.Browser -> "Browsers"
-        is PasskeyOrigin.App -> "Browsers and ${o.packageName}"
-    }
+    val context = LocalContext.current
     val site = passkey.rpName.ifBlank { passkey.rpId }
-    val entry = credentialTitle?.takeIf { it.isNotBlank() && !it.equals(passkey.rpName, ignoreCase = true) && !it.equals(passkey.rpId, ignoreCase = true) }
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
+    val showDomain = passkey.rpName.isNotBlank() && !passkey.rpName.equals(passkey.rpId, ignoreCase = true)
+    val account = listOf(passkey.userDisplayName, passkey.userName).filter { it.isNotBlank() }.distinct().joinToString(" · ")
+    val created = remember(passkey.createdAt, detailed) { if (detailed) passkey.createdAt.toFormattedDateTime() else passkey.createdAt.toFormattedDate() }
+    val lastUsed = remember(passkey.lastUsedAt) { passkey.lastUsedAt?.toFormattedDateTime() }
+    val (scopeIcon, scopeText) = when (val origin = passkey.origin) {
+        is PasskeyOrigin.Browser -> Icons.Outlined.Language to "Browsers"
+        is PasskeyOrigin.App -> {
+            val label = remember(origin.packageName) {
+                runCatching {
+                    val pm = context.packageManager
+                    pm.getApplicationLabel(pm.getApplicationInfo(origin.packageName, 0)).toString()
+                }.getOrNull() ?: origin.packageName
+            }
+            Icons.Outlined.Smartphone to "Browsers and $label"
+        }
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            SiteMonogram(site)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(site, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (showDomain) {
+                    Text(passkey.rpId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "More options for ${passkey.rpId}")
+                }
+                LockAwareDropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    if (onOpen != null) {
+                        DropdownMenuItem(
+                            text = { Text(entryTitle?.takeIf { it.isNotBlank() }?.let { "Open \"$it\"" } ?: "Open vault entry") },
+                            leadingIcon = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, contentDescription = null) },
+                            onClick = {
+                                menuOpen = false
+                                onOpen()
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("Delete passkey", color = MaterialTheme.colorScheme.error) },
+                        leadingIcon = { Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            menuOpen = false
+                            onDelete()
+                        },
+                    )
+                }
+            }
+        }
+        if (account.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            MetaLine(icon = Icons.Outlined.Person, text = account, emphasised = true)
+        }
+        if (detailed) {
+            Spacer(Modifier.height(10.dp))
+            MetaLine(icon = Icons.Outlined.CalendarToday, text = "Created $created")
+            Spacer(Modifier.height(6.dp))
+            MetaLine(icon = Icons.Outlined.Schedule, text = lastUsed?.let { "Last used $it" } ?: "Never used")
+            Spacer(Modifier.height(6.dp))
+            MetaLine(icon = scopeIcon, text = "Works in: $scopeText")
+        } else {
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MetaLine(icon = Icons.Outlined.CalendarToday, text = created)
+                Spacer(Modifier.width(14.dp))
+                MetaLine(icon = scopeIcon, text = scopeText, modifier = Modifier.weight(1f, fill = false))
+            }
+        }
+    }
+}
+
+/** First letter of the site in a tinted tile: a stable per-site anchor without fetching favicons, which 1Key never does. */
+@Composable
+private fun SiteMonogram(site: String) {
+    val letter = site.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: "?"
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer),
+        contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(site, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-            if (passkey.rpName.isNotBlank() && passkey.rpName != passkey.rpId) {
-                Text(passkey.rpId, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val account = listOf(passkey.userDisplayName, passkey.userName).filter { it.isNotBlank() }.distinct().joinToString(" · ")
-            if (account.isNotBlank()) Text(account, style = MaterialTheme.typography.bodyMedium)
-            if (entry != null) {
-                Text("In vault entry: $entry", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Text(
-                "Created $created" + (lastUsed?.let { " · Last used $it" } ?: " · Never used") + " · Works in: $scope",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        if (letter == "?") {
+            Icon(Icons.Outlined.Key, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(20.dp))
+        } else {
+            Text(letter, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
         }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete passkey for ${passkey.rpId}", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(20.dp))
-        }
+    }
+}
+
+@Composable
+private fun MetaLine(icon: ImageVector, text: String, modifier: Modifier = Modifier, emphasised: Boolean = false) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text,
+            style = if (emphasised) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+            color = if (emphasised) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -87,7 +188,7 @@ internal fun DeletePasskeyDialog(
 ) {
     LockAwareDialog(
         onDismissRequest = onDismiss,
-        icon = { Icon(Icons.Default.Key, contentDescription = null) },
+        icon = { Icon(Icons.Outlined.Key, contentDescription = null) },
         title = { Text("Delete this passkey?") },
         text = {
             Text(

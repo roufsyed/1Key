@@ -113,9 +113,10 @@ fun PasskeyListScreen(
                         ) {
                             PasskeyRow(
                                 passkey = row.passkey,
-                                credentialTitle = row.credentialTitle,
+                                entryTitle = row.credentialTitle,
+                                onOpen = { onCredentialClick(row.passkey.credentialId) },
                                 onDelete = { pendingDelete = row.passkey.id },
-                                modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                                modifier = Modifier.padding(start = 16.dp, end = 4.dp, top = 14.dp, bottom = 14.dp),
                             )
                         }
                     }

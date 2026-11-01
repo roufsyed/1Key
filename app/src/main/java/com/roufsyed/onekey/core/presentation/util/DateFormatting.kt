@@ -13,6 +13,12 @@ fun Long.toFormattedDateTime(): String =
         .atZone(ZoneId.systemDefault())
         .format(dateTimeFormatter)
 
+/** Date only, e.g. "Nov 1, 2026"; for compact rows where the time adds nothing. */
+fun Long.toFormattedDate(): String =
+    Instant.ofEpochMilli(this)
+        .atZone(ZoneId.systemDefault())
+        .format(dateOnlyFormatter)
+
 fun Long.toRelativeTime(): String {
     val now = System.currentTimeMillis()
     val diff = now - this
