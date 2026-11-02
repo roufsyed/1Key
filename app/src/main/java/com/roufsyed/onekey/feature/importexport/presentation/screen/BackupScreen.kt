@@ -383,12 +383,36 @@ fun BackupScreen(
             when (val s = state) {
                 is ImportExportUiState.ImportLoading ->
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                is ImportExportUiState.ImportSuccess ->
+                is ImportExportUiState.ImportSuccess -> {
                     ImportSummaryRow(
                         result = s.result,
                         onShowSkipped = { showSkippedDialog = true },
                         onShowFailed = { showFailedDialog = true },
                     )
+                    when {
+                        s.sourceDeletable -> {
+                            Text(
+                                "The file you imported holds your secrets in plain text.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            OutlinedButton(
+                                onClick = { viewModel.deleteImportedSource(context) },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("Delete the imported file") }
+                        }
+                        s.sourceDeleted -> Text(
+                            "Imported file deleted.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        s.sourceDeleteError != null -> Text(
+                            s.sourceDeleteError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
                 else -> Unit
             }
 

@@ -2,6 +2,7 @@ package com.roufsyed.onekey.feature.importexport.presentation.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -56,7 +57,19 @@ sealed class ImportExportUiState {
     data object ExportLoading : ImportExportUiState()
     data object ImportLoading : ImportExportUiState()
     data class Success(val message: String) : ImportExportUiState()
-    data class ImportSuccess(val result: ImportResult) : ImportExportUiState()
+    /**
+     * [sourceDeletable] is true when the file that was imported was unencrypted
+     * (plain JSON, CSV, KeePass XML or a KeePassXC .passkey file) and came from a
+     * document provider, so 1Key can offer to delete it: such a file holds
+     * passwords or private keys in the clear. [sourceDeleted] and
+     * [sourceDeleteError] report the outcome of that offer.
+     */
+    data class ImportSuccess(
+        val result: ImportResult,
+        val sourceDeletable: Boolean = false,
+        val sourceDeleted: Boolean = false,
+        val sourceDeleteError: String? = null,
+    ) : ImportExportUiState()
     // Parsed data ready for user review - shown before committing anything to the vault.
     data class ImportPreview(
         val parsed: ParsedImport,
@@ -108,6 +121,11 @@ class ImportExportViewModel @Inject constructor(
 
     // Held between "file picked" and "password submitted / cancelled".
     private var pendingImportFile: File? = null
+
+    // The document the user picked, kept until the import ends so an unencrypted
+    // source can be offered for deletion. Never read again after the copy.
+    private var pendingSourceUri: Uri? = null
+    private var pendingSourceEncrypted = false
 
     // Held between "parse complete -> preview shown" and "user confirms / cancels".
     private var pendingParsedImport: ParsedImport? = null
@@ -232,6 +250,8 @@ class ImportExportViewModel @Inject constructor(
                 val encrypted = withContext(Dispatchers.IO) {
                     importVault.isEncrypted(tmpFile.absolutePath)
                 }
+                pendingSourceUri = uri
+                pendingSourceEncrypted = encrypted
                 if (encrypted) {
                     pendingImportFile = tmpFile
                     keepFile = true
@@ -451,7 +471,10 @@ class ImportExportViewModel @Inject constructor(
             is AppResult.Success -> {
                 pendingParsedImport = null
                 pendingPlan = null
-                _uiState.value = ImportExportUiState.ImportSuccess(result.data)
+                _uiState.value = ImportExportUiState.ImportSuccess(
+                    result = result.data,
+                    sourceDeletable = pendingSourceUri != null && !pendingSourceEncrypted,
+                )
             }
             is AppResult.Error ->
                 _uiState.value = ImportExportUiState.Error(result.message ?: "Import failed")
@@ -462,6 +485,7 @@ class ImportExportViewModel @Inject constructor(
         viewModelScope.launch {
             val file = pendingImportFile
             pendingImportFile = null
+            pendingSourceUri = null
             pendingParsedImport = null
             pendingPlan = null
             pendingImportPassword?.fill(' ')
@@ -548,7 +572,31 @@ class ImportExportViewModel @Inject constructor(
         // Defensive - confirmImport already nulls on success, but if any path lands
         // here with stale parsed data, drop it so we don't leak across imports.
         pendingParsedImport = null
+        pendingSourceUri = null
         _uiState.value = ImportExportUiState.Idle
+    }
+
+    /**
+     * Deletes the unencrypted file the last import came from, on the user's
+     * request. Works through the document provider that supplied it; a
+     * provider that cannot delete (read-only shares, some cloud apps) leaves the
+     * file in place and the user is told to remove it by hand.
+     */
+    fun deleteImportedSource(context: Context) {
+        val success = _uiState.value as? ImportExportUiState.ImportSuccess ?: return
+        val uri = pendingSourceUri ?: return
+        viewModelScope.launch {
+            val deleted = withContext(Dispatchers.IO) {
+                runCatching { DocumentsContract.isDocumentUri(context, uri) && DocumentsContract.deleteDocument(context.contentResolver, uri) }
+                    .getOrDefault(false)
+            }
+            pendingSourceUri = null
+            _uiState.value = success.copy(
+                sourceDeletable = false,
+                sourceDeleted = deleted,
+                sourceDeleteError = if (deleted) null else "The file could not be deleted from here. Remove it manually.",
+            )
+        }
     }
 
     // ── Disable-encryption guard ──────────────────────────────────────────────
