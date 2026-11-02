@@ -9,6 +9,7 @@ import com.roufsyed.onekey.core.domain.card.CardFields
 import com.roufsyed.onekey.core.domain.card.CardSlot
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
+import com.roufsyed.onekey.core.domain.notes.MarkdownSniffer
 import com.roufsyed.onekey.core.domain.model.CustomField
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
 import com.roufsyed.onekey.core.domain.model.CredentialType
@@ -475,18 +476,27 @@ class CredentialDetailViewModel @Inject constructor(
      * crash between the two writes leaves the heuristic re-runnable rather
      * than silently consumed.
      *
+     * The flip and the Snackbar only happen when the notes actually contain
+     * markdown ([MarkdownSniffer]). Plain notes, an email address or a phone
+     * number render the same either way, so they stay in rendered mode and the
+     * user hears nothing; the sentinel is still recorded so the check runs once.
+     *
      * @param importedAt epoch-ms from [Credential.importedAt]; `null` for
      *   manually-entered credentials, which skip the flip.
+     * @param notes the credential's notes as stored, used only for the sniff.
      */
-    fun maybeAutoFlip(credentialId: String, importedAt: Long?) {
+    fun maybeAutoFlip(credentialId: String, importedAt: Long?, notes: String) {
         if (credentialId.isBlank() || importedAt == null) return
         if (credentialId in autoFlippedCredentialIds.value) return
+        val hasMarkdown = MarkdownSniffer.looksLikeMarkdown(notes)
         viewModelScope.launch {
-            notesDisplayPrefs.setPlainSource(credentialId, true)
+            if (hasMarkdown) notesDisplayPrefs.setPlainSource(credentialId, true)
             notesDisplayPrefs.markAutoFlipped(credentialId)
-            _notesEvent.tryEmit(
-                "Imported notes shown as source. Tap the overflow menu to render as markdown."
-            )
+            if (hasMarkdown) {
+                _notesEvent.tryEmit(
+                    "Imported notes shown as source. Tap the overflow menu to render as markdown."
+                )
+            }
         }
     }
 

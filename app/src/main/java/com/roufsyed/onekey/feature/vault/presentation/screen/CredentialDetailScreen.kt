@@ -256,7 +256,7 @@ private fun CredentialViewContent(
     isNotesMarkdownEnabled: Boolean,
     plainSourceCredentialIds: Set<String>,
     notesEvent: SharedFlow<String>,
-    onMaybeAutoFlip: (String, Long?) -> Unit,
+    onMaybeAutoFlip: (String, Long?, String) -> Unit,
     onToggleViewMode: (String) -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -810,14 +810,14 @@ private fun NotesSection(
     isNotesMarkdownEnabled: Boolean,
     isInPlainSourceMode: Boolean,
     snackbarHostState: SnackbarHostState,
-    onMaybeAutoFlip: (String, Long?) -> Unit,
+    onMaybeAutoFlip: (String, Long?, String) -> Unit,
     onLinkTapped: (LinkRequest) -> Unit,
 ) {
     // Run the auto-flip exactly once per credential.id transition. The VM's
     // own membership-in-autoFlippedCredentialIds gate makes this idempotent
     // across recompositions too, so the duplicate guard is belt-and-braces.
     LaunchedEffect(credential.id) {
-        onMaybeAutoFlip(credential.id, credential.importedAt)
+        onMaybeAutoFlip(credential.id, credential.importedAt, credential.notes)
     }
 
     // Banner state lives here, not on the VM, because the cap classification
