@@ -520,7 +520,10 @@ fun OneKeyNavGraph(
                 }
 
                 composable(Screen.SettingsPasskeys.route) {
-                    SettingsPasskeysScreen(onBack = { navController.popBackStack() })
+                    SettingsPasskeysScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenBackup = { navController.navigate(Screen.Backup.route) },
+                    )
                 }
 
                 composable(Screen.SettingsSync.route) {

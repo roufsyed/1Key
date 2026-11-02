@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.feature.importexport.domain
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.opencsv.CSVReader
 import com.roufsyed.onekey.core.domain.card.FieldLabelCatalog
@@ -18,6 +19,8 @@ import com.roufsyed.onekey.core.domain.usecase.ExportFormat
 import com.roufsyed.onekey.core.domain.webauthn.Base64Url
 import com.roufsyed.onekey.core.domain.webauthn.PasskeyAlgorithm
 import com.roufsyed.onekey.core.domain.webauthn.Pkcs8Pem
+import com.roufsyed.onekey.feature.importexport.domain.keepass.KeePassXcPasskeyFile
+import com.roufsyed.onekey.feature.importexport.domain.keepass.KeePassXmlImporter
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriParser
 import java.io.ByteArrayInputStream
@@ -38,18 +41,40 @@ class VaultImporterImpl @Inject constructor(
 
     override suspend fun parse(path: String): AppResult<ParsedImport> =
         runCatchingResult {
-            when (detectFormat(path)) {
-                ExportFormat.JSON -> parseJsonContent(File(path).readText())
-                ExportFormat.CSV -> parseCsvReader(FileReader(path))
+            val file = File(path)
+            when (detectFormat(file)) {
+                SourceFormat.KEEPASS_XML -> KeePassXmlImporter.parse(file)
+                SourceFormat.JSON -> {
+                    val content = file.readText()
+                    // A KeePassXC .passkey file is a JSON object (or a small array of
+                    // them) carrying a private key; it must never reach the generic
+                    // path, which would file that key as a custom field.
+                    if (isKeePassXcPasskeyFile(content)) KeePassXcPasskeyFile.parse(content) else parseJsonContent(content)
+                }
+                SourceFormat.CSV -> parseCsvReader(FileReader(file))
             }
         }
 
-    private fun detectFormat(path: String): ExportFormat {
-        File(path).bufferedReader().use { reader ->
+    private enum class SourceFormat { JSON, CSV, KEEPASS_XML }
+
+    private fun detectFormat(file: File): SourceFormat {
+        file.bufferedReader().use { reader ->
             var c = reader.read()
-            while (c != -1 && c.toChar().isWhitespace()) c = reader.read()
-            return if (c.toChar() == '[' || c.toChar() == '{') ExportFormat.JSON else ExportFormat.CSV
+            while (c != -1 && (c.toChar().isWhitespace() || c == BYTE_ORDER_MARK)) c = reader.read()
+            return when (c.toChar()) {
+                '<' -> SourceFormat.KEEPASS_XML
+                '[', '{' -> SourceFormat.JSON
+                else -> SourceFormat.CSV
+            }
         }
+    }
+
+    /** Sniffs only what a .passkey file can be: one object, or an array small enough to be a handful of them. */
+    private fun isKeePassXcPasskeyFile(content: String): Boolean {
+        val trimmed = content.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+        if (!(trimmed.startsWith('{') || (trimmed.startsWith('[') && content.length <= PASSKEY_FILE_SNIFF_LIMIT))) return false
+        val root = runCatching { JsonParser.parseString(trimmed) }.getOrNull() ?: return false
+        return KeePassXcPasskeyFile.looksLike(root)
     }
 
     override suspend fun parseEncrypted(
@@ -379,6 +404,9 @@ class VaultImporterImpl @Inject constructor(
 
     companion object {
         private const val OTPAUTH_PREFIX = "otpauth://"
+        private const val BYTE_ORDER_MARK = 0xFEFF
+        /** Arrays larger than this are 1Key backups, never concatenated .passkey files. */
+        private const val PASSKEY_FILE_SNIFF_LIMIT = 1024 * 1024
 
         private val KNOWN_JSON_KEYS = setOf(
             "id", "title", "username", "password", "url", "notes",

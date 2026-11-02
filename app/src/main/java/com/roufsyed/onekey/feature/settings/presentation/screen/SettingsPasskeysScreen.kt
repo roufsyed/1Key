@@ -56,6 +56,7 @@ import com.roufsyed.onekey.feature.settings.presentation.viewmodel.PasskeySettin
 @Composable
 fun SettingsPasskeysScreen(
     onBack: () -> Unit,
+    onOpenBackup: () -> Unit,
     viewModel: PasskeySettingsViewModel = hiltViewModel(),
 ) {
     val isEnabled by viewModel.isEnabled.collectAsStateWithLifecycle()
@@ -228,6 +229,22 @@ fun SettingsPasskeysScreen(
                         supportingContent = { Text("A trusted browser can ask 1Key to sign in to any website it shows. Add only browsers you installed on purpose.") },
                     )
                 }
+            }
+
+            SectionHeader("Import")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ListItem(
+                    modifier = Modifier.clickable(onClick = onOpenBackup),
+                    leadingContent = { Icon(Icons.Default.Key, contentDescription = null) },
+                    headlineContent = { Text("Import passkeys from KeePassXC or KeePassDX") },
+                    supportingContent = {
+                        Text(
+                            "In KeePassXC export the database as an XML file, or one passkey with Export passkey. " +
+                                "A KeePassDX database can be opened in KeePassXC first. Then use Backup and Import here.",
+                        )
+                    },
+                    trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null) },
+                )
             }
 
             SectionHeader("What works where")
