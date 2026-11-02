@@ -22,7 +22,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import com.roufsyed.onekey.core.presentation.util.oneKeyTopBarColors
@@ -42,6 +41,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -55,6 +56,8 @@ import com.roufsyed.onekey.core.domain.card.CardSlot
 import com.roufsyed.onekey.core.domain.card.FieldLabel
 import com.roufsyed.onekey.core.domain.card.FieldLabelCatalog
 import com.roufsyed.onekey.core.domain.model.Credential
+import com.roufsyed.onekey.core.presentation.monogram.SiteMonogram
+import com.roufsyed.onekey.core.presentation.monogram.SiteColours
 import com.roufsyed.onekey.core.domain.model.CredentialHistoryEntry
 import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.domain.model.CustomField
@@ -109,16 +112,38 @@ private val NO_AUTH_TYPES = setOf(
 private const val MARKDOWN_SYNTAX_HINT =
     "Markdown: **bold** _italic_ # heading - list `code` [text](url)"
 
-private fun typeIcon(type: CredentialType) = when (type) {
-    CredentialType.LOGIN -> Icons.Default.Lock
-    CredentialType.SECURE_NOTE -> Icons.Default.Description
-    CredentialType.CREDIT_CARD -> Icons.Default.CreditCard
-    CredentialType.PASSWORD -> Icons.Default.Key
-    CredentialType.BANK_ACCOUNT -> Icons.Default.AccountBalance
-    CredentialType.DATABASE -> Icons.Default.Storage
-    CredentialType.EMAIL -> Icons.Default.Email
-    CredentialType.SERVER -> Icons.Default.Computer
-    CredentialType.OTHER -> Icons.AutoMirrored.Filled.Label
+/**
+ * Identity row at the top of the item: the same coloured monogram the list
+ * rows use, grown to 56 dp, beside the title in headline size with a hairline
+ * under it. The top bar carries only actions, so this row is where the user
+ * confirms which entry they opened.
+ */
+@Composable
+private fun CredentialHeader(credential: Credential) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SiteMonogram(
+            label = credential.title,
+            colourKey = SiteColours.keyFor(credential.url, credential.title),
+            size = 56.dp,
+        )
+        Spacer(Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                credential.title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Normal,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -307,18 +332,9 @@ private fun CredentialViewContent(
             TopAppBar(
                 expandedHeight = 56.dp,
                 colors = oneKeyTopBarColors(),
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = typeIcon(credential.type),
-                            contentDescription = credential.type.displayName,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(credential.title)
-                    }
-                },
+                // Actions only. The item identifies itself in the header row below,
+                // the way 1Password, Proton Pass and Apple Passwords lay out item details.
+                title = {},
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
                 actions = {
                     if (!isInRecycleBin) {
@@ -370,6 +386,7 @@ private fun CredentialViewContent(
                 .verticalScroll(rememberScrollState())
                 .padding(top = 8.dp, bottom = 16.dp),
         ) {
+            CredentialHeader(credential)
             // For card types the countdown banner renders below the card's action row
             // instead (inside CredentialCardSection), so a copy never pushes the card
             // and its buttons down under the user's finger.

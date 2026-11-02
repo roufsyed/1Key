@@ -49,7 +49,12 @@ fun SiteMonogram(
         if (letter == null) {
             Icon(fallbackIcon, contentDescription = null, tint = colours.content, modifier = Modifier.size(size / 2))
         } else {
-            Text(letter, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colours.content)
+            Text(
+                letter,
+                style = if (size >= 48.dp) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = colours.content,
+            )
         }
     }
 }
