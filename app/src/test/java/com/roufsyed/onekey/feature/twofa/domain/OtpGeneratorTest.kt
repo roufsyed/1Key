@@ -30,6 +30,14 @@ class OtpGeneratorTest {
 
     // ── RFC 6238 Appendix B - TOTP / SHA-1 ─────────────────────────────────────
     // Times converted to ms (the spec uses Unix seconds).
+    /** The 2FA list shows the next period's code: one period ahead must land on the RFC vector for that period. */
+    @Test fun code_one_period_ahead_is_the_next_rfc_vector() {
+        val params = OtpParams(type = OtpType.TOTP, secret = SHA1_SECRET_B32, algorithm = OtpAlgorithm.SHA1, digits = 8, period = 30)
+        val now = 1_111_111_109_000L
+        assertEquals("07081804", OtpGenerator().generate(params, now).code)
+        assertEquals("14050471", OtpGenerator().generate(params, now + params.period * 1_000L).code)
+    }
+
     @Test fun totp_sha1_sample1_59s() = assertCode("94287082", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 59_000L)
     @Test fun totp_sha1_sample2_1111111109s() = assertCode("07081804", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 1_111_111_109_000L)
     @Test fun totp_sha1_sample3_1111111111s() = assertCode("14050471", SHA1_SECRET_B32, OtpAlgorithm.SHA1, 8, time = 1_111_111_111_000L)

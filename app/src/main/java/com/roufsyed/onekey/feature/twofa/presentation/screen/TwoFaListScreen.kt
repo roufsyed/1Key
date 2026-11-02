@@ -243,9 +243,22 @@ private fun RotatingOtpRow(
     // 6/7/8-digit codes get chunked.
     val params = entry.credential.otpParams
     val displayCode = if (params != null) formatOtpCode(params, entry.code) else entry.code
+    val displayNext = if (params != null) formatOtpCode(params, entry.nextCode) else entry.nextCode
     val expiring = entry.remainingSeconds <= 5
     OtpCard(entry = entry, onClick = { onCopyCode(entry.code) }, onLongClick = onLongClick) {
-        OtpCode(displayCode, color = if (expiring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+        // Current code on top; the next period's code in a muted line beneath,
+        // right-aligned under it, so someone with two seconds left can type the
+        // one that is about to become valid instead of waiting for the roll-over.
+        Column(horizontalAlignment = Alignment.End) {
+            OtpCode(displayCode, color = if (expiring) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface)
+            Text(
+                "Next $displayNext",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
         Spacer(Modifier.width(12.dp))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator(

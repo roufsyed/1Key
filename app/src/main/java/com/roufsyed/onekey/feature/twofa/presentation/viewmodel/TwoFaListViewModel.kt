@@ -38,10 +38,16 @@ sealed class TwoFaListEntry {
             || credential.customFields.isNotEmpty()
 }
 
-/** Time-based row (TOTP, Steam). Code recomputes every second from the wall clock. */
+/**
+ * Time-based row (TOTP, Steam). Code recomputes every second from the wall clock.
+ * [nextCode] is the code for the period after this one, shown small beside the
+ * current code so a user who is about to run out of time can type the next one
+ * instead of waiting for the roll-over.
+ */
 data class RotatingOtpEntry(
     override val credential: Credential,
     val code: String,
+    val nextCode: String,
     val remainingSeconds: Int,
     val progress: Float,
 ) : TwoFaListEntry()
@@ -87,13 +93,18 @@ class TwoFaListViewModel @Inject constructor(
     private val rotating: Flow<List<RotatingOtpEntry>> = credentialRepository.observeRotatingOtp()
         .transformLatest { credentials ->
             while (true) {
+                // One clock read per tick so every row, and each row's next code,
+                // agrees on which period "now" is.
+                val now = System.currentTimeMillis()
                 emit(credentials.mapNotNull { cred ->
                     val params = cred.otpParams ?: return@mapNotNull null
-                    runCatching { otpGenerator.generate(params) }.getOrNull()?.let { result ->
+                    runCatching {
+                        val current = otpGenerator.generate(params, now)
+                        val next = otpGenerator.generate(params, now + params.period * MILLIS_PER_SECOND)
                         // Time-based variants always carry remainingSeconds / progress;
                         // the !! is the structural invariant.
-                        RotatingOtpEntry(cred, result.code, result.remainingSeconds!!, result.progress!!)
-                    }
+                        RotatingOtpEntry(cred, current.code, next.code, current.remainingSeconds!!, current.progress!!)
+                    }.getOrNull()
                 })
                 delay(TICK_MILLIS)
             }
@@ -246,5 +257,6 @@ class TwoFaListViewModel @Inject constructor(
 
     private companion object {
         const val TICK_MILLIS = 1_000L
+        const val MILLIS_PER_SECOND = 1_000L
     }
 }
