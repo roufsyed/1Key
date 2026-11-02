@@ -12,7 +12,7 @@ import com.roufsyed.onekey.core.domain.model.TagWithCount
 import com.roufsyed.onekey.core.domain.repository.AppPreferencesRepository
 import com.roufsyed.onekey.core.domain.repository.AuthRepository
 import com.roufsyed.onekey.core.domain.repository.TagRepository
-import com.roufsyed.onekey.feature.autofill.domain.HostExtractor
+import com.roufsyed.onekey.core.domain.url.HostExtractor
 import com.roufsyed.onekey.feature.autofill.domain.PackageMatcher
 import com.roufsyed.onekey.feature.autofill.domain.ParsedFields
 import dagger.hilt.android.lifecycle.HiltViewModel

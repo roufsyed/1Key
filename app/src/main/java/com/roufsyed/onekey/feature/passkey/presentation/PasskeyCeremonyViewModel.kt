@@ -24,7 +24,7 @@ import com.roufsyed.onekey.core.domain.webauthn.RequestOptions
 import com.roufsyed.onekey.core.domain.webauthn.RpId
 import com.roufsyed.onekey.core.domain.webauthn.WebAuthnAuthenticator
 import com.roufsyed.onekey.core.domain.webauthn.WebAuthnJson
-import com.roufsyed.onekey.feature.autofill.domain.HostExtractor
+import com.roufsyed.onekey.core.domain.url.HostExtractor
 import com.roufsyed.onekey.feature.passkey.verify.CallerVerifier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow

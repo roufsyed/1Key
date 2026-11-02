@@ -1,4 +1,4 @@
-package com.roufsyed.onekey.feature.autofill.domain
+package com.roufsyed.onekey.core.domain.url
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

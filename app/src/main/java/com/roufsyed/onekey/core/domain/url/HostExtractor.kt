@@ -1,11 +1,13 @@
-package com.roufsyed.onekey.feature.autofill.domain
+package com.roufsyed.onekey.core.domain.url
 
 import java.net.URI
 
 /**
- * Single source of truth for host normalisation across the autofill path.
+ * Single source of truth for host normalisation. Lives in core because the
+ * autofill path, the passkey ceremony and the site monogram colour all ask
+ * the same question and must answer it the same way.
  *
- * Two independent code paths need to ask "what host is this URL?":
+ * Two independent autofill code paths need to ask "what host is this URL?":
  *   1. [PackageMatcher] - extracting the host from a credential's saved `url`
  *      to compare against the form's `webDomain` for exact-host matching.
  *   2. The unlock activity's search snapshot - both to render the credential's

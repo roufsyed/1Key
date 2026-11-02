@@ -96,7 +96,7 @@ import com.roufsyed.onekey.core.presentation.util.BiometricPromptController
 import com.roufsyed.onekey.core.security.AutoLockManager
 import com.roufsyed.onekey.feature.auth.presentation.viewmodel.AuthViewModel
 import com.roufsyed.onekey.feature.autofill.domain.DatasetBuilder
-import com.roufsyed.onekey.feature.autofill.domain.HostExtractor
+import com.roufsyed.onekey.core.domain.url.HostExtractor
 import com.roufsyed.onekey.feature.autofill.domain.ParsedFields
 import dagger.hilt.android.AndroidEntryPoint
 import com.roufsyed.onekey.core.presentation.animation.UnlockOverlay

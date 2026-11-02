@@ -1,5 +1,6 @@
 package com.roufsyed.onekey.feature.autofill.domain
 
+import com.roufsyed.onekey.core.domain.url.HostExtractor
 import com.roufsyed.onekey.core.domain.model.AppResult
 import com.roufsyed.onekey.core.domain.model.Credential
 import com.roufsyed.onekey.core.domain.repository.CredentialRepository
