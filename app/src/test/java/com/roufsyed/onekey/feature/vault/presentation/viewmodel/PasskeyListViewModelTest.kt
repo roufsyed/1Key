@@ -80,6 +80,20 @@ class PasskeyListViewModelTest {
         subscriber.cancel()
     }
 
+    @Test fun deleting_from_the_tab_removes_only_that_passkey() = runTest(dispatcher) {
+        passkeys.save(passkey("a", "c1", "github.com", userName = "amy"))
+        passkeys.save(passkey("b", "c1", "github.com", userName = "bob"))
+        val vm = vm()
+        val subscriber = launch { vm.listState.collect {} }
+        advanceUntilIdle()
+        vm.deletePasskey("a")
+        advanceUntilIdle()
+        assertEquals(listOf("b"), (vm.listState.value as ListState.Loaded).passkeys.map { it.id })
+        assertTrue(passkeys.getById("a").isError)
+        assertTrue(passkeys.getById("b").isSuccess)
+        subscriber.cancel()
+    }
+
     /** Only the top-bar preference is read; everything else is unreachable from this ViewModel. */
     private class PrefsForPasskeyTab : AppPreferencesRepository {
         override fun isHideTopBarOnScroll(): Flow<Boolean> = flowOf(true)

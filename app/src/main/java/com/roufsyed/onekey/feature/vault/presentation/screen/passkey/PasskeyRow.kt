@@ -139,7 +139,8 @@ internal fun DeletePasskeyDialog(
         title = { Text("Delete this passkey?") },
         text = {
             Text(
-                "You will need to sign in to ${target?.rpId ?: "this site"} another way and create a new passkey. " +
+                "Only the passkey is removed; the vault entry stays. " +
+                    "You will need to sign in to ${target?.rpId ?: "this site"} another way and create a new passkey. " +
                     "The site keeps its copy of the public key until you remove it there too.",
             )
         },

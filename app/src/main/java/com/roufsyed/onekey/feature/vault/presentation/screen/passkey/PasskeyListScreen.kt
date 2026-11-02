@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.feature.vault.presentation.screen.passkey
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,9 @@ import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -43,10 +47,11 @@ import com.roufsyed.onekey.feature.vault.presentation.viewmodel.PasskeyListViewM
 /**
  * Bottom-navigation tab listing every passkey in the vault, the way the 2FA
  * tab lists every OTP account. Tapping a row opens the vault entry that owns
- * the passkey, where the passkey can be deleted. The tab is shown only while
- * "Show Passkeys tab" is on in Settings > Passkeys.
+ * the passkey; a long press asks to delete only the passkey, leaving the entry
+ * alone, the way a long press in the 2FA tab removes only the code. The tab is
+ * shown only while "Show Passkeys tab" is on in Settings > Passkeys.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PasskeyListScreen(
     onCredentialClick: (String) -> Unit,
@@ -54,6 +59,9 @@ fun PasskeyListScreen(
 ) {
     val state by viewModel.listState.collectAsStateWithLifecycle()
     val hideTopBarOnScroll by viewModel.hideTopBarOnScroll.collectAsStateWithLifecycle()
+    // The id, not the row, so the confirm dialog survives rotation; the row is
+    // looked up at render time and the dialog simply closes if it has gone.
+    var pendingDeleteId by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Same collapsing top bar as the other tabs; see TwoFaListScreen for why the
     // offset is pre-seeded and clamped to the 56 dp bar height.
@@ -105,7 +113,10 @@ fun PasskeyListScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { onCredentialClick(passkey.credentialId) },
+                                .combinedClickable(
+                                    onClick = { onCredentialClick(passkey.credentialId) },
+                                    onLongClick = { pendingDeleteId = passkey.id },
+                                ),
                         ) {
                             PasskeyRow(
                                 passkey = passkey,
@@ -116,6 +127,18 @@ fun PasskeyListScreen(
                 }
             }
         }
+    }
+
+    pendingDeleteId?.let { id ->
+        val target = (state as? ListState.Loaded)?.passkeys?.firstOrNull { it.id == id } ?: return@let
+        DeletePasskeyDialog(
+            target = target,
+            onConfirm = {
+                viewModel.deletePasskey(id)
+                pendingDeleteId = null
+            },
+            onDismiss = { pendingDeleteId = null },
+        )
     }
 }
 
