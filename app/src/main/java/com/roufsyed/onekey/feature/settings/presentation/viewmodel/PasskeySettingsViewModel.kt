@@ -68,7 +68,7 @@ class PasskeySettingsViewModel @Inject constructor(
 
     /** Passkeys tab in the bottom navigation bar; the same switch Favourites has in General. */
     val isShowTab: StateFlow<Boolean> = appPrefs.isShowPasskeys()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
 
     val trustedBrowsers: StateFlow<List<TrustedBrowser>> = prefs.trustedBrowsersJson()
         .map { json -> parseTrusted(json) }

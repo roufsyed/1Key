@@ -169,7 +169,7 @@ class AppPreferencesRepositoryImpl @Inject constructor(
     }
 
     override fun isShowPasskeys(): Flow<Boolean> =
-        prefs.map { it[KEY_SHOW_PASSKEYS] ?: false }.distinctUntilChanged()
+        prefs.map { it[KEY_SHOW_PASSKEYS] ?: true }.distinctUntilChanged()
 
     override suspend fun setShowPasskeys(show: Boolean) {
         dataStore.edit { it[KEY_SHOW_PASSKEYS] = show }
