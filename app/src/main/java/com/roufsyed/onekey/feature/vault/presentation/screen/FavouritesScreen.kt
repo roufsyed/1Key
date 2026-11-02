@@ -263,6 +263,7 @@ fun FavouritesScreen(
                                         else onCredentialClick(credential.id)
                                     },
                                     onLongClick = { viewModel.toggleSelection(credential.id) },
+                                    leading = CardLeading.SiteMonogram,
                                 )
                             }
                         }

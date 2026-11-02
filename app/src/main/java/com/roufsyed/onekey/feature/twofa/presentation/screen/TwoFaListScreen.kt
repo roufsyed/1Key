@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import com.roufsyed.onekey.core.presentation.monogram.SiteColours
 import com.roufsyed.onekey.core.presentation.monogram.SiteMonogram
 import androidx.compose.material3.*
 import com.roufsyed.onekey.core.presentation.util.oneKeyTopBarColors
@@ -337,7 +338,11 @@ private fun OtpCard(
             modifier = Modifier.padding(start = 16.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SiteMonogram(label = entry.credential.title, fallbackIcon = Icons.Default.Security)
+            SiteMonogram(
+                label = entry.credential.title,
+                colourKey = SiteColours.keyFor(entry.credential.url, entry.credential.title),
+                fallbackIcon = Icons.Default.Security,
+            )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

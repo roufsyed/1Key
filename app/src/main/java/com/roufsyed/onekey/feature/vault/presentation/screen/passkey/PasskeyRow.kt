@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.roufsyed.onekey.core.domain.model.PasskeyOrigin
 import com.roufsyed.onekey.core.domain.model.PasskeySummary
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDialog
+import com.roufsyed.onekey.core.presentation.monogram.SiteColours
 import com.roufsyed.onekey.core.presentation.monogram.SiteMonogram
 import com.roufsyed.onekey.core.presentation.util.toFormattedDate
 import com.roufsyed.onekey.core.presentation.util.toFormattedDateTime
@@ -75,7 +76,7 @@ internal fun PasskeyRow(
     }
     Column(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SiteMonogram(label = site)
+            SiteMonogram(label = site, colourKey = SiteColours.keyFor(passkey.rpId, site))
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(site, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)

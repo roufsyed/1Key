@@ -3,6 +3,8 @@ package com.roufsyed.onekey.core.presentation.theme
 import android.app.Activity
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
@@ -68,6 +70,9 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerHighest = Color(0xFF343842),
 )
 
+/** True while [OneKeyTheme] is rendering its dark scheme. For composables that keep their own two palettes. */
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
+
 @Composable
 fun OneKeyTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
     val view = LocalView.current
@@ -81,14 +86,16 @@ fun OneKeyTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
         }
     }
 
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-        typography = Typography(),
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.onBackground,
-            content = content,
-        )
+    CompositionLocalProvider(LocalIsDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
+            typography = Typography(),
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.background,
+                contentColor = MaterialTheme.colorScheme.onBackground,
+                content = content,
+            )
+        }
     }
 }
