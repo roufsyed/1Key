@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.roufsyed.onekey.core.domain.model.CredentialType
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareModalBottomSheet
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareTextField
+import com.roufsyed.onekey.feature.vault.presentation.viewmodel.PasskeyBadgesViewModel
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.VaultViewModel
 import kotlinx.coroutines.delay
 
@@ -47,8 +48,10 @@ fun VaultScreen(
     onCredentialClick: (String) -> Unit,
     onRecycleBinClick: () -> Unit,
     viewModel: VaultViewModel = hiltViewModel(),
+    passkeyBadges: PasskeyBadgesViewModel = hiltViewModel(),
 ) {
     val tagCounts by viewModel.tagCounts.collectAsStateWithLifecycle()
+    val passkeyIds by passkeyBadges.credentialIdsWithPasskeys.collectAsStateWithLifecycle()
     val totalCount by viewModel.totalCount.collectAsStateWithLifecycle()
     val favoriteCount by viewModel.favoriteCount.collectAsStateWithLifecycle()
     val recycleBinCount by viewModel.recycleBinCount.collectAsStateWithLifecycle()
@@ -179,6 +182,7 @@ fun VaultScreen(
                 query = searchQuery,
                 state = searchState,
                 padding = padding,
+                passkeyIds = passkeyIds,
                 onCredentialClick = onCredentialClick,
             )
         } else {
@@ -350,6 +354,7 @@ private fun SearchResultsContent(
     query: String,
     state: VaultViewModel.SearchState,
     padding: PaddingValues,
+    passkeyIds: Set<String>,
     onCredentialClick: (String) -> Unit,
 ) {
     // Blank-query short-circuit: react to the raw query value rather than wait
@@ -408,6 +413,7 @@ private fun SearchResultsContent(
                         CredentialCard(
                             credential = credential,
                             onClick = { onCredentialClick(credential.id) },
+                            hasPasskey = credential.id in passkeyIds,
                         )
                     }
                 }

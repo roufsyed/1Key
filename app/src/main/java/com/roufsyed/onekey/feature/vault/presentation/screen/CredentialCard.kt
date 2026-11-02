@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -42,6 +43,7 @@ internal fun CredentialCard(
     isSelected: Boolean = false,
     onLongClick: () -> Unit = {},
     leading: CardLeading = CardLeading.TypeIcon,
+    hasPasskey: Boolean = false,
 ) = CredentialCardImpl(
     title = credential.title,
     username = credential.username,
@@ -52,6 +54,7 @@ internal fun CredentialCard(
     isSelected = isSelected,
     onLongClick = onLongClick,
     leading = leading,
+    hasPasskey = hasPasskey,
 )
 
 /**
@@ -74,6 +77,7 @@ internal fun CredentialCard(
     isSelected: Boolean = false,
     onLongClick: () -> Unit = {},
     leading: CardLeading = CardLeading.TypeIcon,
+    hasPasskey: Boolean = false,
 ) = CredentialCardImpl(
     title = credential.title,
     username = credential.username,
@@ -84,6 +88,7 @@ internal fun CredentialCard(
     isSelected = isSelected,
     onLongClick = onLongClick,
     leading = leading,
+    hasPasskey = hasPasskey,
 )
 
 @Composable
@@ -97,6 +102,7 @@ private fun CredentialCardImpl(
     isSelected: Boolean,
     onLongClick: () -> Unit,
     leading: CardLeading,
+    hasPasskey: Boolean,
 ) {
     // Subtitle precedence: username, then URL, then nothing. Falling back to URL
     // when username is empty keeps the row's two-line shape consistent and gives
@@ -180,6 +186,22 @@ private fun CredentialCardImpl(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        },
+        // A passkey is a sign-in method, not a type, so the entry stays a Login and
+        // the row says so with a small key at the trailing edge, the way the other
+        // managers badge passkey-bearing logins. Hidden in selection mode to keep
+        // the row quiet while the check mark is showing.
+        trailingContent = if (hasPasskey && !isSelected) {
+            {
+                Icon(
+                    imageVector = Icons.Outlined.Key,
+                    contentDescription = "Has a passkey",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        } else {
+            null
         },
         colors = colors,
         modifier = Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick),

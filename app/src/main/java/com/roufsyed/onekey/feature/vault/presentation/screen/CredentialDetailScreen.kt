@@ -433,6 +433,13 @@ private fun CredentialViewContent(
                     )
                     HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 }
+                if (credential.password.isEmpty() && passkeys.isNotEmpty()) {
+                    // A passkey-only login: no empty password row, and a plain statement
+                    // of how this entry signs in, so the entry does not read as a login
+                    // with a forgotten password.
+                    DetailField(label = "Password", value = "None. Signs in with a passkey.")
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                }
                 if (credential.password.isNotEmpty()) {
                     DetailField(
                         label = "Password",

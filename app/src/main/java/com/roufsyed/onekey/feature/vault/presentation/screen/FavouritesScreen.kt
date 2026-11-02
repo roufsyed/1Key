@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.roufsyed.onekey.core.domain.model.CredentialSortOrder
 import com.roufsyed.onekey.core.presentation.lockaware.LockAwareDropdownMenu
+import com.roufsyed.onekey.feature.vault.presentation.viewmodel.PasskeyBadgesViewModel
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.CredentialListEvent
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.CredentialListState
 import com.roufsyed.onekey.feature.vault.presentation.viewmodel.DeleteKind
@@ -49,8 +50,10 @@ import kotlinx.coroutines.launch
 fun FavouritesScreen(
     onCredentialClick: (String) -> Unit,
     viewModel: FavouritesViewModel = hiltViewModel(),
+    passkeyBadges: PasskeyBadgesViewModel = hiltViewModel(),
 ) {
     val listState by viewModel.listState.collectAsStateWithLifecycle()
+    val passkeyIds by passkeyBadges.credentialIdsWithPasskeys.collectAsStateWithLifecycle()
     val selectedIds by viewModel.selectedIds.collectAsStateWithLifecycle()
     val isSelectionMode by viewModel.isSelectionMode.collectAsStateWithLifecycle()
     val selectedAreAllFavourite by viewModel.selectedAreAllFavourite.collectAsStateWithLifecycle()
@@ -264,6 +267,7 @@ fun FavouritesScreen(
                                     },
                                     onLongClick = { viewModel.toggleSelection(credential.id) },
                                     leading = CardLeading.SiteMonogram,
+                                    hasPasskey = credential.id in passkeyIds,
                                 )
                             }
                         }

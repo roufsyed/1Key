@@ -173,8 +173,8 @@ internal fun CreatePasskeySurface(
         Spacer(Modifier.height(4.dp))
         Text("Save to", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TargetRow(
-            title = "New entry",
-            subtitle = form.rpName.ifBlank { form.rpId },
+            title = "New login for ${form.rpId}",
+            subtitle = "A Login entry named \"${form.rpName.ifBlank { form.rpId }}\" with this account and no password",
             selected = form.selectedTargetId == null,
             onClick = { onChooseTarget(null) },
         )
