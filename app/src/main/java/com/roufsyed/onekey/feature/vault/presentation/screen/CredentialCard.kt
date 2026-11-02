@@ -4,12 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import com.roufsyed.onekey.core.presentation.theme.FavoriteIcon
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
@@ -55,6 +58,7 @@ internal fun CredentialCard(
     onLongClick = onLongClick,
     leading = leading,
     hasPasskey = hasPasskey,
+    hasOtp = credential.otpParams != null,
 )
 
 /**
@@ -89,6 +93,7 @@ internal fun CredentialCard(
     onLongClick = onLongClick,
     leading = leading,
     hasPasskey = hasPasskey,
+    hasOtp = credential.hasOtp,
 )
 
 @Composable
@@ -103,6 +108,7 @@ private fun CredentialCardImpl(
     onLongClick: () -> Unit,
     leading: CardLeading,
     hasPasskey: Boolean,
+    hasOtp: Boolean,
 ) {
     // Subtitle precedence: username, then URL, then nothing. Falling back to URL
     // when username is empty keeps the row's two-line shape consistent and gives
@@ -187,18 +193,30 @@ private fun CredentialCardImpl(
                 )
             }
         },
-        // A passkey is a sign-in method, not a type, so the entry stays a Login and
-        // the row says so with a small key at the trailing edge, the way the other
-        // managers badge passkey-bearing logins. Hidden in selection mode to keep
-        // the row quiet while the check mark is showing.
-        trailingContent = if (hasPasskey && !isSelected) {
+        // Sign-in methods are badged at the trailing edge rather than typed: a
+        // 2FA shield and a passkey key, small and muted, in that order. Both are
+        // hidden in selection mode to keep the row quiet while the check mark is
+        // showing.
+        trailingContent = if ((hasOtp || hasPasskey) && !isSelected) {
             {
-                Icon(
-                    imageVector = Icons.Outlined.Key,
-                    contentDescription = "Has a passkey",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (hasOtp) {
+                        Icon(
+                            imageVector = Icons.Outlined.Security,
+                            contentDescription = "Has 2FA",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    if (hasPasskey) {
+                        Icon(
+                            imageVector = Icons.Outlined.Key,
+                            contentDescription = "Has a passkey",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
         } else {
             null
