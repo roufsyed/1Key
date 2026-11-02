@@ -366,7 +366,7 @@ fun BackupScreen(
 
             Text(
                 "Picks up your file format automatically: a 1Key backup, a .json or .csv export, " +
-                    "a KeePass .xml export, or a KeePassXC .passkey file.",
+                    "a KeePass .xml export, a KeePassXC .passkey file, or a Proton Authenticator export.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -845,6 +845,7 @@ private fun ImportGuideCard() {
                         AppGuideRow("KeePassXC", "Database → Export → XML file (keeps custom fields, 2FA and passkeys); single passkeys: right-click the entry → Export passkey")
                         AppGuideRow("KeePassDX", "Open the database in KeePassXC on a computer, then export it as XML")
                         AppGuideRow("KeePass 2", "File → Export → KeePass XML (2.x)")
+                        AppGuideRow("Proton Authenticator", "Settings → Export → Export data without password (your 2FA codes as JSON)")
                         AppGuideRow("Safari / iCloud", "Passwords → ··· → Export All Passwords (iOS 17+)")
                         AppGuideRow("1Password", "File → Export → All Items → CSV")
                         AppGuideRow("Dashlane / NordPass", "Settings → Export → CSV")

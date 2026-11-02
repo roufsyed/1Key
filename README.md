@@ -74,7 +74,8 @@ Point your camera at a printed password, a screen showing credentials, or a phys
 |-----|--------|
 | Google Passwords | CSV |
 | LastPass | CSV |
-| KeePass | CSV |
+| KeePassXC / KeePassDX / KeePass 2 | XML export (with 2FA and passkeys), KeePassXC .passkey files, CSV |
+| Proton Authenticator | JSON export without password (2FA codes) |
 | Safari / iCloud Keychain | CSV |
 | 1Password | CSV |
 | Dashlane | CSV |

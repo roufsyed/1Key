@@ -1,6 +1,7 @@
 package com.roufsyed.onekey.feature.importexport.domain
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import com.opencsv.CSVReader
@@ -21,6 +22,7 @@ import com.roufsyed.onekey.core.domain.webauthn.PasskeyAlgorithm
 import com.roufsyed.onekey.core.domain.webauthn.Pkcs8Pem
 import com.roufsyed.onekey.feature.importexport.domain.keepass.KeePassXcPasskeyFile
 import com.roufsyed.onekey.feature.importexport.domain.keepass.KeePassXmlImporter
+import com.roufsyed.onekey.feature.importexport.domain.proton.ProtonAuthenticatorExport
 import com.roufsyed.onekey.core.security.CryptoManager
 import com.roufsyed.onekey.feature.twofa.domain.OtpAuthUriParser
 import java.io.ByteArrayInputStream
@@ -46,10 +48,17 @@ class VaultImporterImpl @Inject constructor(
                 SourceFormat.KEEPASS_XML -> KeePassXmlImporter.parse(file)
                 SourceFormat.JSON -> {
                     val content = file.readText()
-                    // A KeePassXC .passkey file is a JSON object (or a small array of
-                    // them) carrying a private key; it must never reach the generic
-                    // path, which would file that key as a custom field.
-                    if (isKeePassXcPasskeyFile(content)) KeePassXcPasskeyFile.parse(content) else parseJsonContent(content)
+                    // Objects, and arrays small enough to be a handful of .passkey files,
+                    // are sniffed once. A KeePassXC .passkey file carries a private key
+                    // and must never reach the generic path, which would file that key
+                    // as a custom field; a Proton Authenticator export is an object the
+                    // generic path would reject outright.
+                    val root = sniffJsonRoot(content)
+                    when {
+                        root != null && KeePassXcPasskeyFile.looksLike(root) -> KeePassXcPasskeyFile.parse(content)
+                        root != null && ProtonAuthenticatorExport.looksLike(root) -> ProtonAuthenticatorExport.parse(content)
+                        else -> parseJsonContent(content)
+                    }
                 }
                 SourceFormat.CSV -> parseCsvReader(FileReader(file))
             }
@@ -69,12 +78,15 @@ class VaultImporterImpl @Inject constructor(
         }
     }
 
-    /** Sniffs only what a .passkey file can be: one object, or an array small enough to be a handful of them. */
-    private fun isKeePassXcPasskeyFile(content: String): Boolean {
+    /**
+     * Parses the root of a JSON object, or of an array small enough to be a few
+     * .passkey objects. Large arrays are 1Key or third-party exports and go to
+     * the generic path without being parsed twice.
+     */
+    private fun sniffJsonRoot(content: String): JsonElement? {
         val trimmed = content.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
-        if (!(trimmed.startsWith('{') || (trimmed.startsWith('[') && content.length <= PASSKEY_FILE_SNIFF_LIMIT))) return false
-        val root = runCatching { JsonParser.parseString(trimmed) }.getOrNull() ?: return false
-        return KeePassXcPasskeyFile.looksLike(root)
+        if (!(trimmed.startsWith('{') || (trimmed.startsWith('[') && content.length <= PASSKEY_FILE_SNIFF_LIMIT))) return null
+        return runCatching { JsonParser.parseString(trimmed) }.getOrNull()
     }
 
     override suspend fun parseEncrypted(
@@ -122,7 +134,8 @@ class VaultImporterImpl @Inject constructor(
     @Suppress("UNCHECKED_CAST")
     private fun parseJsonContent(content: String): ParsedImport {
         require(content.trimStart().startsWith('[')) {
-            "Not a valid credential file. Make sure this is a 1Key backup or a valid csv."
+            "Not a recognised file. 1Key imports its own backups, .json and .csv exports, KeePass .xml exports, " +
+                "KeePassXC .passkey files and Proton Authenticator exports."
         }
         val now = System.currentTimeMillis()
         val failed = mutableListOf<FailedEntry>()
